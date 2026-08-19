@@ -241,7 +241,40 @@ reports/baseline_explanation.md
 这能帮助业务方信任优化结果。
 ```
 
-## 12. 可以打开的代码
+## 12. 演示 API 化部署
+
+启动服务：
+
+```bash
+python scheduling_app.py
+```
+
+健康检查：
+
+```bash
+curl --noproxy '*' http://127.0.0.1:5050/api/health
+```
+
+Python 客户端演示：
+
+```bash
+python scheduling_api_client_demo.py
+```
+
+讲解点：
+
+```text
+排班模型不只可以通过网页使用，也可以作为 JSON API 给其他系统调用。
+这一步把 CPLEX 求解器包装成了一个可集成的小服务。
+```
+
+API 文档：
+
+```text
+scheduling_api.md
+```
+
+## 13. 可以打开的代码
 
 核心求解器：
 
@@ -300,6 +333,14 @@ scheduling_scenarios_demo.py
 ```text
 scheduling_explain_demo.py
 reports/baseline_explanation.md
+```
+
+API 化部署演示：
+
+```text
+scheduling_app.py
+scheduling_api.md
+scheduling_api_client_demo.py
 ```
 
 前面几节基础模型：

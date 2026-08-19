@@ -153,6 +153,20 @@ http://127.0.0.1:5050
 manager_demo.md
 ```
 
+## 调用排班 API
+
+API 文档在：
+
+```bash
+scheduling_api.md
+```
+
+启动服务后，可以运行 Python 客户端：
+
+```bash
+python scheduling_api_client_demo.py
+```
+
 ## 排班模型学到的内容
 
 - 0/1 决策变量：`work_employee_day = 1` 表示某员工在某天上班。
@@ -166,6 +180,7 @@ manager_demo.md
 - 情景分析：批量运行多个业务场景，对比可行性、缺口、公平性和偏好命中。
 - 结果导出：将场景汇总和详细排班写入 CSV/JSON。
 - 结果解释：自动说明每天为什么这样排、约束是否满足、偏好是否命中。
+- API 化部署：通过 JSON API 将排班求解能力提供给其他系统调用。
 
 ## CPLEX vs Gurobi
 

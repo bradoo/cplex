@@ -15,6 +15,11 @@ def index():
     return render_template("scheduling_app.html")
 
 
+@app.get("/api/health")
+def health():
+    return jsonify({"status": "ok", "service": "cplex-scheduling"})
+
+
 @app.get("/api/problem")
 def get_problem():
     return jsonify(default_problem())
@@ -33,6 +38,10 @@ def get_infeasible_demo():
 @app.post("/api/solve")
 def solve():
     data = request.get_json(force=True)
+    validation_error = validate_problem(data)
+    if validation_error:
+        return jsonify({"status": "error", "message": validation_error}), 400
+
     solver_args = {
         "employees": data["employees"],
         "days": data["days"],
@@ -50,6 +59,48 @@ def solve():
     else:
         result = solve_staff_scheduling(**solver_args)
     return jsonify(result)
+
+
+def validate_problem(data):
+    required_keys = [
+        "employees",
+        "days",
+        "required_staff",
+        "availability",
+        "max_shifts_per_employee",
+    ]
+    missing = [key for key in required_keys if key not in data]
+    if missing:
+        return f"Missing required fields: {', '.join(missing)}"
+
+    employees = data["employees"]
+    days = data["days"]
+    if not employees:
+        return "employees must not be empty"
+    if not days:
+        return "days must not be empty"
+
+    for day in days:
+        if day not in data["required_staff"]:
+            return f"required_staff is missing day: {day}"
+
+    for employee in employees:
+        if employee not in data["availability"]:
+            return f"availability is missing employee: {employee}"
+        for day in days:
+            if day not in data["availability"][employee]:
+                return f"availability is missing {employee} / {day}"
+
+    preferences = data.get("preferences")
+    if preferences:
+        for employee in employees:
+            if employee not in preferences:
+                return f"preferences is missing employee: {employee}"
+            for day in days:
+                if day not in preferences[employee]:
+                    return f"preferences is missing {employee} / {day}"
+
+    return None
 
 
 if __name__ == "__main__":
