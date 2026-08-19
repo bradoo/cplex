@@ -290,7 +290,29 @@ python run_tests.py
 这样后续继续改模型时，不容易悄悄破坏已有行为。
 ```
 
-## 14. 可以打开的代码
+## 14. 演示性能基准测试
+
+运行：
+
+```bash
+python scheduling_benchmark_demo.py
+```
+
+会生成：
+
+```text
+reports/benchmark_results.csv
+```
+
+讲解点：
+
+```text
+自动化测试回答“结果对不对”，性能基准测试回答“规模变大后快不快”。
+这个脚本会生成 small、medium、large、xlarge 四个规模的排班问题，
+对比员工数、天数、0/1 变量数量、求解时间和结果质量。
+```
+
+## 15. 可以打开的代码
 
 核心求解器：
 
@@ -364,6 +386,13 @@ scheduling_api_client_demo.py
 ```text
 run_tests.py
 tests/test_scheduling.py
+```
+
+性能基准测试：
+
+```text
+scheduling_benchmark_demo.py
+reports/benchmark_results.csv
 ```
 
 前面几节基础模型：
