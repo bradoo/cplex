@@ -219,7 +219,29 @@ CSV 适合给人看，JSON 适合系统集成。
 这一步把“模型求解”变成了可以落地流转的业务报表。
 ```
 
-## 11. 可以打开的代码
+## 11. 演示结果解释
+
+运行：
+
+```bash
+python scheduling_explain_demo.py
+```
+
+会生成：
+
+```text
+reports/baseline_explanation.md
+```
+
+讲解点：
+
+```text
+业务方不只想知道排班结果，还会问“为什么这样排”。
+解释报告会说明每天需求、实际安排、缺口、员工可用性、偏好命中和工作量。
+这能帮助业务方信任优化结果。
+```
+
+## 12. 可以打开的代码
 
 核心求解器：
 
@@ -271,6 +293,13 @@ scheduling_multi_objective_demo.py
 
 ```text
 scheduling_scenarios_demo.py
+```
+
+结果解释演示：
+
+```text
+scheduling_explain_demo.py
+reports/baseline_explanation.md
 ```
 
 前面几节基础模型：

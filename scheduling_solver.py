@@ -278,6 +278,10 @@ def solve_details(model):
 def rounded_or_none(value):
     if value is None:
         return None
+    try:
+        return round(float(value), 6)
+    except (TypeError, ValueError):
+        return None
 
 
 def preference_value(preferences, employee, day):
@@ -294,7 +298,3 @@ def count_preference_matches(schedule, preferences):
         for day, employees in schedule.items()
         for employee in employees
     )
-    try:
-        return round(float(value), 6)
-    except (TypeError, ValueError):
-        return None

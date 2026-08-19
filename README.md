@@ -115,6 +115,18 @@ reports/scenario_schedule.csv
 reports/scenario_results.json
 ```
 
+## 运行排班解释示例
+
+```bash
+python scheduling_explain_demo.py
+```
+
+这个示例会解释为什么这样排班，并生成：
+
+```text
+reports/baseline_explanation.md
+```
+
 ## 查看静态排班展示页
 
 用浏览器打开：
@@ -153,6 +165,7 @@ manager_demo.md
 - 多目标建模：在公平性之外平衡员工偏好命中。
 - 情景分析：批量运行多个业务场景，对比可行性、缺口、公平性和偏好命中。
 - 结果导出：将场景汇总和详细排班写入 CSV/JSON。
+- 结果解释：自动说明每天为什么这样排、约束是否满足、偏好是否命中。
 
 ## CPLEX vs Gurobi
 
