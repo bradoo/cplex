@@ -167,6 +167,20 @@ scheduling_api.md
 python scheduling_api_client_demo.py
 ```
 
+## 运行自动化测试
+
+```bash
+python run_tests.py
+```
+
+测试覆盖：
+
+- 默认排班求解
+- 软约束缺口场景
+- API 健康检查和求解接口
+- API 请求校验
+- 情景分析报表导出
+
 ## 排班模型学到的内容
 
 - 0/1 决策变量：`work_employee_day = 1` 表示某员工在某天上班。
@@ -181,6 +195,7 @@ python scheduling_api_client_demo.py
 - 结果导出：将场景汇总和详细排班写入 CSV/JSON。
 - 结果解释：自动说明每天为什么这样排、约束是否满足、偏好是否命中。
 - API 化部署：通过 JSON API 将排班求解能力提供给其他系统调用。
+- 自动化测试：用回归测试确保模型、API 和报表导出没有被后续改动破坏。
 
 ## CPLEX vs Gurobi
 

@@ -274,7 +274,23 @@ API 文档：
 scheduling_api.md
 ```
 
-## 13. 可以打开的代码
+## 13. 演示自动化测试
+
+运行：
+
+```bash
+python run_tests.py
+```
+
+讲解点：
+
+```text
+优化模型也需要回归测试。
+测试可以验证默认求解、软约束兜底、API 请求校验和报表导出是否正常。
+这样后续继续改模型时，不容易悄悄破坏已有行为。
+```
+
+## 14. 可以打开的代码
 
 核心求解器：
 
@@ -341,6 +357,13 @@ API 化部署演示：
 scheduling_app.py
 scheduling_api.md
 scheduling_api_client_demo.py
+```
+
+自动化测试：
+
+```text
+run_tests.py
+tests/test_scheduling.py
 ```
 
 前面几节基础模型：
