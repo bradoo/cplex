@@ -1,0 +1,36 @@
+scenario,day,required_staff,assigned_employees,assigned_count,shortage
+Baseline,Mon,2,Alice;Bob,2,0
+Baseline,Tue,2,Carol;David,2,0
+Baseline,Wed,2,Alice;Bob,2,0
+Baseline,Thu,2,Alice;David,2,0
+Baseline,Fri,3,Alice;Carol;David,3,0
+Baseline,Sat,2,Bob;Carol,2,0
+Baseline,Sun,1,Carol,1,0
+Friday peak,Mon,2,Alice;Bob,2,0
+Friday peak,Tue,2,Carol;David,2,0
+Friday peak,Wed,2,Alice;Bob,2,0
+Friday peak,Thu,2,Alice;David,2,0
+Friday peak,Fri,4,Alice;Bob;Carol;David,4,0
+Friday peak,Sat,2,Bob;Carol,2,0
+Friday peak,Sun,1,David,1,0
+Max 4 shifts,Mon,2,Alice;Bob,2,0
+Max 4 shifts,Tue,2,Carol;David,2,0
+Max 4 shifts,Wed,2,Alice;Bob,2,0
+Max 4 shifts,Thu,2,Alice;David,2,0
+Max 4 shifts,Fri,3,Alice;Carol;David,3,0
+Max 4 shifts,Sat,2,Bob;Carol,2,0
+Max 4 shifts,Sun,1,Carol,1,0
+Weekend peak,Mon,2,Alice;Bob,2,0
+Weekend peak,Tue,2,Alice;Carol,2,0
+Weekend peak,Wed,2,Alice;Bob,2,0
+Weekend peak,Thu,2,Alice;David,2,0
+Weekend peak,Fri,3,Bob;Carol;David,3,0
+Weekend peak,Sat,4,Bob;Carol;David,3,1
+Weekend peak,Sun,3,Carol;David,2,1
+Preference focus,Mon,2,Alice;Bob,2,0
+Preference focus,Tue,2,Carol;David,2,0
+Preference focus,Wed,2,Alice;Bob,2,0
+Preference focus,Thu,2,Alice;David,2,0
+Preference focus,Fri,3,Alice;Carol;David,3,0
+Preference focus,Sat,2,Bob;Carol,2,0
+Preference focus,Sun,1,Carol,1,0

@@ -1,0 +1,839 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CPLEX 排班模拟器</title>
+  <style>
+    :root {
+      --bg: #f5f6f8;
+      --panel: #ffffff;
+      --ink: #20242a;
+      --muted: #667280;
+      --line: #d9dee5;
+      --blue: #246bfe;
+      --green: #16885a;
+      --red: #c23b2a;
+      --amber: #a86500;
+      --soft-blue: #e8f0ff;
+      --soft-green: #e7f6ef;
+      --soft-red: #fdebea;
+      --soft-amber: #fff2d8;
+      --soft-gray: #eef1f5;
+      --shadow: 0 14px 36px rgba(30, 38, 52, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.45;
+    }
+
+    header {
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .header-inner,
+    main {
+      width: min(1200px, calc(100% - 32px));
+      margin: 0 auto;
+    }
+
+    .header-inner {
+      padding: 24px 0 20px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 18px;
+      align-items: end;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 28px;
+      line-height: 1.15;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .compact-actions {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 8px;
+      min-height: 38px;
+      padding: 8px 14px;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 760;
+      cursor: pointer;
+    }
+
+    .primary {
+      background: var(--blue);
+      color: #fff;
+    }
+
+    .secondary {
+      background: var(--soft-gray);
+      color: var(--ink);
+    }
+
+    .warning {
+      background: var(--soft-amber);
+      color: var(--amber);
+    }
+
+    button:disabled {
+      cursor: progress;
+      opacity: 0.7;
+    }
+
+    main {
+      padding: 24px 0 42px;
+      display: grid;
+      gap: 18px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 0.95fr 1.45fr;
+      gap: 18px;
+      align-items: start;
+    }
+
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .section-head {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 17px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .tag {
+      min-height: 28px;
+      padding: 4px 9px;
+      border-radius: 8px;
+      background: var(--soft-gray);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 760;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .controls {
+      padding: 16px 18px 18px;
+      display: grid;
+      gap: 18px;
+    }
+
+    .field {
+      display: grid;
+      gap: 8px;
+    }
+
+    label {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 720;
+    }
+
+    input[type="number"] {
+      width: 100%;
+      min-height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 6px 9px;
+      font: inherit;
+      font-weight: 700;
+      color: var(--ink);
+      background: #fff;
+    }
+
+    .day-inputs {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(62px, 1fr));
+      gap: 8px;
+    }
+
+    .day-input {
+      min-width: 0;
+      display: grid;
+      gap: 6px;
+    }
+
+    .matrix-wrap {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 0;
+      font-size: 13px;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--line);
+      padding: 8px 6px;
+      text-align: center;
+    }
+
+    th:first-child,
+    td:first-child {
+      text-align: left;
+      font-weight: 760;
+      position: sticky;
+      left: 0;
+      background: var(--panel);
+    }
+
+    .toggle {
+      width: 34px;
+      height: 26px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: var(--soft-red);
+      color: var(--red);
+      font-weight: 900;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .toggle.on {
+      background: var(--soft-green);
+      color: var(--green);
+      border-color: #b7dfca;
+    }
+
+    .toggle.preferred.on {
+      background: var(--soft-blue);
+      color: var(--blue);
+      border-color: #b6caff;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      background: #fbfcfe;
+      min-height: 86px;
+    }
+
+    .metric-label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 760;
+    }
+
+    .metric-value {
+      margin-top: 8px;
+      font-size: 28px;
+      line-height: 1;
+      font-weight: 800;
+    }
+
+    .results {
+      padding: 16px 18px 18px;
+    }
+
+    .notice {
+      margin-bottom: 16px;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 14px;
+      font-weight: 720;
+    }
+
+    .notice.ok {
+      background: var(--soft-green);
+      color: var(--green);
+    }
+
+    .notice.bad {
+      background: var(--soft-red);
+      color: var(--red);
+    }
+
+    .notice.warn {
+      background: var(--soft-amber);
+      color: var(--amber);
+    }
+
+    .schedule-grid {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(88px, 1fr));
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+
+    .day-card {
+      min-width: 88px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfe;
+      overflow: hidden;
+    }
+
+    .day-head {
+      padding: 8px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .day-name {
+      font-weight: 800;
+      font-size: 12px;
+    }
+
+    .need {
+      color: var(--muted);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .shortage {
+      margin-top: 6px;
+      color: var(--red);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .people {
+      min-height: 110px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      align-content: start;
+      gap: 7px;
+    }
+
+    .person {
+      min-height: 30px;
+      padding: 6px;
+      border-radius: 8px;
+      background: var(--soft-blue);
+      color: #1749a8;
+      font-size: 12px;
+      font-weight: 760;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .person.preferred {
+      background: var(--soft-green);
+      color: var(--green);
+    }
+
+    .avatar {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--blue);
+      color: #fff;
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 11px;
+      font-weight: 900;
+      flex: 0 0 auto;
+    }
+
+    .workloads {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .workload {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fbfcfe;
+    }
+
+    .workload-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 9px;
+      font-size: 13px;
+      font-weight: 760;
+    }
+
+    .bar {
+      height: 12px;
+      border-radius: 8px;
+      background: var(--soft-gray);
+      overflow: hidden;
+    }
+
+    .fill {
+      height: 100%;
+      border-radius: 8px;
+      background: var(--blue);
+    }
+
+    @media (max-width: 980px) {
+      .layout,
+      .header-inner {
+        grid-template-columns: 1fr;
+      }
+
+      .actions {
+        justify-content: flex-start;
+      }
+
+      .metrics,
+      .workloads {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 560px) {
+      h1 {
+        font-size: 24px;
+      }
+
+      .metrics,
+      .workloads {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div>
+        <h1>CPLEX 排班模拟器</h1>
+        <p class="subtitle">调整每日需求、员工可用性和最大班次数，然后重新求解。</p>
+      </div>
+      <div class="actions">
+        <button class="warning" id="demoBtn">无解演示</button>
+        <button class="secondary" id="resetBtn">重置</button>
+        <button class="primary" id="solveBtn">重新求解</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="layout">
+      <section>
+        <div class="section-head">
+          <h2>输入条件</h2>
+          <span class="tag">可编辑</span>
+        </div>
+        <div class="controls">
+          <div class="field">
+            <label for="maxShifts">每人最多班次数</label>
+            <input id="maxShifts" type="number" min="0" max="7" step="1">
+          </div>
+
+          <div class="field">
+            <label>求解模式</label>
+            <div class="actions" style="justify-content: flex-start">
+              <button class="primary" id="hardModeBtn" type="button">硬约束</button>
+              <button class="secondary" id="softModeBtn" type="button">软约束兜底</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>求解参数</label>
+            <div class="day-inputs">
+              <div class="day-input">
+                <label for="timeLimit">时间限制秒</label>
+                <input id="timeLimit" type="number" min="0" step="0.1" value="10">
+              </div>
+              <div class="day-input">
+                <label for="mipGap">MIP Gap</label>
+                <input id="mipGap" type="number" min="0" max="1" step="0.01" value="0">
+              </div>
+              <div class="day-input">
+                <label for="preferenceWeight">偏好权重</label>
+                <input id="preferenceWeight" type="number" min="0" max="1" step="0.01" value="0.01">
+              </div>
+            </div>
+            <div class="compact-actions">
+              <button class="secondary" id="fastPresetBtn" type="button">快速</button>
+              <button class="secondary" id="balancedPresetBtn" type="button">平衡</button>
+              <button class="secondary" id="exactPresetBtn" type="button">精确</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>每天需要人数</label>
+            <div class="day-inputs" id="requiredInputs"></div>
+          </div>
+
+          <div class="field">
+            <label>员工可用性</label>
+            <div class="matrix-wrap">
+              <table>
+                <thead id="availabilityHead"></thead>
+                <tbody id="availabilityBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>员工偏好</label>
+            <div class="matrix-wrap">
+              <table>
+                <thead id="preferenceHead"></thead>
+                <tbody id="preferenceBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="section-head">
+          <h2>求解结果</h2>
+          <span class="tag" id="resultTag">等待求解</span>
+        </div>
+        <div class="results">
+          <div id="notice" class="notice ok">加载默认排班中...</div>
+          <div class="metrics">
+            <div class="metric">
+              <div class="metric-label">总班次数</div>
+              <div class="metric-value" id="totalShifts">-</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">公平性差距</div>
+              <div class="metric-value" id="fairness">-</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">最多工作量</div>
+              <div class="metric-value" id="maxWorkload">-</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">最少工作量</div>
+              <div class="metric-value" id="minWorkload">-</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">需求缺口</div>
+              <div class="metric-value" id="totalShortage">-</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">偏好命中</div>
+              <div class="metric-value" id="preferenceMatches">-</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">求解耗时秒</div>
+              <div class="metric-value" id="solveTime">-</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">求解状态</div>
+              <div class="metric-value" id="solveStatus" style="font-size: 18px">-</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">报告 Gap</div>
+              <div class="metric-value" id="reportedGap">-</div>
+            </div>
+          </div>
+          <div class="schedule-grid" id="scheduleGrid"></div>
+          <div class="workloads" id="workloads"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    let problem = null;
+    let softConstraints = false;
+
+    const requiredInputs = document.querySelector("#requiredInputs");
+    const availabilityHead = document.querySelector("#availabilityHead");
+    const availabilityBody = document.querySelector("#availabilityBody");
+    const preferenceHead = document.querySelector("#preferenceHead");
+    const preferenceBody = document.querySelector("#preferenceBody");
+    const maxShifts = document.querySelector("#maxShifts");
+    const timeLimit = document.querySelector("#timeLimit");
+    const mipGap = document.querySelector("#mipGap");
+    const preferenceWeight = document.querySelector("#preferenceWeight");
+    const solveBtn = document.querySelector("#solveBtn");
+    const resetBtn = document.querySelector("#resetBtn");
+    const demoBtn = document.querySelector("#demoBtn");
+    const hardModeBtn = document.querySelector("#hardModeBtn");
+    const softModeBtn = document.querySelector("#softModeBtn");
+    const fastPresetBtn = document.querySelector("#fastPresetBtn");
+    const balancedPresetBtn = document.querySelector("#balancedPresetBtn");
+    const exactPresetBtn = document.querySelector("#exactPresetBtn");
+    const notice = document.querySelector("#notice");
+    const resultTag = document.querySelector("#resultTag");
+    const scheduleGrid = document.querySelector("#scheduleGrid");
+    const workloadsEl = document.querySelector("#workloads");
+
+    function setNotice(message, ok = true) {
+      notice.textContent = message;
+      notice.className = `notice ${ok ? "ok" : "bad"}`;
+      resultTag.textContent = ok ? "可行方案" : "无可行解";
+    }
+
+    function setMode(nextSoftConstraints) {
+      softConstraints = nextSoftConstraints;
+      hardModeBtn.className = softConstraints ? "secondary" : "primary";
+      softModeBtn.className = softConstraints ? "primary" : "secondary";
+    }
+
+    function renderInputs() {
+      maxShifts.value = problem.max_shifts_per_employee;
+
+      requiredInputs.innerHTML = problem.days.map(day => `
+        <div class="day-input">
+          <label for="required-${day}">${day}</label>
+          <input id="required-${day}" type="number" min="0" max="${problem.employees.length}" step="1" value="${problem.required_staff[day]}">
+        </div>
+      `).join("");
+
+      availabilityHead.innerHTML = `
+        <tr>
+          <th>员工</th>
+          ${problem.days.map(day => `<th>${day}</th>`).join("")}
+        </tr>
+      `;
+
+      availabilityBody.innerHTML = problem.employees.map(employee => `
+        <tr>
+          <td>${employee}</td>
+          ${problem.days.map(day => {
+            const isOn = problem.availability[employee][day] === 1;
+            return `<td><span class="toggle ${isOn ? "on" : ""}" data-employee="${employee}" data-day="${day}">${isOn ? "✓" : "×"}</span></td>`;
+          }).join("")}
+        </tr>
+      `).join("");
+
+      document.querySelectorAll(".toggle").forEach(toggle => {
+        if (toggle.classList.contains("preferred")) {
+          return;
+        }
+        toggle.addEventListener("click", () => {
+          const employee = toggle.dataset.employee;
+          const day = toggle.dataset.day;
+          const next = problem.availability[employee][day] === 1 ? 0 : 1;
+          problem.availability[employee][day] = next;
+          toggle.classList.toggle("on", next === 1);
+          toggle.textContent = next === 1 ? "✓" : "×";
+        });
+      });
+
+      preferenceHead.innerHTML = availabilityHead.innerHTML;
+      preferenceBody.innerHTML = problem.employees.map(employee => `
+        <tr>
+          <td>${employee}</td>
+          ${problem.days.map(day => {
+            const isOn = problem.preferences[employee][day] === 1;
+            return `<td><span class="toggle preferred ${isOn ? "on" : ""}" data-employee="${employee}" data-day="${day}">${isOn ? "✓" : "×"}</span></td>`;
+          }).join("")}
+        </tr>
+      `).join("");
+
+      document.querySelectorAll(".toggle.preferred").forEach(toggle => {
+        toggle.addEventListener("click", () => {
+          const employee = toggle.dataset.employee;
+          const day = toggle.dataset.day;
+          const next = problem.preferences[employee][day] === 1 ? 0 : 1;
+          problem.preferences[employee][day] = next;
+          toggle.classList.toggle("on", next === 1);
+          toggle.textContent = next === 1 ? "✓" : "×";
+        });
+      });
+    }
+
+    function collectInputs() {
+      problem.max_shifts_per_employee = Number(maxShifts.value);
+      problem.time_limit = Number(timeLimit.value);
+      problem.mip_gap = Number(mipGap.value);
+      problem.preference_weight = Number(preferenceWeight.value);
+      problem.days.forEach(day => {
+        problem.required_staff[day] = Number(document.querySelector(`#required-${day}`).value);
+      });
+    }
+
+    function renderResult(result) {
+      if (result.status !== "optimal") {
+        setNotice(result.message, false);
+        document.querySelector("#totalShifts").textContent = "-";
+        document.querySelector("#fairness").textContent = "-";
+        document.querySelector("#maxWorkload").textContent = "-";
+        document.querySelector("#minWorkload").textContent = "-";
+        document.querySelector("#totalShortage").textContent = "-";
+        document.querySelector("#preferenceMatches").textContent = "-";
+        document.querySelector("#solveTime").textContent = "-";
+        document.querySelector("#solveStatus").textContent = "-";
+        document.querySelector("#reportedGap").textContent = "-";
+        scheduleGrid.innerHTML = "";
+        workloadsEl.innerHTML = "";
+        return;
+      }
+
+      if (result.mode === "soft" && result.total_shortage > 0) {
+        notice.textContent = `硬约束场景可能无解；软约束给出应急方案，仍有 ${result.total_shortage} 个班次缺口。`;
+        notice.className = "notice warn";
+        resultTag.textContent = "软约束方案";
+      } else {
+        setNotice("CPLEX 已找到满足全部约束的最优排班。", true);
+      }
+      document.querySelector("#totalShifts").textContent = result.total_required_shifts;
+      document.querySelector("#fairness").textContent = result.fairness_spread;
+      document.querySelector("#maxWorkload").textContent = result.max_workload;
+      document.querySelector("#minWorkload").textContent = result.min_workload;
+      document.querySelector("#totalShortage").textContent = result.total_shortage;
+      document.querySelector("#preferenceMatches").textContent = result.preference_matches;
+      document.querySelector("#solveTime").textContent = result.solve_time;
+      document.querySelector("#solveStatus").textContent = result.solve_status;
+      document.querySelector("#reportedGap").textContent = result.reported_mip_gap ?? "-";
+
+      scheduleGrid.innerHTML = problem.days.map(day => `
+        <div class="day-card">
+          <div class="day-head">
+            <span class="day-name">${day}</span>
+            <span class="need">需要 ${problem.required_staff[day]} 人</span>
+          </div>
+          <div class="people">
+            ${result.schedule[day].map(employee => `
+              <div class="person ${problem.preferences[employee][day] === 1 ? "preferred" : ""}"><span class="avatar">${employee[0]}</span>${employee}</div>
+            `).join("")}
+            ${result.shortages[day] > 0 ? `<div class="shortage">缺 ${result.shortages[day]} 人</div>` : ""}
+          </div>
+        </div>
+      `).join("");
+
+      const maxLimit = Math.max(1, problem.max_shifts_per_employee);
+      workloadsEl.innerHTML = problem.employees.map(employee => {
+        const shifts = result.workloads[employee];
+        const width = Math.min(100, Math.round((shifts / maxLimit) * 100));
+        return `
+          <div class="workload">
+            <div class="workload-top"><span>${employee}</span><span>${shifts} 班</span></div>
+            <div class="bar"><div class="fill" style="width: ${width}%"></div></div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    async function solve() {
+      collectInputs();
+      solveBtn.disabled = true;
+      solveBtn.textContent = "求解中";
+      resultTag.textContent = "求解中";
+
+      try {
+        const response = await fetch("/api/solve", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({...problem, soft_constraints: softConstraints}),
+        });
+        renderResult(await response.json());
+      } finally {
+        solveBtn.disabled = false;
+        solveBtn.textContent = "重新求解";
+      }
+    }
+
+    async function loadDefault() {
+      const response = await fetch("/api/problem");
+      problem = await response.json();
+      renderInputs();
+      timeLimit.value = 10;
+      mipGap.value = 0;
+      preferenceWeight.value = 0.01;
+      setMode(false);
+      await solve();
+    }
+
+    async function loadInfeasibleDemo() {
+      const response = await fetch("/api/infeasible-demo");
+      problem = await response.json();
+      renderInputs();
+      timeLimit.value = 10;
+      mipGap.value = 0;
+      preferenceWeight.value = 0.01;
+      setMode(false);
+      await solve();
+    }
+
+    function setPreset(timeLimitValue, mipGapValue) {
+      timeLimit.value = timeLimitValue;
+      mipGap.value = mipGapValue;
+      solve();
+    }
+
+    solveBtn.addEventListener("click", solve);
+    resetBtn.addEventListener("click", loadDefault);
+    demoBtn.addEventListener("click", loadInfeasibleDemo);
+    hardModeBtn.addEventListener("click", () => {
+      setMode(false);
+      solve();
+    });
+    softModeBtn.addEventListener("click", () => {
+      setMode(true);
+      solve();
+    });
+    fastPresetBtn.addEventListener("click", () => setPreset(0.5, 0.2));
+    balancedPresetBtn.addEventListener("click", () => setPreset(5, 0.05));
+    exactPresetBtn.addEventListener("click", () => setPreset(30, 0));
+    loadDefault();
+  </script>
+</body>
+</html>

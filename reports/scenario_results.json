@@ -1,0 +1,416 @@
+[
+  {
+    "scenario": "Baseline",
+    "problem": {
+      "days": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+      ],
+      "required_staff": {
+        "Mon": 2,
+        "Tue": 2,
+        "Wed": 2,
+        "Thu": 2,
+        "Fri": 3,
+        "Sat": 2,
+        "Sun": 1
+      },
+      "max_shifts_per_employee": 5
+    },
+    "result": {
+      "status": "optimal",
+      "mode": "hard",
+      "schedule": {
+        "Mon": [
+          "Alice",
+          "Bob"
+        ],
+        "Tue": [
+          "Carol",
+          "David"
+        ],
+        "Wed": [
+          "Alice",
+          "Bob"
+        ],
+        "Thu": [
+          "Alice",
+          "David"
+        ],
+        "Fri": [
+          "Alice",
+          "Carol",
+          "David"
+        ],
+        "Sat": [
+          "Bob",
+          "Carol"
+        ],
+        "Sun": [
+          "Carol"
+        ]
+      },
+      "workloads": {
+        "Alice": 4,
+        "Bob": 3,
+        "Carol": 4,
+        "David": 3
+      },
+      "shortages": {
+        "Mon": 0,
+        "Tue": 0,
+        "Wed": 0,
+        "Thu": 0,
+        "Fri": 0,
+        "Sat": 0,
+        "Sun": 0
+      },
+      "total_shortage": 0,
+      "total_required_shifts": 14,
+      "fairness_spread": 1,
+      "preference_matches": 13,
+      "max_workload": 4,
+      "min_workload": 3,
+      "solve_status": "integer optimal solution",
+      "solve_time": 0.0044,
+      "reported_mip_gap": null
+    }
+  },
+  {
+    "scenario": "Friday peak",
+    "problem": {
+      "days": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+      ],
+      "required_staff": {
+        "Mon": 2,
+        "Tue": 2,
+        "Wed": 2,
+        "Thu": 2,
+        "Fri": 4,
+        "Sat": 2,
+        "Sun": 1
+      },
+      "max_shifts_per_employee": 5
+    },
+    "result": {
+      "status": "optimal",
+      "mode": "hard",
+      "schedule": {
+        "Mon": [
+          "Alice",
+          "Bob"
+        ],
+        "Tue": [
+          "Carol",
+          "David"
+        ],
+        "Wed": [
+          "Alice",
+          "Bob"
+        ],
+        "Thu": [
+          "Alice",
+          "David"
+        ],
+        "Fri": [
+          "Alice",
+          "Bob",
+          "Carol",
+          "David"
+        ],
+        "Sat": [
+          "Bob",
+          "Carol"
+        ],
+        "Sun": [
+          "David"
+        ]
+      },
+      "workloads": {
+        "Alice": 4,
+        "Bob": 4,
+        "Carol": 3,
+        "David": 4
+      },
+      "shortages": {
+        "Mon": 0,
+        "Tue": 0,
+        "Wed": 0,
+        "Thu": 0,
+        "Fri": 0,
+        "Sat": 0,
+        "Sun": 0
+      },
+      "total_shortage": 0,
+      "total_required_shifts": 15,
+      "fairness_spread": 1,
+      "preference_matches": 13,
+      "max_workload": 4,
+      "min_workload": 3,
+      "solve_status": "integer optimal solution",
+      "solve_time": 0.0068,
+      "reported_mip_gap": null
+    }
+  },
+  {
+    "scenario": "Max 4 shifts",
+    "problem": {
+      "days": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+      ],
+      "required_staff": {
+        "Mon": 2,
+        "Tue": 2,
+        "Wed": 2,
+        "Thu": 2,
+        "Fri": 3,
+        "Sat": 2,
+        "Sun": 1
+      },
+      "max_shifts_per_employee": 4
+    },
+    "result": {
+      "status": "optimal",
+      "mode": "hard",
+      "schedule": {
+        "Mon": [
+          "Alice",
+          "Bob"
+        ],
+        "Tue": [
+          "Carol",
+          "David"
+        ],
+        "Wed": [
+          "Alice",
+          "Bob"
+        ],
+        "Thu": [
+          "Alice",
+          "David"
+        ],
+        "Fri": [
+          "Alice",
+          "Carol",
+          "David"
+        ],
+        "Sat": [
+          "Bob",
+          "Carol"
+        ],
+        "Sun": [
+          "Carol"
+        ]
+      },
+      "workloads": {
+        "Alice": 4,
+        "Bob": 3,
+        "Carol": 4,
+        "David": 3
+      },
+      "shortages": {
+        "Mon": 0,
+        "Tue": 0,
+        "Wed": 0,
+        "Thu": 0,
+        "Fri": 0,
+        "Sat": 0,
+        "Sun": 0
+      },
+      "total_shortage": 0,
+      "total_required_shifts": 14,
+      "fairness_spread": 1,
+      "preference_matches": 13,
+      "max_workload": 4,
+      "min_workload": 3,
+      "solve_status": "integer optimal solution",
+      "solve_time": 0.0088,
+      "reported_mip_gap": null
+    }
+  },
+  {
+    "scenario": "Weekend peak",
+    "problem": {
+      "days": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+      ],
+      "required_staff": {
+        "Mon": 2,
+        "Tue": 2,
+        "Wed": 2,
+        "Thu": 2,
+        "Fri": 3,
+        "Sat": 4,
+        "Sun": 3
+      },
+      "max_shifts_per_employee": 4
+    },
+    "result": {
+      "status": "optimal",
+      "mode": "soft",
+      "schedule": {
+        "Mon": [
+          "Alice",
+          "Bob"
+        ],
+        "Tue": [
+          "Alice",
+          "Carol"
+        ],
+        "Wed": [
+          "Alice",
+          "Bob"
+        ],
+        "Thu": [
+          "Alice",
+          "David"
+        ],
+        "Fri": [
+          "Bob",
+          "Carol",
+          "David"
+        ],
+        "Sat": [
+          "Bob",
+          "Carol",
+          "David"
+        ],
+        "Sun": [
+          "Carol",
+          "David"
+        ]
+      },
+      "workloads": {
+        "Alice": 4,
+        "Bob": 4,
+        "Carol": 4,
+        "David": 4
+      },
+      "shortages": {
+        "Mon": 0,
+        "Tue": 0,
+        "Wed": 0,
+        "Thu": 0,
+        "Fri": 0,
+        "Sat": 1,
+        "Sun": 1
+      },
+      "total_shortage": 2,
+      "total_required_shifts": 18,
+      "fairness_spread": 0,
+      "preference_matches": 14,
+      "max_workload": 4,
+      "min_workload": 4,
+      "objective_value": 1999.8599999999997,
+      "solve_status": "integer optimal solution",
+      "solve_time": 0.0023,
+      "reported_mip_gap": null
+    }
+  },
+  {
+    "scenario": "Preference focus",
+    "problem": {
+      "days": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+      ],
+      "required_staff": {
+        "Mon": 2,
+        "Tue": 2,
+        "Wed": 2,
+        "Thu": 2,
+        "Fri": 3,
+        "Sat": 2,
+        "Sun": 1
+      },
+      "max_shifts_per_employee": 5
+    },
+    "result": {
+      "status": "optimal",
+      "mode": "hard",
+      "schedule": {
+        "Mon": [
+          "Alice",
+          "Bob"
+        ],
+        "Tue": [
+          "Carol",
+          "David"
+        ],
+        "Wed": [
+          "Alice",
+          "Bob"
+        ],
+        "Thu": [
+          "Alice",
+          "David"
+        ],
+        "Fri": [
+          "Alice",
+          "Carol",
+          "David"
+        ],
+        "Sat": [
+          "Bob",
+          "Carol"
+        ],
+        "Sun": [
+          "Carol"
+        ]
+      },
+      "workloads": {
+        "Alice": 4,
+        "Bob": 3,
+        "Carol": 4,
+        "David": 3
+      },
+      "shortages": {
+        "Mon": 0,
+        "Tue": 0,
+        "Wed": 0,
+        "Thu": 0,
+        "Fri": 0,
+        "Sat": 0,
+        "Sun": 0
+      },
+      "total_shortage": 0,
+      "total_required_shifts": 14,
+      "fairness_spread": 1,
+      "preference_matches": 13,
+      "max_workload": 4,
+      "min_workload": 3,
+      "solve_status": "integer optimal solution",
+      "solve_time": 0.0031,
+      "reported_mip_gap": null
+    }
+  }
+]
