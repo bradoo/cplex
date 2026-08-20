@@ -400,7 +400,23 @@ python scheduling_conflict_diagnosis_demo.py
 把可能的问题翻译成可读的诊断报告。
 ```
 
-## 20. 可以打开的代码
+## 20. 演示软约束进阶
+
+运行：
+
+```bash
+python scheduling_soft_constraints_demo.py
+```
+
+讲解点：
+
+```text
+上一版软约束只允许“人数不足”有缺口。
+这一版进一步允许“技能覆盖不足”也有缺口，并给缺口设置高罚分。
+这样模型会尽量满足技能要求，实在满足不了时明确报告缺哪个技能、缺几个人。
+```
+
+## 21. 可以打开的代码
 
 核心求解器：
 
@@ -517,6 +533,13 @@ reports/experiments_summary.csv
 ```text
 scheduling_conflict_diagnosis_demo.py
 scheduling_diagnostics.py
+```
+
+软约束进阶：
+
+```text
+scheduling_soft_constraints_demo.py
+scheduling_solver.py
 ```
 
 前面几节基础模型：

@@ -39,8 +39,7 @@ def main():
     print()
 
     print("=== 软约束兜底 ===")
-    print("注意：当前软约束只放松每天人数需求，技能覆盖仍然是硬约束。")
-    print("所以先保留技能冲突求解一次，再移除技能冲突展示人数缺口兜底。")
+    print("现在软约束会同时放松人数需求和技能覆盖，并分别报告缺口。")
     print()
 
     soft_result = solve_staff_scheduling_soft(
@@ -55,8 +54,12 @@ def main():
     )
 
     print(f"软约束求解状态: {soft_result['status']}")
-    if soft_result["status"] == "infeasible":
-        print("原因：技能覆盖约束仍然无法满足。")
+    if soft_result["status"] == "optimal":
+        print(f"人数缺口: {soft_result['total_shortage']}")
+        print(f"技能缺口: {soft_result['total_skill_shortage']}")
+        for key, shortage in soft_result["skill_shortages"].items():
+            day, skill = key.split(":")
+            print(f"- {day} 的 {skill} 技能缺 {shortage} 人")
     print()
 
     demand_only_problem = deepcopy(problem)

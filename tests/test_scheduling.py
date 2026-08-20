@@ -49,6 +49,25 @@ class SchedulingSolverTests(unittest.TestCase):
         self.assertEqual(result["mode"], "soft")
         self.assertGreater(result["total_shortage"], 0)
 
+    def test_soft_solver_reports_skill_shortage(self):
+        problem = default_problem()
+        problem["skill_requirements"]["Sun"] = {"night": 2}
+
+        result = solve_staff_scheduling_soft(
+            employees=problem["employees"],
+            days=problem["days"],
+            required_staff=problem["required_staff"],
+            availability=problem["availability"],
+            max_shifts_per_employee=problem["max_shifts_per_employee"],
+            skills=problem["skills"],
+            skill_requirements=problem["skill_requirements"],
+            preferences=problem["preferences"],
+        )
+
+        self.assertEqual(result["status"], "optimal")
+        self.assertEqual(result["total_skill_shortage"], 1)
+        self.assertEqual(result["skill_shortages"]["Sun:night"], 1)
+
     def test_max_consecutive_work_days_is_enforced(self):
         problem = default_problem()
         result = solve_staff_scheduling(

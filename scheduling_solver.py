@@ -229,6 +229,7 @@ def solve_staff_scheduling_soft(
     preferences=None,
     preference_weight=0.01,
     shortage_penalty=1000,
+    skill_shortage_penalty=1200,
     time_limit=None,
     mip_gap=None,
     log_output=False,
@@ -245,11 +246,13 @@ def solve_staff_scheduling_soft(
         day: model.integer_var(name=f"shortage_{day}", lb=0)
         for day in days
     }
+    skill_shortage = create_skill_shortage_vars(model, days, skill_requirements)
     max_workload = model.integer_var(name="max_workload", lb=0)
     min_workload = model.integer_var(name="min_workload", lb=0)
     total_required_shifts = sum(required_staff[day] for day in days)
 
     total_shortage = model.sum(shortage[day] for day in days)
+    total_skill_shortage = model.sum(skill_shortage.values())
     preference_score = model.sum(
         preference_value(preferences, employee, day) * work[employee, day]
         for employee in employees
@@ -262,6 +265,7 @@ def solve_staff_scheduling_soft(
     )
     model.minimize(
         shortage_penalty * total_shortage
+        + skill_shortage_penalty * total_skill_shortage
         + max_workload
         - min_workload
         + cost_weight * total_cost
@@ -299,9 +303,10 @@ def solve_staff_scheduling_soft(
         max_consecutive_work_days,
     )
 
-    add_skill_coverage_constraints(
+    add_soft_skill_coverage_constraints(
         model,
         work,
+        skill_shortage,
         employees,
         days,
         skills,
@@ -333,6 +338,7 @@ def solve_staff_scheduling_soft(
         day: int(round(shortage[day].solution_value))
         for day in days
     }
+    skill_shortages = solved_skill_shortages(skill_shortage)
     preference_matches = count_preference_matches(schedule, preferences)
     schedule_cost = calculate_schedule_cost(schedule, shift_costs)
 
@@ -343,6 +349,8 @@ def solve_staff_scheduling_soft(
         "workloads": workloads,
         "shortages": shortages,
         "total_shortage": sum(shortages.values()),
+        "skill_shortages": skill_shortages,
+        "total_skill_shortage": sum(skill_shortages.values()),
         "total_required_shifts": total_required_shifts,
         "fairness_spread": max(workloads.values()) - min(workloads.values()) if workloads else 0,
         "preference_matches": preference_matches,
@@ -409,6 +417,53 @@ def add_skill_coverage_constraints(
                 >= required_count,
                 ctname=f"skill_{skill}_{day}",
             )
+
+
+def create_skill_shortage_vars(model, days, skill_requirements):
+    if not skill_requirements:
+        return {}
+
+    return {
+        (day, skill): model.integer_var(name=f"skill_shortage_{skill}_{day}", lb=0)
+        for day in days
+        for skill in skill_requirements.get(day, {})
+    }
+
+
+def add_soft_skill_coverage_constraints(
+    model,
+    work,
+    skill_shortage,
+    employees,
+    days,
+    skills,
+    skill_requirements,
+):
+    if not skills or not skill_requirements:
+        return
+
+    for day in days:
+        day_requirements = skill_requirements.get(day, {})
+        for skill, required_count in day_requirements.items():
+            qualified_employees = [
+                employee
+                for employee in employees
+                if skill in skills.get(employee, [])
+            ]
+            model.add_constraint(
+                model.sum(work[employee, day] for employee in qualified_employees)
+                + skill_shortage[day, skill]
+                >= required_count,
+                ctname=f"soft_skill_{skill}_{day}",
+            )
+
+
+def solved_skill_shortages(skill_shortage):
+    return {
+        f"{day}:{skill}": int(round(variable.solution_value))
+        for (day, skill), variable in skill_shortage.items()
+        if int(round(variable.solution_value)) > 0
+    }
 
 
 def solve_details(model):

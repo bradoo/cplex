@@ -244,6 +244,17 @@ python scheduling_conflict_diagnosis_demo.py
 - 某天需要人数是否超过当天可用人数
 - 某个技能要求是否超过当天可用的合格员工数
 
+## 运行软约束进阶示例
+
+```bash
+python scheduling_soft_constraints_demo.py
+```
+
+这个示例展示如何把技能覆盖也做成软约束。模型会分别输出：
+
+- 人数缺口：当天总人数不够
+- 技能缺口：当天某类技能员工不够，例如 `Sun:night`
+
 ## 排班模型学到的内容
 
 - 0/1 决策变量：`work_employee_day = 1` 表示某员工在某天上班。
@@ -265,6 +276,7 @@ python scheduling_conflict_diagnosis_demo.py
 - 成本优化：在满足排班规则的前提下，尽量降低总排班成本。
 - 实验记录：保存每次模型配置、约束开关、目标权重和结果指标，方便回溯比较。
 - 冲突诊断：硬约束无解时，先从需求、可用性、容量和技能覆盖定位明显矛盾。
+- 软约束进阶：把技能覆盖缺口也量化出来，让模型输出最小损失方案。
 
 ## CPLEX vs Gurobi
 
