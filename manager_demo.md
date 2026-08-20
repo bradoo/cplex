@@ -344,7 +344,23 @@ python scheduling_skills_demo.py
 模型会在满足总人数的同时，保证关键技能覆盖。
 ```
 
-## 17. 可以打开的代码
+## 17. 演示成本优化
+
+运行：
+
+```bash
+python scheduling_cost_demo.py
+```
+
+讲解点：
+
+```text
+真实排班不只要满足人数和技能，还要考虑成本。
+这个示例给每个员工每天设置不同成本，
+模型会在公平性、偏好和技能覆盖之外，尽量降低总排班成本。
+```
+
+## 18. 可以打开的代码
 
 核心求解器：
 
@@ -438,6 +454,13 @@ scheduling_solver.py
 
 ```text
 scheduling_skills_demo.py
+scheduling_solver.py
+```
+
+成本优化：
+
+```text
+scheduling_cost_demo.py
 scheduling_solver.py
 ```
 

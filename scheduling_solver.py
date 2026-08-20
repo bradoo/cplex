@@ -41,6 +41,13 @@ DEFAULT_SKILL_REQUIREMENTS = {
     for day in DEFAULT_DAYS
 }
 
+DEFAULT_SHIFT_COSTS = {
+    "Alice": {"Mon": 140, "Tue": 140, "Wed": 140, "Thu": 140, "Fri": 150, "Sat": 0, "Sun": 0},
+    "Bob": {"Mon": 100, "Tue": 0, "Wed": 100, "Thu": 100, "Fri": 110, "Sat": 130, "Sun": 0},
+    "Carol": {"Mon": 0, "Tue": 135, "Wed": 135, "Thu": 0, "Fri": 145, "Sat": 160, "Sun": 170},
+    "David": {"Mon": 95, "Tue": 95, "Wed": 0, "Thu": 95, "Fri": 105, "Sat": 125, "Sun": 135},
+}
+
 DEFAULT_MAX_SHIFTS = 5
 DEFAULT_MAX_CONSECUTIVE_WORK_DAYS = None
 
@@ -66,6 +73,10 @@ def default_problem():
             day: dict(requirements)
             for day, requirements in DEFAULT_SKILL_REQUIREMENTS.items()
         },
+        "shift_costs": {
+            employee: dict(costs)
+            for employee, costs in DEFAULT_SHIFT_COSTS.items()
+        },
         "max_shifts_per_employee": DEFAULT_MAX_SHIFTS,
         "max_consecutive_work_days": DEFAULT_MAX_CONSECUTIVE_WORK_DAYS,
     }
@@ -80,6 +91,8 @@ def solve_staff_scheduling(
     max_consecutive_work_days=None,
     skills=None,
     skill_requirements=None,
+    shift_costs=None,
+    cost_weight=0,
     preferences=None,
     preference_weight=0.01,
     time_limit=None,
@@ -103,8 +116,18 @@ def solve_staff_scheduling(
         for employee in employees
         for day in days
     )
+    total_cost = model.sum(
+        shift_cost(shift_costs, employee, day) * work[employee, day]
+        for employee in employees
+        for day in days
+    )
 
-    model.minimize(max_workload - min_workload - preference_weight * preference_score)
+    model.minimize(
+        max_workload
+        - min_workload
+        + cost_weight * total_cost
+        - preference_weight * preference_score
+    )
 
     for day in days:
         model.add_constraint(
@@ -173,6 +196,7 @@ def solve_staff_scheduling(
         for employee in employees
     }
     preference_matches = count_preference_matches(schedule, preferences)
+    schedule_cost = calculate_schedule_cost(schedule, shift_costs)
 
     return {
         "status": "optimal",
@@ -184,6 +208,7 @@ def solve_staff_scheduling(
         "total_required_shifts": total_required_shifts,
         "fairness_spread": max(workloads.values()) - min(workloads.values()) if workloads else 0,
         "preference_matches": preference_matches,
+        "total_cost": schedule_cost,
         "max_workload": max(workloads.values()) if workloads else 0,
         "min_workload": min(workloads.values()) if workloads else 0,
         **solve_details(model),
@@ -199,6 +224,8 @@ def solve_staff_scheduling_soft(
     max_consecutive_work_days=None,
     skills=None,
     skill_requirements=None,
+    shift_costs=None,
+    cost_weight=0,
     preferences=None,
     preference_weight=0.01,
     shortage_penalty=1000,
@@ -228,10 +255,16 @@ def solve_staff_scheduling_soft(
         for employee in employees
         for day in days
     )
+    total_cost = model.sum(
+        shift_cost(shift_costs, employee, day) * work[employee, day]
+        for employee in employees
+        for day in days
+    )
     model.minimize(
         shortage_penalty * total_shortage
         + max_workload
         - min_workload
+        + cost_weight * total_cost
         - preference_weight * preference_score
     )
 
@@ -301,6 +334,7 @@ def solve_staff_scheduling_soft(
         for day in days
     }
     preference_matches = count_preference_matches(schedule, preferences)
+    schedule_cost = calculate_schedule_cost(schedule, shift_costs)
 
     return {
         "status": "optimal",
@@ -312,6 +346,7 @@ def solve_staff_scheduling_soft(
         "total_required_shifts": total_required_shifts,
         "fairness_spread": max(workloads.values()) - min(workloads.values()) if workloads else 0,
         "preference_matches": preference_matches,
+        "total_cost": schedule_cost,
         "max_workload": max(workloads.values()) if workloads else 0,
         "min_workload": min(workloads.values()) if workloads else 0,
         "objective_value": solution.objective_value,
@@ -409,4 +444,21 @@ def count_preference_matches(schedule, preferences):
         preference_value(preferences, employee, day)
         for day, employees in schedule.items()
         for employee in employees
+    )
+
+
+def shift_cost(shift_costs, employee, day):
+    if not shift_costs:
+        return 0
+    return float(shift_costs.get(employee, {}).get(day, 0))
+
+
+def calculate_schedule_cost(schedule, shift_costs):
+    return round(
+        sum(
+            shift_cost(shift_costs, employee, day)
+            for day, employees in schedule.items()
+            for employee in employees
+        ),
+        2,
     )

@@ -94,6 +94,24 @@ class SchedulingSolverTests(unittest.TestCase):
             ]
             self.assertGreaterEqual(len(seniors), 1)
 
+    def test_cost_objective_returns_total_cost(self):
+        problem = default_problem()
+        result = solve_staff_scheduling(
+            employees=problem["employees"],
+            days=problem["days"],
+            required_staff=problem["required_staff"],
+            availability=problem["availability"],
+            max_shifts_per_employee=problem["max_shifts_per_employee"],
+            skills=problem["skills"],
+            skill_requirements=problem["skill_requirements"],
+            shift_costs=problem["shift_costs"],
+            cost_weight=0.01,
+            preferences=problem["preferences"],
+        )
+
+        self.assertEqual(result["status"], "optimal")
+        self.assertGreater(result["total_cost"], 0)
+
 
 class SchedulingApiTests(unittest.TestCase):
     def test_health_and_solve_api(self):

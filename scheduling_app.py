@@ -51,6 +51,8 @@ def solve():
         "max_consecutive_work_days": optional_int(data.get("max_consecutive_work_days")),
         "skills": data.get("skills"),
         "skill_requirements": data.get("skill_requirements"),
+        "shift_costs": data.get("shift_costs"),
+        "cost_weight": float(data.get("cost_weight") or 0),
         "preferences": data.get("preferences"),
         "preference_weight": float(data.get("preference_weight") or 0.01),
         "time_limit": float(data.get("time_limit") or 0),

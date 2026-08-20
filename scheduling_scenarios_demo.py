@@ -23,6 +23,8 @@ def solve_scenario(name, changes, use_soft_fallback=True):
         max_consecutive_work_days=problem.get("max_consecutive_work_days"),
         skills=problem.get("skills"),
         skill_requirements=problem.get("skill_requirements"),
+        shift_costs=problem.get("shift_costs"),
+        cost_weight=problem.get("cost_weight", 0),
         preferences=problem["preferences"],
         preference_weight=problem.get("preference_weight", 0.01),
         time_limit=problem.get("time_limit", 10),
@@ -39,6 +41,8 @@ def solve_scenario(name, changes, use_soft_fallback=True):
             max_consecutive_work_days=problem.get("max_consecutive_work_days"),
             skills=problem.get("skills"),
             skill_requirements=problem.get("skill_requirements"),
+            shift_costs=problem.get("shift_costs"),
+            cost_weight=problem.get("cost_weight", 0),
             preferences=problem["preferences"],
             preference_weight=problem.get("preference_weight", 0.01),
             time_limit=problem.get("time_limit", 10),
@@ -77,7 +81,7 @@ def apply_changes(problem, changes):
         for day, requirements in changes["skill_requirements"].items():
             problem["skill_requirements"][day].update(requirements)
 
-    for key in ("preference_weight", "time_limit", "mip_gap"):
+    for key in ("preference_weight", "cost_weight", "time_limit", "mip_gap"):
         if key in changes:
             problem[key] = changes[key]
 
