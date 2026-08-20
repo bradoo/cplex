@@ -230,6 +230,8 @@ def solve_staff_scheduling_soft(
     preference_weight=0.01,
     shortage_penalty=1000,
     skill_shortage_penalty=1200,
+    max_total_shortage=None,
+    max_total_skill_shortage=None,
     time_limit=None,
     mip_gap=None,
     log_output=False,
@@ -313,6 +315,18 @@ def solve_staff_scheduling_soft(
         skill_requirements,
     )
 
+    if max_total_shortage is not None:
+        model.add_constraint(
+            total_shortage <= max_total_shortage,
+            ctname="max_total_shortage",
+        )
+
+    if max_total_skill_shortage is not None:
+        model.add_constraint(
+            total_skill_shortage <= max_total_skill_shortage,
+            ctname="max_total_skill_shortage",
+        )
+
     solution = model.solve(log_output=log_output)
 
     if solution is None:
@@ -359,6 +373,83 @@ def solve_staff_scheduling_soft(
         "min_workload": min(workloads.values()) if workloads else 0,
         "objective_value": solution.objective_value,
         **solve_details(model),
+    }
+
+
+def solve_staff_scheduling_two_stage(
+    employees,
+    days,
+    required_staff,
+    availability,
+    max_shifts_per_employee,
+    max_consecutive_work_days=None,
+    skills=None,
+    skill_requirements=None,
+    shift_costs=None,
+    cost_weight=0,
+    preferences=None,
+    preference_weight=0.01,
+    shortage_penalty=1000,
+    skill_shortage_penalty=1200,
+    time_limit=None,
+    mip_gap=None,
+    log_output=False,
+):
+    stage_one = solve_staff_scheduling_soft(
+        employees=employees,
+        days=days,
+        required_staff=required_staff,
+        availability=availability,
+        max_shifts_per_employee=max_shifts_per_employee,
+        max_consecutive_work_days=max_consecutive_work_days,
+        skills=skills,
+        skill_requirements=skill_requirements,
+        shift_costs=shift_costs,
+        cost_weight=0,
+        preferences=None,
+        preference_weight=0,
+        shortage_penalty=1_000_000,
+        skill_shortage_penalty=1_000_000,
+        time_limit=time_limit,
+        mip_gap=mip_gap,
+        log_output=log_output,
+    )
+
+    if stage_one["status"] != "optimal":
+        return {
+            **stage_one,
+            "mode": "two_stage",
+            "stage_one": stage_one,
+            "stage_two": None,
+        }
+
+    stage_two = solve_staff_scheduling_soft(
+        employees=employees,
+        days=days,
+        required_staff=required_staff,
+        availability=availability,
+        max_shifts_per_employee=max_shifts_per_employee,
+        max_consecutive_work_days=max_consecutive_work_days,
+        skills=skills,
+        skill_requirements=skill_requirements,
+        shift_costs=shift_costs,
+        cost_weight=cost_weight,
+        preferences=preferences,
+        preference_weight=preference_weight,
+        shortage_penalty=shortage_penalty,
+        skill_shortage_penalty=skill_shortage_penalty,
+        max_total_shortage=stage_one["total_shortage"],
+        max_total_skill_shortage=stage_one["total_skill_shortage"],
+        time_limit=time_limit,
+        mip_gap=mip_gap,
+        log_output=log_output,
+    )
+
+    return {
+        **stage_two,
+        "mode": "two_stage",
+        "stage_one": stage_one,
+        "stage_two": stage_two,
     }
 
 
