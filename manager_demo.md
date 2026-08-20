@@ -360,7 +360,30 @@ python scheduling_cost_demo.py
 模型会在公平性、偏好和技能覆盖之外，尽量降低总排班成本。
 ```
 
-## 18. 可以打开的代码
+## 18. 演示模型版本和实验记录
+
+运行：
+
+```bash
+python scheduling_experiment_log_demo.py
+```
+
+会生成：
+
+```text
+reports/experiments.jsonl
+reports/experiments_summary.csv
+```
+
+讲解点：
+
+```text
+随着模型规则越来越多，需要记录每次实验用了哪些参数、哪些约束和得到什么结果。
+JSONL 适合追加保存历史实验，CSV 适合快速对比。
+这能帮助我们回溯“为什么当时选择这个模型版本”。
+```
+
+## 19. 可以打开的代码
 
 核心求解器：
 
@@ -462,6 +485,14 @@ scheduling_solver.py
 ```text
 scheduling_cost_demo.py
 scheduling_solver.py
+```
+
+实验记录：
+
+```text
+scheduling_experiment_log_demo.py
+reports/experiments.jsonl
+reports/experiments_summary.csv
 ```
 
 前面几节基础模型：

@@ -219,6 +219,19 @@ python scheduling_cost_demo.py
 
 这个示例展示如何在公平性、偏好和技能覆盖之外加入排班成本。
 
+## 运行实验记录示例
+
+```bash
+python scheduling_experiment_log_demo.py
+```
+
+这个示例会记录不同模型配置和结果指标，输出：
+
+```text
+reports/experiments.jsonl
+reports/experiments_summary.csv
+```
+
 ## 排班模型学到的内容
 
 - 0/1 决策变量：`work_employee_day = 1` 表示某员工在某天上班。
@@ -238,6 +251,7 @@ python scheduling_cost_demo.py
 - 规则扩展：加入“最多连续上班天数”等真实排班约束。
 - 技能覆盖约束：确保每天有足够的特定技能员工，例如 senior 覆盖。
 - 成本优化：在满足排班规则的前提下，尽量降低总排班成本。
+- 实验记录：保存每次模型配置、约束开关、目标权重和结果指标，方便回溯比较。
 
 ## CPLEX vs Gurobi
 
