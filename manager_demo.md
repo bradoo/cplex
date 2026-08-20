@@ -312,7 +312,23 @@ reports/benchmark_results.csv
 对比员工数、天数、0/1 变量数量、求解时间和结果质量。
 ```
 
-## 15. 可以打开的代码
+## 15. 演示业务规则扩展
+
+运行：
+
+```bash
+python scheduling_consecutive_demo.py
+```
+
+讲解点：
+
+```text
+真实排班经常会增加新的劳动规则，比如不能连续上太多天。
+这个示例用滑动窗口约束实现“最多连续上 N 天”，
+说明优化模型可以随着业务规则逐步扩展。
+```
+
+## 16. 可以打开的代码
 
 核心求解器：
 
@@ -393,6 +409,13 @@ tests/test_scheduling.py
 ```text
 scheduling_benchmark_demo.py
 reports/benchmark_results.csv
+```
+
+业务规则扩展：
+
+```text
+scheduling_consecutive_demo.py
+scheduling_solver.py
 ```
 
 前面几节基础模型：

@@ -48,6 +48,7 @@ def solve():
         "required_staff": data["required_staff"],
         "availability": data["availability"],
         "max_shifts_per_employee": int(data["max_shifts_per_employee"]),
+        "max_consecutive_work_days": optional_int(data.get("max_consecutive_work_days")),
         "preferences": data.get("preferences"),
         "preference_weight": float(data.get("preference_weight") or 0.01),
         "time_limit": float(data.get("time_limit") or 0),
@@ -59,6 +60,12 @@ def solve():
     else:
         result = solve_staff_scheduling(**solver_args)
     return jsonify(result)
+
+
+def optional_int(value):
+    if value in (None, "", 0, "0"):
+        return None
+    return int(value)
 
 
 def validate_problem(data):

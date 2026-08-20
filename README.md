@@ -195,6 +195,14 @@ python scheduling_benchmark_demo.py
 reports/benchmark_results.csv
 ```
 
+## 运行连续上班限制示例
+
+```bash
+python scheduling_consecutive_demo.py
+```
+
+这个示例展示如何新增业务规则：员工最多只能连续上 N 天。
+
 ## 排班模型学到的内容
 
 - 0/1 决策变量：`work_employee_day = 1` 表示某员工在某天上班。
@@ -211,6 +219,7 @@ reports/benchmark_results.csv
 - API 化部署：通过 JSON API 将排班求解能力提供给其他系统调用。
 - 自动化测试：用回归测试确保模型、API 和报表导出没有被后续改动破坏。
 - 性能基准测试：比较不同问题规模下的变量数量、求解时间和结果质量。
+- 规则扩展：加入“最多连续上班天数”等真实排班约束。
 
 ## CPLEX vs Gurobi
 

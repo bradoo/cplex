@@ -48,6 +48,30 @@ class SchedulingSolverTests(unittest.TestCase):
         self.assertEqual(result["mode"], "soft")
         self.assertGreater(result["total_shortage"], 0)
 
+    def test_max_consecutive_work_days_is_enforced(self):
+        problem = default_problem()
+        result = solve_staff_scheduling(
+            employees=problem["employees"],
+            days=problem["days"],
+            required_staff=problem["required_staff"],
+            availability=problem["availability"],
+            max_shifts_per_employee=problem["max_shifts_per_employee"],
+            max_consecutive_work_days=2,
+            preferences=problem["preferences"],
+        )
+
+        self.assertEqual(result["status"], "optimal")
+        for employee in problem["employees"]:
+            current_run = 0
+            longest_run = 0
+            for day in problem["days"]:
+                if employee in result["schedule"][day]:
+                    current_run += 1
+                    longest_run = max(longest_run, current_run)
+                else:
+                    current_run = 0
+            self.assertLessEqual(longest_run, 2)
+
 
 class SchedulingApiTests(unittest.TestCase):
     def test_health_and_solve_api(self):

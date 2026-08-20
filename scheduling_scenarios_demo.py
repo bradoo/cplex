@@ -20,6 +20,7 @@ def solve_scenario(name, changes, use_soft_fallback=True):
         required_staff=problem["required_staff"],
         availability=problem["availability"],
         max_shifts_per_employee=problem["max_shifts_per_employee"],
+        max_consecutive_work_days=problem.get("max_consecutive_work_days"),
         preferences=problem["preferences"],
         preference_weight=problem.get("preference_weight", 0.01),
         time_limit=problem.get("time_limit", 10),
@@ -33,6 +34,7 @@ def solve_scenario(name, changes, use_soft_fallback=True):
             required_staff=problem["required_staff"],
             availability=problem["availability"],
             max_shifts_per_employee=problem["max_shifts_per_employee"],
+            max_consecutive_work_days=problem.get("max_consecutive_work_days"),
             preferences=problem["preferences"],
             preference_weight=problem.get("preference_weight", 0.01),
             time_limit=problem.get("time_limit", 10),
@@ -52,6 +54,9 @@ def apply_changes(problem, changes):
 
     if "max_shifts_per_employee" in changes:
         problem["max_shifts_per_employee"] = changes["max_shifts_per_employee"]
+
+    if "max_consecutive_work_days" in changes:
+        problem["max_consecutive_work_days"] = changes["max_consecutive_work_days"]
 
     if "availability" in changes:
         for employee, days in changes["availability"].items():

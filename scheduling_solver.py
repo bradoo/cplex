@@ -30,6 +30,7 @@ DEFAULT_PREFERENCES = {
 }
 
 DEFAULT_MAX_SHIFTS = 5
+DEFAULT_MAX_CONSECUTIVE_WORK_DAYS = None
 
 
 def default_problem():
@@ -46,6 +47,7 @@ def default_problem():
             for employee, days in DEFAULT_PREFERENCES.items()
         },
         "max_shifts_per_employee": DEFAULT_MAX_SHIFTS,
+        "max_consecutive_work_days": DEFAULT_MAX_CONSECUTIVE_WORK_DAYS,
     }
 
 
@@ -55,6 +57,7 @@ def solve_staff_scheduling(
     required_staff,
     availability,
     max_shifts_per_employee,
+    max_consecutive_work_days=None,
     preferences=None,
     preference_weight=0.01,
     time_limit=None,
@@ -103,6 +106,14 @@ def solve_staff_scheduling(
         )
         model.add_constraint(workload <= max_workload, ctname=f"max_workload_{employee}")
         model.add_constraint(workload >= min_workload, ctname=f"min_workload_{employee}")
+
+    add_max_consecutive_work_constraints(
+        model,
+        work,
+        employees,
+        days,
+        max_consecutive_work_days,
+    )
 
     model.add_constraint(
         model.sum(work[employee, day] for employee in employees for day in days)
@@ -154,6 +165,7 @@ def solve_staff_scheduling_soft(
     required_staff,
     availability,
     max_shifts_per_employee,
+    max_consecutive_work_days=None,
     preferences=None,
     preference_weight=0.01,
     shortage_penalty=1000,
@@ -213,6 +225,14 @@ def solve_staff_scheduling_soft(
         model.add_constraint(workload <= max_workload, ctname=f"max_workload_{employee}")
         model.add_constraint(workload >= min_workload, ctname=f"min_workload_{employee}")
 
+    add_max_consecutive_work_constraints(
+        model,
+        work,
+        employees,
+        days,
+        max_consecutive_work_days,
+    )
+
     solution = model.solve(log_output=log_output)
 
     if solution is None:
@@ -262,6 +282,30 @@ def apply_solve_parameters(model, time_limit, mip_gap):
         model.parameters.timelimit = float(time_limit)
     if mip_gap is not None and mip_gap >= 0:
         model.parameters.mip.tolerances.mipgap = float(mip_gap)
+
+
+def add_max_consecutive_work_constraints(
+    model,
+    work,
+    employees,
+    days,
+    max_consecutive_work_days,
+):
+    if not max_consecutive_work_days:
+        return
+
+    window_size = max_consecutive_work_days + 1
+    if window_size > len(days):
+        return
+
+    for employee in employees:
+        for start in range(len(days) - window_size + 1):
+            window_days = days[start : start + window_size]
+            model.add_constraint(
+                model.sum(work[employee, day] for day in window_days)
+                <= max_consecutive_work_days,
+                ctname=f"max_consecutive_{employee}_{start}",
+            )
 
 
 def solve_details(model):
