@@ -416,7 +416,23 @@ python scheduling_soft_constraints_demo.py
 这样模型会尽量满足技能要求，实在满足不了时明确报告缺哪个技能、缺几个人。
 ```
 
-## 21. 可以打开的代码
+## 21. 演示罚分权重
+
+运行：
+
+```bash
+python scheduling_penalty_weights_demo.py
+```
+
+讲解点：
+
+```text
+软约束不是简单地“都可以违反”，而是要给不同违反设置不同代价。
+如果技能缺口罚分很低，模型可能为了满足员工偏好牺牲技能覆盖。
+如果技能缺口罚分很高，模型会优先安排具备关键技能的人。
+```
+
+## 22. 可以打开的代码
 
 核心求解器：
 
@@ -539,6 +555,13 @@ scheduling_diagnostics.py
 
 ```text
 scheduling_soft_constraints_demo.py
+scheduling_solver.py
+```
+
+罚分权重：
+
+```text
+scheduling_penalty_weights_demo.py
 scheduling_solver.py
 ```
 

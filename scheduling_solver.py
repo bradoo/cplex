@@ -275,7 +275,7 @@ def solve_staff_scheduling_soft(
     for day in days:
         model.add_constraint(
             model.sum(work[employee, day] for employee in employees) + shortage[day]
-            >= required_staff[day],
+            == required_staff[day],
             ctname=f"cover_with_shortage_{day}",
         )
 

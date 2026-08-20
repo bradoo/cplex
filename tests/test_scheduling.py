@@ -68,6 +68,37 @@ class SchedulingSolverTests(unittest.TestCase):
         self.assertEqual(result["total_skill_shortage"], 1)
         self.assertEqual(result["skill_shortages"]["Sun:night"], 1)
 
+    def test_soft_solver_does_not_overstaff_when_preferences_are_high(self):
+        problem = default_problem()
+        problem["days"] = ["Sun"]
+        problem["required_staff"] = {"Sun": 1}
+        problem["availability"] = {
+            employee: {"Sun": int(employee in ["Carol", "David"])}
+            for employee in problem["employees"]
+        }
+        problem["skill_requirements"] = {"Sun": {"night": 1}}
+        problem["preferences"] = {
+            employee: {"Sun": int(employee == "Carol")}
+            for employee in problem["employees"]
+        }
+
+        result = solve_staff_scheduling_soft(
+            employees=problem["employees"],
+            days=problem["days"],
+            required_staff=problem["required_staff"],
+            availability=problem["availability"],
+            max_shifts_per_employee=1,
+            skills=problem["skills"],
+            skill_requirements=problem["skill_requirements"],
+            preferences=problem["preferences"],
+            preference_weight=10,
+            skill_shortage_penalty=1,
+        )
+
+        self.assertEqual(len(result["schedule"]["Sun"]), 1)
+        self.assertEqual(result["schedule"]["Sun"], ["Carol"])
+        self.assertEqual(result["total_skill_shortage"], 1)
+
     def test_max_consecutive_work_days_is_enforced(self):
         problem = default_problem()
         result = solve_staff_scheduling(

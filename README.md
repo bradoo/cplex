@@ -255,6 +255,17 @@ python scheduling_soft_constraints_demo.py
 - 人数缺口：当天总人数不够
 - 技能缺口：当天某类技能员工不够，例如 `Sun:night`
 
+## 运行罚分权重示例
+
+```bash
+python scheduling_penalty_weights_demo.py
+```
+
+这个示例展示同一个业务场景下，技能缺口罚分不同会改变模型取舍：
+
+- 低技能罚分：可能更偏向员工偏好
+- 高技能罚分：优先满足技能覆盖
+
 ## 排班模型学到的内容
 
 - 0/1 决策变量：`work_employee_day = 1` 表示某员工在某天上班。
@@ -277,6 +288,7 @@ python scheduling_soft_constraints_demo.py
 - 实验记录：保存每次模型配置、约束开关、目标权重和结果指标，方便回溯比较。
 - 冲突诊断：硬约束无解时，先从需求、可用性、容量和技能覆盖定位明显矛盾。
 - 软约束进阶：把技能覆盖缺口也量化出来，让模型输出最小损失方案。
+- 罚分权重：通过调整不同缺口的惩罚系数，控制模型优先牺牲哪类目标。
 
 ## CPLEX vs Gurobi
 

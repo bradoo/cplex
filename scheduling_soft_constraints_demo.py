@@ -7,6 +7,7 @@ from scheduling_solver import (
 
 def main():
     problem = default_problem()
+    problem["required_staff"]["Sun"] = 2
     problem["skill_requirements"]["Sun"] = {"senior": 1, "night": 2}
 
     print("=== CPLEX 软约束进阶示例 ===")
