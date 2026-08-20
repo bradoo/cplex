@@ -328,7 +328,23 @@ python scheduling_consecutive_demo.py
 说明优化模型可以随着业务规则逐步扩展。
 ```
 
-## 16. 可以打开的代码
+## 16. 演示技能覆盖约束
+
+运行：
+
+```bash
+python scheduling_skills_demo.py
+```
+
+讲解点：
+
+```text
+真实排班里，不是所有员工都能覆盖所有岗位。
+这个示例给员工配置技能，并要求每天至少有 1 名 senior。
+模型会在满足总人数的同时，保证关键技能覆盖。
+```
+
+## 17. 可以打开的代码
 
 核心求解器：
 
@@ -415,6 +431,13 @@ reports/benchmark_results.csv
 
 ```text
 scheduling_consecutive_demo.py
+scheduling_solver.py
+```
+
+技能覆盖约束：
+
+```text
+scheduling_skills_demo.py
 scheduling_solver.py
 ```
 

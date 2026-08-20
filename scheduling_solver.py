@@ -29,6 +29,18 @@ DEFAULT_PREFERENCES = {
     "David": {"Mon": 0, "Tue": 1, "Wed": 0, "Thu": 1, "Fri": 1, "Sat": 0, "Sun": 1},
 }
 
+DEFAULT_SKILLS = {
+    "Alice": ["senior", "support"],
+    "Bob": ["support"],
+    "Carol": ["senior", "training"],
+    "David": ["support", "night"],
+}
+
+DEFAULT_SKILL_REQUIREMENTS = {
+    day: {"senior": 1}
+    for day in DEFAULT_DAYS
+}
+
 DEFAULT_MAX_SHIFTS = 5
 DEFAULT_MAX_CONSECUTIVE_WORK_DAYS = None
 
@@ -46,6 +58,14 @@ def default_problem():
             employee: dict(days)
             for employee, days in DEFAULT_PREFERENCES.items()
         },
+        "skills": {
+            employee: list(skills)
+            for employee, skills in DEFAULT_SKILLS.items()
+        },
+        "skill_requirements": {
+            day: dict(requirements)
+            for day, requirements in DEFAULT_SKILL_REQUIREMENTS.items()
+        },
         "max_shifts_per_employee": DEFAULT_MAX_SHIFTS,
         "max_consecutive_work_days": DEFAULT_MAX_CONSECUTIVE_WORK_DAYS,
     }
@@ -58,6 +78,8 @@ def solve_staff_scheduling(
     availability,
     max_shifts_per_employee,
     max_consecutive_work_days=None,
+    skills=None,
+    skill_requirements=None,
     preferences=None,
     preference_weight=0.01,
     time_limit=None,
@@ -115,6 +137,15 @@ def solve_staff_scheduling(
         max_consecutive_work_days,
     )
 
+    add_skill_coverage_constraints(
+        model,
+        work,
+        employees,
+        days,
+        skills,
+        skill_requirements,
+    )
+
     model.add_constraint(
         model.sum(work[employee, day] for employee in employees for day in days)
         == total_required_shifts,
@@ -166,6 +197,8 @@ def solve_staff_scheduling_soft(
     availability,
     max_shifts_per_employee,
     max_consecutive_work_days=None,
+    skills=None,
+    skill_requirements=None,
     preferences=None,
     preference_weight=0.01,
     shortage_penalty=1000,
@@ -231,6 +264,15 @@ def solve_staff_scheduling_soft(
         employees,
         days,
         max_consecutive_work_days,
+    )
+
+    add_skill_coverage_constraints(
+        model,
+        work,
+        employees,
+        days,
+        skills,
+        skill_requirements,
     )
 
     solution = model.solve(log_output=log_output)
@@ -305,6 +347,32 @@ def add_max_consecutive_work_constraints(
                 model.sum(work[employee, day] for day in window_days)
                 <= max_consecutive_work_days,
                 ctname=f"max_consecutive_{employee}_{start}",
+            )
+
+
+def add_skill_coverage_constraints(
+    model,
+    work,
+    employees,
+    days,
+    skills,
+    skill_requirements,
+):
+    if not skills or not skill_requirements:
+        return
+
+    for day in days:
+        day_requirements = skill_requirements.get(day, {})
+        for skill, required_count in day_requirements.items():
+            qualified_employees = [
+                employee
+                for employee in employees
+                if skill in skills.get(employee, [])
+            ]
+            model.add_constraint(
+                model.sum(work[employee, day] for employee in qualified_employees)
+                >= required_count,
+                ctname=f"skill_{skill}_{day}",
             )
 
 

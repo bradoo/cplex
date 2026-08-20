@@ -49,6 +49,8 @@ def solve():
         "availability": data["availability"],
         "max_shifts_per_employee": int(data["max_shifts_per_employee"]),
         "max_consecutive_work_days": optional_int(data.get("max_consecutive_work_days")),
+        "skills": data.get("skills"),
+        "skill_requirements": data.get("skill_requirements"),
         "preferences": data.get("preferences"),
         "preference_weight": float(data.get("preference_weight") or 0.01),
         "time_limit": float(data.get("time_limit") or 0),
@@ -106,6 +108,12 @@ def validate_problem(data):
             for day in days:
                 if day not in preferences[employee]:
                     return f"preferences is missing {employee} / {day}"
+
+    skill_requirements = data.get("skill_requirements")
+    if skill_requirements:
+        for day in days:
+            if day not in skill_requirements:
+                return f"skill_requirements is missing day: {day}"
 
     return None
 

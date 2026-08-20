@@ -72,6 +72,28 @@ class SchedulingSolverTests(unittest.TestCase):
                     current_run = 0
             self.assertLessEqual(longest_run, 2)
 
+    def test_skill_requirements_are_enforced(self):
+        problem = default_problem()
+        result = solve_staff_scheduling(
+            employees=problem["employees"],
+            days=problem["days"],
+            required_staff=problem["required_staff"],
+            availability=problem["availability"],
+            max_shifts_per_employee=problem["max_shifts_per_employee"],
+            skills=problem["skills"],
+            skill_requirements=problem["skill_requirements"],
+            preferences=problem["preferences"],
+        )
+
+        self.assertEqual(result["status"], "optimal")
+        for day in problem["days"]:
+            seniors = [
+                employee
+                for employee in result["schedule"][day]
+                if "senior" in problem["skills"][employee]
+            ]
+            self.assertGreaterEqual(len(seniors), 1)
+
 
 class SchedulingApiTests(unittest.TestCase):
     def test_health_and_solve_api(self):
