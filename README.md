@@ -1,24 +1,24 @@
-# CPLEX 学习笔记
+# CPLEX / DOcplex 学习笔记
 
-这个目录保存了一组 CPLEX / DOcplex 入门示例，用来学习数学优化建模、排班系统和可运行的汇报 Demo。
+这个仓库是一组 **CPLEX / DOcplex** 入门到进阶的可运行示例，围绕「数学优化建模」和「员工排班系统」两条主线，配套课件、汇报脚本、REST API 和自动化测试，适合自学和团队分享。
 
-英文版已保留在：
+> 英文版说明见 [docs/README.en.md](docs/README.en.md)
 
-```bash
-README.en.md
-```
+---
 
-## 课件
+## 目录
 
-复习和分享用的课件在：
+- [环境准备](#环境准备)
+- [仓库结构](#仓库结构)
+- [学习路线](#学习路线)
+- [文档与课件](#文档与课件)
+- [示例速查表](#示例速查表)
+- [自动化测试](#自动化测试)
+- [CPLEX vs Gurobi](#cplex-vs-gurobi)
 
-```bash
-cplex_intro_slides.md
-```
+---
 
 ## 环境准备
-
-创建并激活虚拟环境：
 
 ```bash
 python3 -m venv .venv
@@ -26,269 +26,179 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## 运行背包问题示例
+> 所有示例默认从仓库根目录运行（`data/` 与 `reports/` 使用相对路径）。
+
+---
+
+## 仓库结构
+
+```text
+cplex/
+├── README.md                     # 本文件：入口与索引
+├── requirements.txt              # 依赖：docplex / cplex / flask
+├── run_tests.py                  # 一键运行全部测试
+│
+├── docs/                         # 文档与课件
+│   ├── README.en.md              # 英文版说明
+│   ├── cplex_intro_slides.md     # 分享用课件
+│   ├── manager_demo.md           # 经理汇报脚本
+│   └── scheduling_api.md         # 排班 REST API 文档
+│
+├── scheduling_solver.py          # 核心排班求解器（被大多数示例复用）
+├── scheduling_diagnostics.py     # 冲突诊断工具
+├── scheduling_app.py             # Flask 交互式排班服务 + API
+│
+├── data/                         # 示例业务数据（员工 / 需求 / 可用性）
+├── reports/                      # 示例输出（各 demo 生成，已提交作参考）
+├── templates/                    # Flask 页面模板
+└── tests/                        # 回归测试
+```
+
+经典优化示例与排班示例目前都平铺在根目录，命名统一以 `*_docplex.py` / `scheduling_*_demo.py` 区分，详见下方[示例速查表](#示例速查表)。
+
+---
+
+## 学习路线
+
+建议按下面顺序循序渐进：
+
+**第一阶段 · 数学优化基础**（理解「变量 / 目标 / 约束」三要素）
+
+1. `knapsack_docplex.py` — 背包问题（0/1 变量 + 最大化价值）
+2. `transportation_docplex.py` — 运输问题（连续变量 + 供需平衡）
+3. `facility_location_docplex.py` — 仓库选址（0/1 + 连续混合，关联约束）
+
+**第二阶段 · 排班建模入门**
+
+4. `scheduling_docplex.py` — 最基础排班模型
+5. `scheduling_from_csv.py` — 从 CSV 读业务数据；硬约束无解自动切软约束
+6. `scheduling_parameters_demo.py` — 求解参数（`time_limit` / `mip_gap`）
+
+**第三阶段 · 多目标与业务规则**
+
+7. `scheduling_multi_objective_demo.py` — 公平性 + 员工偏好
+8. `scheduling_consecutive_demo.py` — 最多连续上班 N 天
+9. `scheduling_skills_demo.py` — 技能覆盖（如每天至少 1 名 senior）
+10. `scheduling_cost_demo.py` — 加入排班成本优化
+
+**第四阶段 · 软约束、诊断与取舍**
+
+11. `scheduling_conflict_diagnosis_demo.py` — 无解时定位冲突来源
+12. `scheduling_soft_constraints_demo.py` — 人数缺口 + 技能缺口量化
+13. `scheduling_penalty_weights_demo.py` — 罚分权重如何改变模型取舍
+14. `scheduling_two_stage_demo.py` — 两阶段求解：先保覆盖、再优化偏好
+
+**第五阶段 · 工程化（情景 / 解释 / 实验 / 基准 / API）**
+
+15. `scheduling_scenarios_demo.py` — 批量情景分析 + 报表导出
+16. `scheduling_explain_demo.py` — 自动解释排班结果
+17. `scheduling_experiment_log_demo.py` — 记录每次实验配置与指标
+18. `scheduling_benchmark_demo.py` — 不同规模的性能基准
+19. `scheduling_app.py` + `scheduling_api_client_demo.py` — REST API 化部署
+
+---
+
+## 文档与课件
+
+| 文档 | 用途 |
+|---|---|
+| [docs/cplex_intro_slides.md](docs/cplex_intro_slides.md) | 复习与分享用课件 |
+| [docs/manager_demo.md](docs/manager_demo.md) | 面向经理的汇报脚本 |
+| [docs/scheduling_api.md](docs/scheduling_api.md) | 排班 REST API 接口文档 |
+| [docs/README.en.md](docs/README.en.md) | 英文版说明 |
+
+---
+
+## 示例速查表
+
+### 经典数学优化
+
+| 脚本 | 主题 | 关键概念 |
+|---|---|---|
+| `knapsack_docplex.py` | 背包问题 | 0/1 变量、最大化目标、容量约束 |
+| `transportation_docplex.py` | 运输问题 | 连续变量、供应/需求约束 |
+| `facility_location_docplex.py` | 仓库选址 | 0/1+连续混合、开仓固定成本、关联约束 |
+
+### 排班系统（核心：`scheduling_solver.py`）
+
+| 脚本 | 主题 | 产出 |
+|---|---|---|
+| `scheduling_docplex.py` | 基础排班 | — |
+| `scheduling_from_csv.py` | 读 CSV / 软约束兜底 | — |
+| `scheduling_parameters_demo.py` | 求解参数 | — |
+| `scheduling_multi_objective_demo.py` | 公平性 + 偏好 | — |
+| `scheduling_consecutive_demo.py` | 连续上班限制 | — |
+| `scheduling_skills_demo.py` | 技能覆盖约束 | — |
+| `scheduling_cost_demo.py` | 成本优化 | — |
+| `scheduling_conflict_diagnosis_demo.py` | 冲突诊断 | — |
+| `scheduling_soft_constraints_demo.py` | 软约束进阶 | — |
+| `scheduling_penalty_weights_demo.py` | 罚分权重取舍 | — |
+| `scheduling_two_stage_demo.py` | 两阶段求解（先覆盖后偏好） | — |
+| `scheduling_scenarios_demo.py` | 批量情景分析 | `reports/scenario_*.{csv,json}` |
+| `scheduling_explain_demo.py` | 结果自动解释 | `reports/baseline_explanation.md` |
+| `scheduling_experiment_log_demo.py` | 实验记录 | `reports/experiments.jsonl` / `_summary.csv` |
+| `scheduling_benchmark_demo.py` | 性能基准 | `reports/benchmark_results.csv` |
+
+### 部署与展示
+
+| 脚本 / 文件 | 说明 |
+|---|---|
+| `scheduling_app.py` | Flask 服务，`http://127.0.0.1:5050`，含交互模拟器与 JSON API |
+| `scheduling_api_client_demo.py` | 调用 `/api/health`、`/api/problem`、`/api/solve` 的 Python 客户端 |
+| `scheduling_solution.html` | 静态排班展示页（浏览器直接打开） |
+
+运行任意脚本：
 
 ```bash
+python <脚本名>.py
+# 例如
 python knapsack_docplex.py
+python scheduling_scenarios_demo.py
 ```
 
-## 背包模型含义
-
-- 决策变量：`pick_item = 1` 表示选择该物品，`0` 表示不选择。
-- 目标函数：最大化总价值。
-- 约束条件：总重量不能超过背包容量。
-
-## 运行运输问题示例
-
-```bash
-python transportation_docplex.py
-```
-
-## 运输模型含义
-
-- 决策变量：`ship_warehouse_to_customer` 表示从某仓库发给某客户的数量。
-- 目标函数：最小化总运输成本。
-- 供应约束：每个仓库发出的数量不能超过可用供应量。
-- 需求约束：每个客户必须收到指定需求量。
-
-## 运行仓库选址示例
-
-```bash
-python facility_location_docplex.py
-```
-
-## 仓库选址模型含义
-
-- 0/1 决策变量：`open_facility = 1` 表示开启该仓库。
-- 连续决策变量：`ship_facility_to_customer` 表示从仓库发给客户的数量。
-- 目标函数：最小化开仓固定成本和运输成本。
-- 需求约束：每个客户必须收到指定需求量。
-- 关联约束：仓库只有开启后才能发货。
-
-## 运行基础排班示例
-
-```bash
-python scheduling_docplex.py
-```
-
-## 从 CSV 读取排班数据
-
-```bash
-python scheduling_from_csv.py
-```
-
-运行一个更紧张的需求场景；硬约束无解时会自动切换到软约束兜底：
+一个更紧张的需求场景（硬约束无解会自动切换软约束兜底）：
 
 ```bash
 python scheduling_from_csv.py --employees data/employees_limited.csv --demand data/demand_hard.csv
 ```
 
-## 运行求解参数示例
+---
 
-```bash
-python scheduling_parameters_demo.py
-```
-
-这个示例展示 `time_limit` 和 `mip_gap` 如何影响 CPLEX 求解。
-
-## 运行多目标排班示例
-
-```bash
-python scheduling_multi_objective_demo.py
-```
-
-这个示例展示如何在公平性之外加入员工偏好。
-
-## 运行批量情景分析示例
-
-```bash
-python scheduling_scenarios_demo.py
-```
-
-这个示例会一次性比较多个需求和人员配置场景。
-
-它还会导出报表：
-
-```text
-reports/scenario_summary.csv
-reports/scenario_schedule.csv
-reports/scenario_results.json
-```
-
-## 运行排班解释示例
-
-```bash
-python scheduling_explain_demo.py
-```
-
-这个示例会解释为什么这样排班，并生成：
-
-```text
-reports/baseline_explanation.md
-```
-
-## 查看静态排班展示页
-
-用浏览器打开：
-
-```bash
-scheduling_solution.html
-```
-
-## 运行交互式排班模拟器
-
-```bash
-python scheduling_app.py
-```
-
-然后打开：
-
-```text
-http://127.0.0.1:5050
-```
-
-经理汇报脚本在：
-
-```bash
-manager_demo.md
-```
-
-## 调用排班 API
-
-API 文档在：
-
-```bash
-scheduling_api.md
-```
-
-启动服务后，可以运行 Python 客户端：
-
-```bash
-python scheduling_api_client_demo.py
-```
-
-## 运行自动化测试
+## 自动化测试
 
 ```bash
 python run_tests.py
 ```
 
-测试覆盖：
+覆盖范围：
 
 - 默认排班求解
 - 软约束缺口场景
-- API 健康检查和求解接口
+- API 健康检查与求解接口
 - API 请求校验
 - 情景分析报表导出
 
-## 运行性能基准测试
-
-```bash
-python scheduling_benchmark_demo.py
-```
-
-这个示例会生成不同规模的排班问题，对比变量数量、求解时间、公平性和偏好命中。
-
-它会导出：
-
-```text
-reports/benchmark_results.csv
-```
-
-## 运行连续上班限制示例
-
-```bash
-python scheduling_consecutive_demo.py
-```
-
-这个示例展示如何新增业务规则：员工最多只能连续上 N 天。
-
-## 运行技能覆盖约束示例
-
-```bash
-python scheduling_skills_demo.py
-```
-
-这个示例展示如何要求每天至少安排指定数量的某类技能员工，例如每天至少 1 名 senior。
-
-## 运行成本优化示例
-
-```bash
-python scheduling_cost_demo.py
-```
-
-这个示例展示如何在公平性、偏好和技能覆盖之外加入排班成本。
-
-## 运行实验记录示例
-
-```bash
-python scheduling_experiment_log_demo.py
-```
-
-这个示例会记录不同模型配置和结果指标，输出：
-
-```text
-reports/experiments.jsonl
-reports/experiments_summary.csv
-```
-
-## 运行冲突诊断示例
-
-```bash
-python scheduling_conflict_diagnosis_demo.py
-```
-
-这个示例展示硬约束模型无解时，如何从业务输入里定位可能冲突：
-
-- 全周总需求是否超过员工总容量
-- 某天需要人数是否超过当天可用人数
-- 某个技能要求是否超过当天可用的合格员工数
-
-## 运行软约束进阶示例
-
-```bash
-python scheduling_soft_constraints_demo.py
-```
-
-这个示例展示如何把技能覆盖也做成软约束。模型会分别输出：
-
-- 人数缺口：当天总人数不够
-- 技能缺口：当天某类技能员工不够，例如 `Sun:night`
-
-## 运行罚分权重示例
-
-```bash
-python scheduling_penalty_weights_demo.py
-```
-
-这个示例展示同一个业务场景下，技能缺口罚分不同会改变模型取舍：
-
-- 低技能罚分：可能更偏向员工偏好
-- 高技能罚分：优先满足技能覆盖
+---
 
 ## 排班模型学到的内容
 
-- 0/1 决策变量：`work_employee_day = 1` 表示某员工在某天上班。
-- 覆盖约束：每天必须有足够员工。
-- 可用性约束：员工只能在可用日期上班。
-- 工作量约束：每个员工有最大班次数。
-- 公平性目标：最忙员工和最闲员工的班次数差距尽量小。
-- CSV 数据读取：从业务表格读取员工、需求和可用性数据。
-- 求解参数：设置时间限制和 MIP Gap，更接近生产系统。
-- 多目标建模：在公平性之外平衡员工偏好命中。
-- 情景分析：批量运行多个业务场景，对比可行性、缺口、公平性和偏好命中。
-- 结果导出：将场景汇总和详细排班写入 CSV/JSON。
-- 结果解释：自动说明每天为什么这样排、约束是否满足、偏好是否命中。
-- API 化部署：通过 JSON API 将排班求解能力提供给其他系统调用。
-- 自动化测试：用回归测试确保模型、API 和报表导出没有被后续改动破坏。
-- 性能基准测试：比较不同问题规模下的变量数量、求解时间和结果质量。
-- 规则扩展：加入“最多连续上班天数”等真实排班约束。
-- 技能覆盖约束：确保每天有足够的特定技能员工，例如 senior 覆盖。
-- 成本优化：在满足排班规则的前提下，尽量降低总排班成本。
-- 实验记录：保存每次模型配置、约束开关、目标权重和结果指标，方便回溯比较。
-- 冲突诊断：硬约束无解时，先从需求、可用性、容量和技能覆盖定位明显矛盾。
-- 软约束进阶：把技能覆盖缺口也量化出来，让模型输出最小损失方案。
-- 罚分权重：通过调整不同缺口的惩罚系数，控制模型优先牺牲哪类目标。
+- **0/1 决策变量**：`work_employee_day = 1` 表示某员工某天上班
+- **覆盖约束**：每天必须有足够员工
+- **可用性约束**：员工只能在可用日期上班
+- **工作量约束**：每人有最大班次数
+- **公平性目标**：最忙与最闲员工的班次差距尽量小
+- **CSV 数据读取**：从业务表格读取员工、需求、可用性
+- **求解参数**：`time_limit` 与 `mip_gap`，更贴近生产
+- **多目标建模**：公平性之外平衡员工偏好
+- **情景分析**：批量运行多个业务场景并对比
+- **结果导出 / 解释**：写入 CSV/JSON，并自动说明排班理由
+- **API 化部署**：通过 JSON API 提供求解能力
+- **自动化测试**：回归测试防止后续改动破坏模型/API/报表
+- **性能基准**：对比不同规模下的变量数、求解时间与质量
+- **规则扩展**：最多连续上班天数等真实约束
+- **技能覆盖 / 成本优化 / 软约束 / 罚分权重**：更贴近真实业务的取舍
+
+---
 
 ## CPLEX vs Gurobi
 
@@ -297,10 +207,10 @@ CPLEX 和 Gurobi 是同一类商业数学优化求解器。
 | 对比项 | CPLEX | Gurobi |
 |---|---|---|
 | 公司 | IBM | Gurobi Optimization |
-| 主要定位 | IBM Optimization Studio 生态中的数学优化求解器 | 专注优化 API 和求解器本体 |
-| 常见模型类型 | LP、MILP/MIP、QP、QCP，也可通过 CP Optimizer 做 CP | LP、MILP/MIP、QP、QCP 等数学规划模型 |
+| 主要定位 | IBM Optimization Studio 生态中的求解器 | 专注优化 API 和求解器本体 |
+| 常见模型 | LP、MILP/MIP、QP、QCP，也可用 CP Optimizer 做 CP | LP、MILP/MIP、QP、QCP 等 |
 | Python 写法 | `docplex` 或底层 `cplex` API | `gurobipy` API |
-| 排班场景 | 可用 MILP，也可用 CP Optimizer 处理复杂排程 | 通常用 MILP/MIQP 方式建模 |
+| 排班场景 | 可用 MILP，也可用 CP Optimizer 处理复杂排程 | 通常用 MILP/MIQP 建模 |
 | 学习迁移 | 变量、目标、约束、软约束、MIP Gap 都能迁移到 Gurobi | 同样的建模思想也能迁移回 CPLEX |
 
-关键结论：CPLEX 和 Gurobi 的差别主要在 API、授权、生态和性能细节；真正重要的是建模能力。
+关键结论：CPLEX 和 Gurobi 的差别主要在 API、授权、生态和性能细节；真正重要的是**建模能力**。

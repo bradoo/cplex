@@ -432,7 +432,24 @@ python scheduling_penalty_weights_demo.py
 如果技能缺口罚分很高，模型会优先安排具备关键技能的人。
 ```
 
-## 22. 可以打开的代码
+## 22. 演示分阶段优化
+
+运行：
+
+```bash
+python scheduling_two_stage_demo.py
+```
+
+讲解点：
+
+```text
+生产排班里有些目标有明显优先级：先尽量不缺人、不缺关键技能，
+然后才考虑公平性、偏好和成本。
+分阶段优化会先求出最小缺口，再把这个缺口固定住做第二次优化。
+这样比单纯靠罚分权重更稳定，也更容易向业务解释。
+```
+
+## 23. 可以打开的代码
 
 核心求解器：
 
@@ -562,6 +579,13 @@ scheduling_solver.py
 
 ```text
 scheduling_penalty_weights_demo.py
+scheduling_solver.py
+```
+
+分阶段优化：
+
+```text
+scheduling_two_stage_demo.py
 scheduling_solver.py
 ```
 
