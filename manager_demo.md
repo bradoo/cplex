@@ -383,7 +383,24 @@ JSONL 适合追加保存历史实验，CSV 适合快速对比。
 这能帮助我们回溯“为什么当时选择这个模型版本”。
 ```
 
-## 19. 可以打开的代码
+## 19. 演示冲突诊断
+
+运行：
+
+```bash
+python scheduling_conflict_diagnosis_demo.py
+```
+
+讲解点：
+
+```text
+当硬约束模型无解时，业务方最关心的不是“无解”两个字，
+而是哪条条件互相打架。
+这个示例会检查总班次容量、每天可用人数、每天技能覆盖，
+把可能的问题翻译成可读的诊断报告。
+```
+
+## 20. 可以打开的代码
 
 核心求解器：
 
@@ -493,6 +510,13 @@ scheduling_solver.py
 scheduling_experiment_log_demo.py
 reports/experiments.jsonl
 reports/experiments_summary.csv
+```
+
+冲突诊断：
+
+```text
+scheduling_conflict_diagnosis_demo.py
+scheduling_diagnostics.py
 ```
 
 前面几节基础模型：

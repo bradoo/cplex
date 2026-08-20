@@ -232,6 +232,18 @@ reports/experiments.jsonl
 reports/experiments_summary.csv
 ```
 
+## 运行冲突诊断示例
+
+```bash
+python scheduling_conflict_diagnosis_demo.py
+```
+
+这个示例展示硬约束模型无解时，如何从业务输入里定位可能冲突：
+
+- 全周总需求是否超过员工总容量
+- 某天需要人数是否超过当天可用人数
+- 某个技能要求是否超过当天可用的合格员工数
+
 ## 排班模型学到的内容
 
 - 0/1 决策变量：`work_employee_day = 1` 表示某员工在某天上班。
@@ -252,6 +264,7 @@ reports/experiments_summary.csv
 - 技能覆盖约束：确保每天有足够的特定技能员工，例如 senior 覆盖。
 - 成本优化：在满足排班规则的前提下，尽量降低总排班成本。
 - 实验记录：保存每次模型配置、约束开关、目标权重和结果指标，方便回溯比较。
+- 冲突诊断：硬约束无解时，先从需求、可用性、容量和技能覆盖定位明显矛盾。
 
 ## CPLEX vs Gurobi
 

@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from scheduling_app import app
+from scheduling_diagnostics import diagnose_scheduling_conflicts
 from scheduling_scenarios_demo import export_reports, solve_scenario
 from scheduling_solver import (
     default_problem,
@@ -111,6 +112,45 @@ class SchedulingSolverTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "optimal")
         self.assertGreater(result["total_cost"], 0)
+
+
+class SchedulingDiagnosticsTests(unittest.TestCase):
+    def test_diagnosis_reports_total_capacity_shortage(self):
+        problem = default_problem()
+        problem["max_shifts_per_employee"] = 2
+
+        findings = diagnose_scheduling_conflicts(problem)
+        finding_types = {finding["type"] for finding in findings}
+
+        self.assertIn("total_capacity", finding_types)
+
+    def test_diagnosis_reports_daily_availability_shortage(self):
+        problem = default_problem()
+        problem["required_staff"]["Sun"] = 4
+
+        findings = diagnose_scheduling_conflicts(problem)
+        daily_findings = [
+            finding
+            for finding in findings
+            if finding["type"] == "daily_availability"
+        ]
+
+        self.assertEqual(daily_findings[0]["day"], "Sun")
+        self.assertEqual(daily_findings[0]["gap"], 2)
+
+    def test_diagnosis_reports_skill_coverage_shortage(self):
+        problem = default_problem()
+        problem["skill_requirements"]["Sun"] = {"night": 2}
+
+        findings = diagnose_scheduling_conflicts(problem)
+        skill_findings = [
+            finding
+            for finding in findings
+            if finding["type"] == "skill_coverage"
+        ]
+
+        self.assertEqual(skill_findings[0]["day"], "Sun")
+        self.assertEqual(skill_findings[0]["skill"], "night")
 
 
 class SchedulingApiTests(unittest.TestCase):
