@@ -1,0 +1,15 @@
+Items = {"Laptop", "Camera", "Book"};
+
+// This intentionally uses a string where the model expects an int.
+capacity = 5;
+
+weight = [
+  3,
+  2
+];
+
+value = [
+  500,
+  350,
+  60
+];

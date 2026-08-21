@@ -83,6 +83,7 @@ cplex/
 - `opl/staff_scheduling_cost/` — 在 OPL 排班模型中加入成本目标，练习业务取舍
 - `opl/staff_scheduling_soft_constraints/` — 用缺口变量把硬需求改成可解释的软约束
 - `opl/cp_optimizer_quickstart/` — 对应 Quick Start 的 Two solving engines，使用 `using CP;` 切换到 CP Optimizer
+- `opl/debugging_quickstart/` — 对应 Quick Start 的 Debugging，练习语法错误、数据错误和无解错误
 - 建议在 Studio 中全部使用英文项目名、英文文件名、英文 Run Configuration 名
 
 **第三阶段 · 多目标与业务规则**
