@@ -18,6 +18,12 @@ Run steps:
 4. Add the model file and data file.
 5. Click Run.
 
+Output files:
+
+- `staff_schedule_output.csv` contains one row for each assigned shift.
+- `staff_workload_output.csv` contains workload summary and fairness spread.
+- In CPLEX Studio, refresh the project after running if the files do not appear.
+
 Scenario practice:
 
 - `baseline.dat` has the normal weekly demand.

@@ -65,4 +65,29 @@ execute {
 
   writeln();
   writeln("Fairness spread: ", maxWorkload - minWorkload);
+
+  var scheduleFile = new IloOplOutputFile("staff_schedule_output.csv");
+  scheduleFile.writeln("day,employee,work");
+  for (var d in Days) {
+    for (var e in Employees) {
+      if (work[e][d] > 0.5) {
+        scheduleFile.writeln(d, ",", e, ",1");
+      }
+    }
+  }
+  scheduleFile.close();
+
+  var summaryFile = new IloOplOutputFile("staff_workload_output.csv");
+  summaryFile.writeln("employee,workload");
+  for (var e in Employees) {
+    var workload = 0;
+    for (var d in Days) {
+      if (work[e][d] > 0.5) {
+        workload += 1;
+      }
+    }
+    summaryFile.writeln(e, ",", workload);
+  }
+  summaryFile.writeln("fairness_spread,", maxWorkload - minWorkload);
+  summaryFile.close();
 }
