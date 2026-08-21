@@ -1,0 +1,3 @@
+scenario,total_assignments,fairness_spread,alice_workload,bob_workload,carol_workload,david_workload
+baseline,14,1,4,4,3,3
+weekend_peak,16,0,4,4,4,4

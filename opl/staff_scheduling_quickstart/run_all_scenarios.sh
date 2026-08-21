@@ -15,3 +15,5 @@ for data_file in baseline.dat weekend_peak.dat; do
   echo "  matrix: ${scenario}_schedule_matrix.csv"
   echo "  workload: ${scenario}_workload_output.csv"
 done
+
+python3 summarize_scenarios.py

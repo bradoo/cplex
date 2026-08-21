@@ -44,13 +44,17 @@ Batch run:
 ```
 
 The script runs `baseline.dat` and `weekend_peak.dat`, writes logs to `logs/`,
-and refreshes all scenario CSV outputs.
+refreshes all scenario CSV outputs, and writes `scenario_summary.csv`.
 
 If `oplrun` is installed in a different location:
 
 ```bash
 OPLRUN=/path/to/oplrun ./run_all_scenarios.sh
 ```
+
+Summary file:
+
+- `scenario_summary.csv` compares total assignments, fairness spread, and employee workloads.
 
 Model meaning:
 
