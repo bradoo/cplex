@@ -23,6 +23,7 @@ Output files:
 - Output names use `outputPrefix` from the data file.
 - `baseline.dat` writes `baseline_schedule_output.csv` and `baseline_workload_output.csv`.
 - `weekend_peak.dat` writes `weekend_peak_schedule_output.csv` and `weekend_peak_workload_output.csv`.
+- `*_schedule_matrix.csv` shows one row per day and one column per employee.
 - In CPLEX Studio, refresh the project after running if the files do not appear.
 
 Scenario practice:

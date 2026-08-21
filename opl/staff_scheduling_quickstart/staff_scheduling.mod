@@ -91,4 +91,23 @@ execute {
   }
   summaryFile.writeln("fairness_spread,", maxWorkload - minWorkload);
   summaryFile.close();
+
+  var matrixFile = new IloOplOutputFile(outputPrefix + "_schedule_matrix.csv");
+  matrixFile.write("day");
+  for (var e in Employees) {
+    matrixFile.write(",", e);
+  }
+  matrixFile.writeln();
+  for (var d in Days) {
+    matrixFile.write(d);
+    for (var e in Employees) {
+      if (work[e][d] > 0.5) {
+        matrixFile.write(",1");
+      } else {
+        matrixFile.write(",0");
+      }
+    }
+    matrixFile.writeln();
+  }
+  matrixFile.close();
 }
