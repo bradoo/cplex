@@ -20,8 +20,9 @@ Run steps:
 
 Output files:
 
-- `staff_schedule_output.csv` contains one row for each assigned shift.
-- `staff_workload_output.csv` contains workload summary and fairness spread.
+- Output names use `outputPrefix` from the data file.
+- `baseline.dat` writes `baseline_schedule_output.csv` and `baseline_workload_output.csv`.
+- `weekend_peak.dat` writes `weekend_peak_schedule_output.csv` and `weekend_peak_workload_output.csv`.
 - In CPLEX Studio, refresh the project after running if the files do not appear.
 
 Scenario practice:

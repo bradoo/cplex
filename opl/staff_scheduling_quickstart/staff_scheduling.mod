@@ -4,6 +4,7 @@
 int requiredStaff[Days] = ...;
 int availability[Employees][Days] = ...;
 int maxShiftsPerEmployee = ...;
+string outputPrefix = ...;
 
 dvar boolean work[Employees][Days];
 dvar int+ maxWorkload;
@@ -66,7 +67,7 @@ execute {
   writeln();
   writeln("Fairness spread: ", maxWorkload - minWorkload);
 
-  var scheduleFile = new IloOplOutputFile("staff_schedule_output.csv");
+  var scheduleFile = new IloOplOutputFile(outputPrefix + "_schedule_output.csv");
   scheduleFile.writeln("day,employee,work");
   for (var d in Days) {
     for (var e in Employees) {
@@ -77,7 +78,7 @@ execute {
   }
   scheduleFile.close();
 
-  var summaryFile = new IloOplOutputFile("staff_workload_output.csv");
+  var summaryFile = new IloOplOutputFile(outputPrefix + "_workload_output.csv");
   summaryFile.writeln("employee,workload");
   for (var e in Employees) {
     var workload = 0;

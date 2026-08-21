@@ -19,3 +19,4 @@ availability = [
 ];
 
 maxShiftsPerEmployee = 5;
+outputPrefix = "staff";
