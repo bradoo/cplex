@@ -37,6 +37,21 @@ Scenario practice:
 This is the core Studio workflow: keep the model stable and switch data
 files to compare business scenarios.
 
+Batch run:
+
+```bash
+./run_all_scenarios.sh
+```
+
+The script runs `baseline.dat` and `weekend_peak.dat`, writes logs to `logs/`,
+and refreshes all scenario CSV outputs.
+
+If `oplrun` is installed in a different location:
+
+```bash
+OPLRUN=/path/to/oplrun ./run_all_scenarios.sh
+```
+
 Model meaning:
 
 - `work[e][d] = 1` means employee `e` works on day `d`.

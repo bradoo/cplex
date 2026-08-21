@@ -1,0 +1,76 @@
+IBM ILOG CPLEX Optimization Studio Community Edition.  The CPLEX Optimizers will solve problems up to 1000 variables and 1000 constraints.
+Problem size limit exceeded.
+CP Optimizer Community Edition solves problems with search spaces up to 2^1000.
+Unrestricted version options (including academia) at https://ibm.biz/error1016
+
+
+<<< setup
+
+
+<<< generate
+
+Version identifier: 22.2.0.0 | 2026-05-04 | 5dff98e58
+Tried aggregator 1 time.
+MIP Presolve eliminated 33 rows and 12 columns.
+Reduced MIP has 14 rows, 18 columns, and 60 nonzeros.
+Reduced MIP has 16 binaries, 2 generals, 0 SOSs, and 0 indicators.
+Presolve time = 0.00 sec. (0.05 ticks)
+Found incumbent of value 6.000000 after 0.00 sec. (0.08 ticks)
+Probing fixed 0 vars, tightened 1 bounds.
+Probing time = 0.00 sec. (0.01 ticks)
+Cover probing fixed 0 vars, tightened 1 bounds.
+Tried aggregator 1 time.
+Detecting symmetries...
+Reduced MIP has 14 rows, 18 columns, and 60 nonzeros.
+Reduced MIP has 16 binaries, 2 generals, 0 SOSs, and 0 indicators.
+Presolve time = 0.00 sec. (0.04 ticks)
+Probing time = 0.00 sec. (0.01 ticks)
+Clique table members: 5.
+MIP emphasis: balance optimality and feasibility.
+MIP search method: dynamic search.
+Parallel mode: deterministic, using up to 8 threads.
+Root relaxation solution time = 0.00 sec. (0.03 ticks)
+
+        Nodes                                         Cuts/
+   Node  Left     Objective  IInf  Best Integer    Best Bound    ItCnt     Gap
+
+*     0+    0                            6.0000       -1.0000           116.67%
+*     0+    0                            3.0000       -1.0000           133.33%
+*     0     0      integral     0        0.0000        0.0000        9    0.00%
+Elapsed time = 0.00 sec. (0.19 ticks, tree = 0.00 MB, solutions = 3)
+
+Root node processing (before b&c):
+  Real time             =    0.00 sec. (0.19 ticks)
+Parallel b&c, 8 threads:
+  Real time             =    0.00 sec. (0.00 ticks)
+  Sync time (average)   =    0.00 sec.
+  Wait time (average)   =    0.00 sec.
+                          ------------
+Total (root+branch&cut) =    0.00 sec. (0.19 ticks)
+
+<<< solve
+
+
+OBJECTIVE: 0
+Schedule:
+Mon: Bob, David
+Tue: Alice, David
+Wed: Alice, Carol
+Thu: Alice, Bob
+Fri: Alice, Bob, Carol
+Sat: Bob, Carol, David
+Sun: Carol, David
+
+Workloads:
+Alice: 4
+Bob: 4
+Carol: 4
+David: 4
+
+Fairness spread: 0
+
+<<< post process
+
+
+<<< done
+

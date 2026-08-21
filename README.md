@@ -81,6 +81,7 @@ cplex/
 - `opl/staff_scheduling_quickstart/` — CPLEX Studio 里的最小排班模型，并导出 CSV 结果
 - `opl/staff_scheduling_quickstart/*_schedule_matrix.csv` — 对应 Displaying solutions，把变量值整理成表格
 - `opl/staff_scheduling_quickstart/baseline.dat` 与 `weekend_peak.dat` — 同一模型切换不同数据场景
+- `opl/staff_scheduling_quickstart/run_all_scenarios.sh` — 用 `oplrun` 批量运行多个 OPL 数据场景
 - `opl/staff_scheduling_cost/` — 在 OPL 排班模型中加入成本目标，练习业务取舍
 - `opl/staff_scheduling_soft_constraints/` — 用缺口变量把硬需求改成可解释的软约束
 - `opl/cp_optimizer_quickstart/` — 对应 Quick Start 的 Two solving engines，使用 `using CP;` 切换到 CP Optimizer
