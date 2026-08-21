@@ -1,0 +1,21 @@
+Employees = {"Alice", "Bob", "Carol", "David"};
+Days = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
+
+requiredStaff = [
+  2,
+  2,
+  2,
+  2,
+  3,
+  2,
+  1
+];
+
+availability = [
+  [1, 1, 1, 1, 1, 0, 0],
+  [1, 0, 1, 1, 1, 1, 0],
+  [0, 1, 1, 0, 1, 1, 1],
+  [1, 1, 0, 1, 1, 1, 1]
+];
+
+maxShiftsPerEmployee = 5;

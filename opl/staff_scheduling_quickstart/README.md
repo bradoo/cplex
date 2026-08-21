@@ -18,6 +18,17 @@ Run steps:
 4. Add the model file and data file.
 5. Click Run.
 
+Scenario practice:
+
+- `baseline.dat` has the normal weekly demand.
+- `weekend_peak.dat` raises weekend demand.
+- Create two Run Configurations that use the same model file but different data files:
+  - `staff_baseline_run`: `staff_scheduling.mod` + `baseline.dat`
+  - `staff_weekend_peak_run`: `staff_scheduling.mod` + `weekend_peak.dat`
+
+This is the core Studio workflow: keep the model stable and switch data
+files to compare business scenarios.
+
 Model meaning:
 
 - `work[e][d] = 1` means employee `e` works on day `d`.

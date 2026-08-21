@@ -78,6 +78,7 @@ cplex/
 
 - `opl/pmedian_quickstart/` — 官方 Quick Start 风格的 P-Median 仓库分配模型
 - `opl/staff_scheduling_quickstart/` — CPLEX Studio 里的最小排班模型
+- `opl/staff_scheduling_quickstart/baseline.dat` 与 `weekend_peak.dat` — 同一模型切换不同数据场景
 - 建议在 Studio 中全部使用英文项目名、英文文件名、英文 Run Configuration 名
 
 **第三阶段 · 多目标与业务规则**
