@@ -1,0 +1,31 @@
+Employees = {"Alice", "Bob", "Carol", "David"};
+Days = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
+
+requiredStaff = [
+  3,
+  3,
+  3,
+  3,
+  4,
+  4,
+  3
+];
+
+availability = [
+  [1, 1, 1, 1, 1, 0, 0],
+  [1, 0, 1, 1, 1, 1, 0],
+  [0, 1, 1, 0, 1, 1, 1],
+  [1, 1, 0, 1, 1, 1, 1]
+];
+
+assignmentCost = [
+  [1, 1, 1, 2, 2, 9, 9],
+  [2, 9, 1, 1, 2, 3, 9],
+  [9, 2, 2, 9, 1, 1, 2],
+  [1, 2, 9, 2, 2, 2, 1]
+];
+
+maxShiftsPerEmployee = 5;
+shortagePenalty = 100;
+fairnessWeight = 20;
+costWeight = 1;

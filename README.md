@@ -80,6 +80,7 @@ cplex/
 - `opl/staff_scheduling_quickstart/` — CPLEX Studio 里的最小排班模型
 - `opl/staff_scheduling_quickstart/baseline.dat` 与 `weekend_peak.dat` — 同一模型切换不同数据场景
 - `opl/staff_scheduling_cost/` — 在 OPL 排班模型中加入成本目标，练习业务取舍
+- `opl/staff_scheduling_soft_constraints/` — 用缺口变量把硬需求改成可解释的软约束
 - 建议在 Studio 中全部使用英文项目名、英文文件名、英文 Run Configuration 名
 
 **第三阶段 · 多目标与业务规则**
