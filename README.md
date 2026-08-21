@@ -67,12 +67,13 @@ cplex/
 1. `knapsack_docplex.py` — 背包问题（0/1 变量 + 最大化价值）
 2. `transportation_docplex.py` — 运输问题（连续变量 + 供需平衡）
 3. `facility_location_docplex.py` — 仓库选址（0/1 + 连续混合，关联约束）
+4. `bmi_calorie_optimizer_demo.py` — BMI、热量摄入和运动量优化示例
 
 **第二阶段 · 排班建模入门**
 
-4. `scheduling_docplex.py` — 最基础排班模型
-5. `scheduling_from_csv.py` — 从 CSV 读业务数据；硬约束无解自动切软约束
-6. `scheduling_parameters_demo.py` — 求解参数（`time_limit` / `mip_gap`）
+5. `scheduling_docplex.py` — 最基础排班模型
+6. `scheduling_from_csv.py` — 从 CSV 读业务数据；硬约束无解自动切软约束
+7. `scheduling_parameters_demo.py` — 求解参数（`time_limit` / `mip_gap`）
 
 **CPLEX Studio / OPL 入门**
 
@@ -130,6 +131,7 @@ cplex/
 | `knapsack_docplex.py` | 背包问题 | 0/1 变量、最大化目标、容量约束 |
 | `transportation_docplex.py` | 运输问题 | 连续变量、供应/需求约束 |
 | `facility_location_docplex.py` | 仓库选址 | 0/1+连续混合、开仓固定成本、关联约束 |
+| `bmi_calorie_optimizer_demo.py` | BMI / 热量 / 运动优化 | 连续变量、健康边界、目标体重 |
 
 ### 排班系统（核心：`scheduling_solver.py`）
 
@@ -159,6 +161,7 @@ cplex/
 |---|---|
 | `scheduling_app.py` | Flask 服务，`http://127.0.0.1:5050`，含交互模拟器与 JSON API |
 | `scheduling_api_client_demo.py` | 调用 `/api/health`、`/api/problem`、`/api/solve` 的 Python 客户端 |
+| `bmi_app.py` | BMI / 热量 / 运动量优化页面，`http://127.0.0.1:5051` |
 | `scheduling_solution.html` | 静态排班展示页（浏览器直接打开） |
 
 运行任意脚本：
@@ -169,6 +172,19 @@ python <脚本名>.py
 # 例如
 python knapsack_docplex.py
 python scheduling_scenarios_demo.py
+```
+
+启动 BMI 优化互动页面：
+
+```bash
+cd python
+python bmi_app.py
+```
+
+打开：
+
+```text
+http://127.0.0.1:5051
 ```
 
 一个更紧张的需求场景（硬约束无解会自动切换软约束兜底）：

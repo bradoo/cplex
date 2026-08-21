@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CPLEX BMI 优化器</title>
+  <style>
+    :root {
+      --bg: #f4f6f5;
+      --panel: #ffffff;
+      --ink: #202622;
+      --muted: #65736b;
+      --line: #dce4df;
+      --green: #14784f;
+      --blue: #2459d6;
+      --amber: #9a6500;
+      --soft-green: #e7f5ee;
+      --soft-blue: #e9efff;
+      --soft-amber: #fff3d6;
+      --soft-gray: #edf1ef;
+      --shadow: 0 14px 34px rgba(29, 43, 35, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.45;
+    }
+
+    header {
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .header-inner,
+    main {
+      width: min(1160px, calc(100% - 32px));
+      margin: 0 auto;
+    }
+
+    .header-inner {
+      padding: 24px 0 20px;
+      display: grid;
+      gap: 8px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 28px;
+      line-height: 1.16;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    main {
+      padding: 22px 0 42px;
+      display: grid;
+      grid-template-columns: 0.9fr 1.35fr;
+      gap: 18px;
+      align-items: start;
+    }
+
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .section-head {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 17px;
+      letter-spacing: 0;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 4px 9px;
+      border-radius: 8px;
+      color: var(--green);
+      background: var(--soft-green);
+      font-size: 12px;
+      font-weight: 760;
+      white-space: nowrap;
+    }
+
+    form {
+      padding: 18px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .field {
+      display: grid;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    label {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 720;
+    }
+
+    input,
+    select {
+      width: 100%;
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 7px 9px;
+      color: var(--ink);
+      background: #fff;
+      font: inherit;
+      font-weight: 700;
+    }
+
+    button {
+      min-height: 42px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--blue);
+      color: white;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: 0.7;
+      cursor: progress;
+    }
+
+    .notice {
+      padding: 12px 14px;
+      border-radius: 8px;
+      background: var(--soft-amber);
+      color: var(--amber);
+      font-size: 13px;
+      font-weight: 680;
+    }
+
+    .results {
+      padding: 18px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fff;
+      min-width: 0;
+    }
+
+    .metric-label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 720;
+    }
+
+    .metric-value {
+      margin-top: 4px;
+      font-size: 22px;
+      line-height: 1.1;
+      font-weight: 840;
+      overflow-wrap: anywhere;
+    }
+
+    .metric-unit {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .plan {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .plan-item {
+      border-radius: 8px;
+      background: var(--soft-blue);
+      padding: 14px;
+    }
+
+    .plan-item strong {
+      display: block;
+      font-size: 24px;
+      line-height: 1.1;
+      margin-bottom: 4px;
+    }
+
+    .plan-item span {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 680;
+    }
+
+    .details {
+      border-top: 1px solid var(--line);
+      padding-top: 14px;
+      display: grid;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .error {
+      background: #fdebea;
+      color: #b43327;
+      padding: 12px 14px;
+      border-radius: 8px;
+      font-weight: 720;
+    }
+
+    @media (max-width: 820px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+
+      .grid,
+      .plan,
+      .metrics {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <h1>CPLEX BMI 优化器</h1>
+      <p class="subtitle">输入个人目标和运动限制，调用 CPLEX 计算热量摄入与运动计划。</p>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <div class="section-head">
+        <h2>输入条件</h2>
+        <span class="tag">DOcplex</span>
+      </div>
+      <form id="optimizer-form">
+        <div class="grid">
+          <div class="field">
+            <label for="height_cm">身高 cm</label>
+            <input id="height_cm" name="height_cm" type="number" value="182" min="100" max="230" step="1">
+          </div>
+          <div class="field">
+            <label for="current_weight_kg">当前体重 kg</label>
+            <input id="current_weight_kg" name="current_weight_kg" type="number" value="82" min="35" max="220" step="0.1">
+          </div>
+          <div class="field">
+            <label for="age">年龄</label>
+            <input id="age" name="age" type="number" value="47" min="18" max="90" step="1">
+          </div>
+          <div class="field">
+            <label for="sex">性别</label>
+            <select id="sex" name="sex">
+              <option value="male" selected>男</option>
+              <option value="female">女</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="target_bmi">目标 BMI</label>
+            <input id="target_bmi" name="target_bmi" type="number" value="23" min="18.5" max="30" step="0.1">
+          </div>
+          <div class="field">
+            <label for="weeks">达成周期 周</label>
+            <input id="weeks" name="weeks" type="number" value="26" min="4" max="104" step="1">
+          </div>
+          <div class="field">
+            <label for="workout_days_per_week">每周运动天数</label>
+            <input id="workout_days_per_week" name="workout_days_per_week" type="number" value="4" min="0" max="7" step="1">
+          </div>
+          <div class="field">
+            <label for="max_minutes_per_workout">每次最多分钟</label>
+            <input id="max_minutes_per_workout" name="max_minutes_per_workout" type="number" value="60" min="0" max="180" step="5">
+          </div>
+          <div class="field">
+            <label for="preferred_intake">偏好每日摄入 kcal</label>
+            <input id="preferred_intake" name="preferred_intake" type="number" value="2200" min="1200" max="3200" step="10">
+          </div>
+          <div class="field">
+            <label for="preferred_workout_minutes">偏好每次运动分钟</label>
+            <input id="preferred_workout_minutes" name="preferred_workout_minutes" type="number" value="45" min="0" max="180" step="5">
+          </div>
+        </div>
+        <button id="submit-button" type="submit">计算建议</button>
+        <div class="notice">这是学习模型，不是医疗建议。若有疾病、疼痛、用药或特殊饮食需求，应咨询医生或营养师。</div>
+      </form>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>优化结果</h2>
+        <span id="status-tag" class="tag">Ready</span>
+      </div>
+      <div id="results" class="results"></div>
+    </section>
+  </main>
+
+  <script>
+    const form = document.getElementById("optimizer-form");
+    const button = document.getElementById("submit-button");
+    const results = document.getElementById("results");
+    const statusTag = document.getElementById("status-tag");
+    let isSolving = false;
+
+    function payloadFromForm() {
+      const data = new FormData(form);
+      return Object.fromEntries(data.entries());
+    }
+
+    function metric(label, value, unit = "") {
+      return `
+        <div class="metric">
+          <div class="metric-label">${label}</div>
+          <div class="metric-value">${value}</div>
+          <div class="metric-unit">${unit}</div>
+        </div>
+      `;
+    }
+
+    function renderResult(result) {
+      if (result.status !== "optimal") {
+        results.innerHTML = `<div class="error">${result.message || "没有找到可行计划"}</div>`;
+        statusTag.textContent = result.status;
+        return;
+      }
+
+      statusTag.textContent = "Optimal";
+      results.innerHTML = `
+        <div class="metrics">
+          ${metric("当前 BMI", result.current_bmi)}
+          ${metric("目标体重", result.target_weight_kg, "kg")}
+          ${metric("预计 BMI", result.expected_bmi)}
+        </div>
+        <div class="plan">
+          <div class="plan-item">
+            <strong>${result.daily_calorie_intake}</strong>
+            <span>建议每日摄入 kcal</span>
+          </div>
+          <div class="plan-item">
+            <strong>${result.minutes_per_workout}</strong>
+            <span>每次运动分钟，每周 ${result.workout_days_per_week} 天</span>
+          </div>
+        </div>
+        <div class="metrics">
+          ${metric("每次运动消耗", result.estimated_exercise_burn_per_workout, "kcal")}
+          ${metric("平均每日缺口", result.average_daily_calorie_deficit, "kcal")}
+          ${metric("预计体重", result.expected_weight_kg, `kg / ${result.weeks} 周后`)}
+        </div>
+        <div class="details">
+          <div>基础代谢估算：${result.bmr} kcal；日常消耗估算：${result.base_daily_burn} kcal。</div>
+          <div>模型假设：1 kg 体重变化约 ${result.assumptions.kcal_per_kg} kcal；运动约 ${result.assumptions.kcal_per_workout_minute} kcal / 分钟。</div>
+          <div>${result.message}</div>
+        </div>
+      `;
+    }
+
+    async function optimize(event) {
+      if (event) {
+        event.preventDefault();
+      }
+      if (isSolving) {
+        return;
+      }
+
+      isSolving = true;
+      button.disabled = true;
+      statusTag.textContent = "Solving";
+      results.innerHTML = "";
+
+      try {
+        const response = await fetch("/api/optimize", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(payloadFromForm())
+        });
+        const result = await response.json();
+        renderResult(result);
+      } catch (error) {
+        statusTag.textContent = "Error";
+        results.innerHTML = `<div class="error">${error.message}</div>`;
+      } finally {
+        isSolving = false;
+        button.disabled = false;
+      }
+    }
+
+    form.addEventListener("submit", optimize);
+    window.addEventListener("DOMContentLoaded", () => optimize());
+  </script>
+</body>
+</html>

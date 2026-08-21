@@ -13,6 +13,7 @@ from scheduling_solver import (
     solve_staff_scheduling_soft,
     solve_staff_scheduling_two_stage,
 )
+from bmi_app import app as bmi_app
 
 
 class SchedulingSolverTests(unittest.TestCase):
@@ -300,6 +301,38 @@ class SchedulingApiTests(unittest.TestCase):
     def test_solve_api_validates_required_fields(self):
         with app.test_client() as client:
             response = client.post("/api/solve", json={"employees": []})
+            result = response.get_json()
+
+            self.assertEqual(response.status_code, 400)
+            self.assertEqual(result["status"], "error")
+            self.assertIn("Missing required fields", result["message"])
+
+
+class BmiOptimizerApiTests(unittest.TestCase):
+    def test_bmi_optimizer_api_returns_plan(self):
+        payload = {
+            "height_cm": 182,
+            "current_weight_kg": 82,
+            "age": 47,
+            "sex": "male",
+            "target_bmi": 23,
+            "weeks": 26,
+            "workout_days_per_week": 4,
+            "max_minutes_per_workout": 60,
+        }
+
+        with bmi_app.test_client() as client:
+            response = client.post("/api/optimize", json=payload)
+            result = response.get_json()
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(result["status"], "optimal")
+            self.assertEqual(result["target_bmi"], 23)
+            self.assertGreater(result["daily_calorie_intake"], 0)
+
+    def test_bmi_optimizer_api_validates_required_fields(self):
+        with bmi_app.test_client() as client:
+            response = client.post("/api/optimize", json={"height_cm": 182})
             result = response.get_json()
 
             self.assertEqual(response.status_code, 400)
