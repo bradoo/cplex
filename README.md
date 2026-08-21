@@ -91,11 +91,12 @@ cplex/
 
 **第五阶段 · 工程化（情景 / 解释 / 实验 / 基准 / API）**
 
-16. `scheduling_scenarios_demo.py` — 批量情景分析 + 报表导出
-17. `scheduling_explain_demo.py` — 自动解释排班结果
-18. `scheduling_experiment_log_demo.py` — 记录每次实验配置与指标
-19. `scheduling_benchmark_demo.py` — 不同规模的性能基准
-20. `scheduling_app.py` + `scheduling_api_client_demo.py` — REST API 化部署
+16. `scheduling_alternatives_demo.py` — 生成多个候选排班方案并对比指标
+17. `scheduling_scenarios_demo.py` — 批量情景分析 + 报表导出
+18. `scheduling_explain_demo.py` — 自动解释排班结果
+19. `scheduling_experiment_log_demo.py` — 记录每次实验配置与指标
+20. `scheduling_benchmark_demo.py` — 不同规模的性能基准
+21. `scheduling_app.py` + `scheduling_api_client_demo.py` — REST API 化部署
 
 ---
 
@@ -136,6 +137,7 @@ cplex/
 | `scheduling_penalty_weights_demo.py` | 罚分权重取舍 | — |
 | `scheduling_two_stage_demo.py` | 两阶段求解（先覆盖后偏好） | — |
 | `scheduling_manual_overrides_demo.py` | 人工干预（锁定 / 禁止班次） | — |
+| `scheduling_alternatives_demo.py` | 候选方案对比 | — |
 | `scheduling_scenarios_demo.py` | 批量情景分析 | `reports/scenario_*.{csv,json}` |
 | `scheduling_explain_demo.py` | 结果自动解释 | `reports/baseline_explanation.md` |
 | `scheduling_experiment_log_demo.py` | 实验记录 | `reports/experiments.jsonl` / `_summary.csv` |
@@ -200,6 +202,7 @@ python run_tests.py
 - **规则扩展**：最多连续上班天数等真实约束
 - **技能覆盖 / 成本优化 / 软约束 / 罚分权重**：更贴近真实业务的取舍
 - **人工干预**：支持经理锁定或禁止某些班次，再由模型重排剩余安排
+- **候选方案对比**：同一问题生成多套排班，比较缺口、公平性、偏好和成本
 
 ---
 

@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from scheduling_app import app
+from scheduling_alternatives_demo import generate_schedule_alternatives
 from scheduling_diagnostics import diagnose_scheduling_conflicts
 from scheduling_scenarios_demo import export_reports, solve_scenario
 from scheduling_solver import (
@@ -268,6 +269,17 @@ class SchedulingDiagnosticsTests(unittest.TestCase):
 
         self.assertEqual(skill_findings[0]["day"], "Sun")
         self.assertEqual(skill_findings[0]["skill"], "night")
+
+
+class SchedulingAlternativesTests(unittest.TestCase):
+    def test_schedule_alternatives_are_generated(self):
+        alternatives = generate_schedule_alternatives()
+
+        self.assertEqual(len(alternatives), 4)
+        self.assertEqual(alternatives[0]["name"], "Balanced")
+        for alternative in alternatives:
+            self.assertEqual(alternative["result"]["status"], "optimal")
+            self.assertIn("schedule", alternative["result"])
 
 
 class SchedulingApiTests(unittest.TestCase):
