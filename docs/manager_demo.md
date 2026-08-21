@@ -7,6 +7,7 @@
 ```bash
 cd ~/cplex
 source .venv/bin/activate
+cd python
 python scheduling_app.py
 ```
 

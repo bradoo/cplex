@@ -23,10 +23,10 @@
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r python/requirements.txt
 ```
 
-> 所有示例默认从仓库根目录运行（`data/` 与 `reports/` 使用相对路径）。
+> Python 示例默认从 `python/` 目录运行（`data/` 与 `reports/` 使用相对路径）。
 
 ---
 
@@ -35,8 +35,6 @@ pip install -r requirements.txt
 ```text
 cplex/
 ├── README.md                     # 本文件：入口与索引
-├── requirements.txt              # 依赖：docplex / cplex / flask
-├── run_tests.py                  # 一键运行全部测试
 │
 ├── docs/                         # 文档与课件
 │   ├── README.en.md              # 英文版说明
@@ -44,17 +42,19 @@ cplex/
 │   ├── manager_demo.md           # 经理汇报脚本
 │   └── scheduling_api.md         # 排班 REST API 文档
 │
-├── scheduling_solver.py          # 核心排班求解器（被大多数示例复用）
-├── scheduling_diagnostics.py     # 冲突诊断工具
-├── scheduling_app.py             # Flask 交互式排班服务 + API
-│
-├── data/                         # 示例业务数据（员工 / 需求 / 可用性）
-├── reports/                      # 示例输出（各 demo 生成，已提交作参考）
-├── templates/                    # Flask 页面模板
-└── tests/                        # 回归测试
+├── opl/                          # CPLEX Studio / OPL 示例
+└── python/                       # Python / DOcplex 示例与相关文件
+    ├── requirements.txt          # 依赖：docplex / cplex / flask
+    ├── run_tests.py              # 一键运行全部测试
+    ├── scheduling_solver.py      # 核心排班求解器
+    ├── scheduling_app.py         # Flask 交互式排班服务 + API
+    ├── data/                     # 示例业务数据
+    ├── reports/                  # 示例输出
+    ├── templates/                # Flask 页面模板
+    └── tests/                    # 回归测试
 ```
 
-经典优化示例与排班示例目前都平铺在根目录，命名统一以 `*_docplex.py` / `scheduling_*_demo.py` 区分，详见下方[示例速查表](#示例速查表)。
+经典优化示例与排班示例都在 `python/` 目录，命名统一以 `*_docplex.py` / `scheduling_*_demo.py` 区分，详见下方[示例速查表](#示例速查表)。
 
 ---
 
@@ -73,6 +73,12 @@ cplex/
 4. `scheduling_docplex.py` — 最基础排班模型
 5. `scheduling_from_csv.py` — 从 CSV 读业务数据；硬约束无解自动切软约束
 6. `scheduling_parameters_demo.py` — 求解参数（`time_limit` / `mip_gap`）
+
+**CPLEX Studio / OPL 入门**
+
+- `opl/pmedian_quickstart/` — 官方 Quick Start 风格的 P-Median 仓库分配模型
+- `opl/staff_scheduling_quickstart/` — CPLEX Studio 里的最小排班模型
+- 建议在 Studio 中全部使用英文项目名、英文文件名、英文 Run Configuration 名
 
 **第三阶段 · 多目标与业务规则**
 
@@ -154,6 +160,7 @@ cplex/
 运行任意脚本：
 
 ```bash
+cd python
 python <脚本名>.py
 # 例如
 python knapsack_docplex.py
@@ -163,6 +170,7 @@ python scheduling_scenarios_demo.py
 一个更紧张的需求场景（硬约束无解会自动切换软约束兜底）：
 
 ```bash
+cd python
 python scheduling_from_csv.py --employees data/employees_limited.csv --demand data/demand_hard.csv
 ```
 
@@ -171,6 +179,7 @@ python scheduling_from_csv.py --employees data/employees_limited.csv --demand da
 ## 自动化测试
 
 ```bash
+cd python
 python run_tests.py
 ```
 

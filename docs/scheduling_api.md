@@ -7,7 +7,8 @@
 ```bash
 cd ~/cplex
 source .venv/bin/activate
-python scheduling_app.py
+cd python
+../.venv/bin/python scheduling_app.py
 ```
 
 服务地址：
@@ -88,7 +89,8 @@ curl --noproxy '*' \
 ## Python 客户端演示
 
 ```bash
-python scheduling_api_client_demo.py
+cd python
+../.venv/bin/python scheduling_api_client_demo.py
 ```
 
 这个脚本会调用：
@@ -98,4 +100,3 @@ GET /api/health
 GET /api/problem
 POST /api/solve
 ```
-

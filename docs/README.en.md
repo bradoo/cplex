@@ -17,12 +17,13 @@ Create and activate a virtual environment:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r python/requirements.txt
 ```
 
 ## Run the knapsack example
 
 ```bash
+cd python
 python knapsack_docplex.py
 ```
 
