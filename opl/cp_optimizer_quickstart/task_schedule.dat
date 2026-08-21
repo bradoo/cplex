@@ -1,0 +1,12 @@
+Tasks = {"Prepare", "Build", "Test"};
+
+duration = [
+  2,
+  5,
+  3
+];
+
+precedences = {
+  <"Prepare", "Build">,
+  <"Build", "Test">
+};
