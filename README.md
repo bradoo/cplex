@@ -87,14 +87,15 @@ cplex/
 12. `scheduling_soft_constraints_demo.py` — 人数缺口 + 技能缺口量化
 13. `scheduling_penalty_weights_demo.py` — 罚分权重如何改变模型取舍
 14. `scheduling_two_stage_demo.py` — 两阶段求解：先保覆盖、再优化偏好
+15. `scheduling_manual_overrides_demo.py` — 人工干预：锁定上班 / 禁止上班
 
 **第五阶段 · 工程化（情景 / 解释 / 实验 / 基准 / API）**
 
-15. `scheduling_scenarios_demo.py` — 批量情景分析 + 报表导出
-16. `scheduling_explain_demo.py` — 自动解释排班结果
-17. `scheduling_experiment_log_demo.py` — 记录每次实验配置与指标
-18. `scheduling_benchmark_demo.py` — 不同规模的性能基准
-19. `scheduling_app.py` + `scheduling_api_client_demo.py` — REST API 化部署
+16. `scheduling_scenarios_demo.py` — 批量情景分析 + 报表导出
+17. `scheduling_explain_demo.py` — 自动解释排班结果
+18. `scheduling_experiment_log_demo.py` — 记录每次实验配置与指标
+19. `scheduling_benchmark_demo.py` — 不同规模的性能基准
+20. `scheduling_app.py` + `scheduling_api_client_demo.py` — REST API 化部署
 
 ---
 
@@ -134,6 +135,7 @@ cplex/
 | `scheduling_soft_constraints_demo.py` | 软约束进阶 | — |
 | `scheduling_penalty_weights_demo.py` | 罚分权重取舍 | — |
 | `scheduling_two_stage_demo.py` | 两阶段求解（先覆盖后偏好） | — |
+| `scheduling_manual_overrides_demo.py` | 人工干预（锁定 / 禁止班次） | — |
 | `scheduling_scenarios_demo.py` | 批量情景分析 | `reports/scenario_*.{csv,json}` |
 | `scheduling_explain_demo.py` | 结果自动解释 | `reports/baseline_explanation.md` |
 | `scheduling_experiment_log_demo.py` | 实验记录 | `reports/experiments.jsonl` / `_summary.csv` |
@@ -197,6 +199,7 @@ python run_tests.py
 - **性能基准**：对比不同规模下的变量数、求解时间与质量
 - **规则扩展**：最多连续上班天数等真实约束
 - **技能覆盖 / 成本优化 / 软约束 / 罚分权重**：更贴近真实业务的取舍
+- **人工干预**：支持经理锁定或禁止某些班次，再由模型重排剩余安排
 
 ---
 

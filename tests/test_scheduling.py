@@ -132,6 +132,40 @@ class SchedulingSolverTests(unittest.TestCase):
         self.assertEqual(result["total_skill_shortage"], 0)
         self.assertEqual(result["schedule"]["Sun"], ["David"])
 
+    def test_hard_solver_respects_manual_assignment_overrides(self):
+        problem = default_problem()
+
+        result = solve_staff_scheduling(
+            employees=problem["employees"],
+            days=problem["days"],
+            required_staff=problem["required_staff"],
+            availability=problem["availability"],
+            max_shifts_per_employee=problem["max_shifts_per_employee"],
+            skills=problem["skills"],
+            skill_requirements=problem["skill_requirements"],
+            preferences=problem["preferences"],
+            locked_assignments={"Mon": ["David"]},
+            blocked_assignments={"Wed": ["Bob"]},
+        )
+
+        self.assertEqual(result["status"], "optimal")
+        self.assertIn("David", result["schedule"]["Mon"])
+        self.assertNotIn("Bob", result["schedule"]["Wed"])
+
+    def test_conflicting_manual_assignment_can_make_model_infeasible(self):
+        problem = default_problem()
+
+        result = solve_staff_scheduling(
+            employees=problem["employees"],
+            days=problem["days"],
+            required_staff=problem["required_staff"],
+            availability=problem["availability"],
+            max_shifts_per_employee=problem["max_shifts_per_employee"],
+            locked_assignments={"Sun": ["Alice"]},
+        )
+
+        self.assertEqual(result["status"], "infeasible")
+
     def test_max_consecutive_work_days_is_enforced(self):
         problem = default_problem()
         result = solve_staff_scheduling(

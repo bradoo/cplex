@@ -95,6 +95,8 @@ def solve_staff_scheduling(
     cost_weight=0,
     preferences=None,
     preference_weight=0.01,
+    locked_assignments=None,
+    blocked_assignments=None,
     time_limit=None,
     mip_gap=None,
     log_output=False,
@@ -142,6 +144,15 @@ def solve_staff_scheduling(
                 work[employee, day] <= availability[employee][day],
                 ctname=f"availability_{employee}_{day}",
             )
+
+    add_manual_assignment_constraints(
+        model,
+        work,
+        employees,
+        days,
+        locked_assignments,
+        blocked_assignments,
+    )
 
     for employee in employees:
         workload = model.sum(work[employee, day] for day in days)
@@ -232,6 +243,8 @@ def solve_staff_scheduling_soft(
     skill_shortage_penalty=1200,
     max_total_shortage=None,
     max_total_skill_shortage=None,
+    locked_assignments=None,
+    blocked_assignments=None,
     time_limit=None,
     mip_gap=None,
     log_output=False,
@@ -287,6 +300,15 @@ def solve_staff_scheduling_soft(
                 work[employee, day] <= availability[employee][day],
                 ctname=f"availability_{employee}_{day}",
             )
+
+    add_manual_assignment_constraints(
+        model,
+        work,
+        employees,
+        days,
+        locked_assignments,
+        blocked_assignments,
+    )
 
     for employee in employees:
         workload = model.sum(work[employee, day] for day in days)
@@ -391,6 +413,8 @@ def solve_staff_scheduling_two_stage(
     preference_weight=0.01,
     shortage_penalty=1000,
     skill_shortage_penalty=1200,
+    locked_assignments=None,
+    blocked_assignments=None,
     time_limit=None,
     mip_gap=None,
     log_output=False,
@@ -410,6 +434,8 @@ def solve_staff_scheduling_two_stage(
         preference_weight=0,
         shortage_penalty=1_000_000,
         skill_shortage_penalty=1_000_000,
+        locked_assignments=locked_assignments,
+        blocked_assignments=blocked_assignments,
         time_limit=time_limit,
         mip_gap=mip_gap,
         log_output=log_output,
@@ -440,6 +466,8 @@ def solve_staff_scheduling_two_stage(
         skill_shortage_penalty=skill_shortage_penalty,
         max_total_shortage=stage_one["total_shortage"],
         max_total_skill_shortage=stage_one["total_skill_shortage"],
+        locked_assignments=locked_assignments,
+        blocked_assignments=blocked_assignments,
         time_limit=time_limit,
         mip_gap=mip_gap,
         log_output=log_output,
@@ -508,6 +536,51 @@ def add_skill_coverage_constraints(
                 >= required_count,
                 ctname=f"skill_{skill}_{day}",
             )
+
+
+def add_manual_assignment_constraints(
+    model,
+    work,
+    employees,
+    days,
+    locked_assignments,
+    blocked_assignments,
+):
+    for day, locked_employees in normalized_assignments(locked_assignments).items():
+        if day not in days:
+            continue
+        for employee in locked_employees:
+            if employee in employees:
+                model.add_constraint(
+                    work[employee, day] == 1,
+                    ctname=f"locked_{employee}_{day}",
+                )
+
+    for day, blocked_employees in normalized_assignments(blocked_assignments).items():
+        if day not in days:
+            continue
+        for employee in blocked_employees:
+            if employee in employees:
+                model.add_constraint(
+                    work[employee, day] == 0,
+                    ctname=f"blocked_{employee}_{day}",
+                )
+
+
+def normalized_assignments(assignments):
+    if not assignments:
+        return {}
+
+    if isinstance(assignments, dict):
+        return {
+            day: list(employees)
+            for day, employees in assignments.items()
+        }
+
+    normalized = {}
+    for employee, day in assignments:
+        normalized.setdefault(day, []).append(employee)
+    return normalized
 
 
 def create_skill_shortage_vars(model, days, skill_requirements):
