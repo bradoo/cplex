@@ -1,5 +1,5 @@
 timestamp,experiment_id,status,mode,total_shortage,fairness_spread,preference_matches,total_cost,solve_time,cost_weight,max_consecutive_work_days
-2026-08-20T03:02:50.854093+00:00,baseline_v1,optimal,hard,0,1,13,1765.0,0.0269,0,
-2026-08-20T03:02:50.882312+00:00,cost_aware_v1,optimal,hard,0,1,12,1760.0,0.0079,0.01,
-2026-08-20T03:02:50.900593+00:00,fatigue_rule_v1,optimal,hard,0,1,11,1770.0,0.0011,0,2
-2026-08-20T03:02:50.936350+00:00,weekend_peak_v1,optimal,soft,2,0,14,2070.0,0.0022,0,
+2026-08-24T02:09:49.815098+00:00,baseline_v1,optimal,hard,0,1,13,1765.0,0.0364,0,
+2026-08-24T02:09:49.840512+00:00,cost_aware_v1,optimal,hard,0,1,12,1760.0,0.0072,0.01,
+2026-08-24T02:09:49.858608+00:00,fatigue_rule_v1,optimal,hard,0,1,11,1770.0,0.001,0,2
+2026-08-24T02:09:49.897023+00:00,weekend_peak_v1,optimal,soft,2,0,14,2070.0,0.0021,0,
