@@ -1,6 +1,6 @@
 employee,workload
 Alice,4
 Bob,4
-Carol,4
-David,4
-fairness_spread,0
+Carol,3
+David,3
+fairness_spread,1
