@@ -1,6 +1,6 @@
 scenario,mode,status,total_required_shifts,total_shortage,fairness_spread,preference_matches,solve_time,solve_status
-Baseline,hard,optimal,14,0,1,13,0.0044,integer optimal solution
-Friday peak,hard,optimal,15,0,1,13,0.0068,integer optimal solution
-Max 4 shifts,hard,optimal,14,0,1,13,0.0088,integer optimal solution
-Weekend peak,soft,optimal,18,2,0,14,0.0023,integer optimal solution
-Preference focus,hard,optimal,14,0,1,13,0.0031,integer optimal solution
+Baseline,hard,optimal,14,0,1,13,0.0291,integer optimal solution
+Friday peak,hard,optimal,15,0,1,13,0.003,integer optimal solution
+Max 4 shifts,hard,optimal,14,0,1,13,0.0052,integer optimal solution
+Weekend peak,soft,optimal,18,2,0,14,0.0017,integer optimal solution
+Preference focus,hard,optimal,14,0,1,13,0.01,integer optimal solution

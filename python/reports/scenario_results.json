@@ -43,7 +43,7 @@
           "David"
         ],
         "Fri": [
-          "Alice",
+          "Bob",
           "Carol",
           "David"
         ],
@@ -56,8 +56,8 @@
         ]
       },
       "workloads": {
-        "Alice": 4,
-        "Bob": 3,
+        "Alice": 3,
+        "Bob": 4,
         "Carol": 4,
         "David": 3
       },
@@ -74,11 +74,12 @@
       "total_required_shifts": 14,
       "fairness_spread": 1,
       "preference_matches": 13,
+      "total_cost": 1765.0,
       "max_workload": 4,
       "min_workload": 3,
       "solve_status": "integer optimal solution",
-      "solve_time": 0.0044,
-      "reported_mip_gap": null
+      "solve_time": 0.0291,
+      "reported_mip_gap": 0.0
     }
   },
   {
@@ -135,14 +136,14 @@
           "Carol"
         ],
         "Sun": [
-          "David"
+          "Carol"
         ]
       },
       "workloads": {
         "Alice": 4,
         "Bob": 4,
-        "Carol": 3,
-        "David": 4
+        "Carol": 4,
+        "David": 3
       },
       "shortages": {
         "Mon": 0,
@@ -157,11 +158,12 @@
       "total_required_shifts": 15,
       "fairness_spread": 1,
       "preference_matches": 13,
+      "total_cost": 1915.0,
       "max_workload": 4,
       "min_workload": 3,
       "solve_status": "integer optimal solution",
-      "solve_time": 0.0068,
-      "reported_mip_gap": null
+      "solve_time": 0.003,
+      "reported_mip_gap": 0.0
     }
   },
   {
@@ -196,7 +198,7 @@
           "Bob"
         ],
         "Tue": [
-          "Carol",
+          "Alice",
           "David"
         ],
         "Wed": [
@@ -208,7 +210,7 @@
           "David"
         ],
         "Fri": [
-          "Alice",
+          "Bob",
           "Carol",
           "David"
         ],
@@ -222,8 +224,8 @@
       },
       "workloads": {
         "Alice": 4,
-        "Bob": 3,
-        "Carol": 4,
+        "Bob": 4,
+        "Carol": 3,
         "David": 3
       },
       "shortages": {
@@ -239,11 +241,12 @@
       "total_required_shifts": 14,
       "fairness_spread": 1,
       "preference_matches": 13,
+      "total_cost": 1770.0,
       "max_workload": 4,
       "min_workload": 3,
       "solve_status": "integer optimal solution",
-      "solve_time": 0.0088,
-      "reported_mip_gap": null
+      "solve_time": 0.0052,
+      "reported_mip_gap": 0.0
     }
   },
   {
@@ -320,15 +323,18 @@
         "Sun": 1
       },
       "total_shortage": 2,
+      "skill_shortages": {},
+      "total_skill_shortage": 0,
       "total_required_shifts": 18,
       "fairness_spread": 0,
       "preference_matches": 14,
+      "total_cost": 2070.0,
       "max_workload": 4,
       "min_workload": 4,
-      "objective_value": 1999.8599999999997,
+      "objective_value": 1999.8599999999988,
       "solve_status": "integer optimal solution",
-      "solve_time": 0.0023,
-      "reported_mip_gap": null
+      "solve_time": 0.0017,
+      "reported_mip_gap": 0.0
     }
   },
   {
@@ -375,7 +381,7 @@
           "David"
         ],
         "Fri": [
-          "Alice",
+          "Bob",
           "Carol",
           "David"
         ],
@@ -388,8 +394,8 @@
         ]
       },
       "workloads": {
-        "Alice": 4,
-        "Bob": 3,
+        "Alice": 3,
+        "Bob": 4,
         "Carol": 4,
         "David": 3
       },
@@ -406,11 +412,12 @@
       "total_required_shifts": 14,
       "fairness_spread": 1,
       "preference_matches": 13,
+      "total_cost": 1765.0,
       "max_workload": 4,
       "min_workload": 3,
       "solve_status": "integer optimal solution",
-      "solve_time": 0.0031,
-      "reported_mip_gap": null
+      "solve_time": 0.01,
+      "reported_mip_gap": 0.0
     }
   }
 ]

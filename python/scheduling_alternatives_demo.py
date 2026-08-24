@@ -22,7 +22,7 @@ ALTERNATIVE_CONFIGS = [
         "name": "Cost aware",
         "description": "成本优先：在满足规则时压低总排班成本",
         "preference_weight": 0.01,
-        "cost_weight": 0.05,
+        "cost_weight": 0.2,
         "skill_shortage_penalty": 1200,
     },
     {
