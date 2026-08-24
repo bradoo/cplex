@@ -1,7 +1,7 @@
 from docplex.mp.model import Model
 
 
-def solve_promotion_plan():
+def solve_promotion_plan(promo_budget=6200, max_promoted_skus=2, log_output=True, print_output=True):
     skus = {
         "Phone Case": {
             "base_demand": 3600,
@@ -32,9 +32,6 @@ def solve_promotion_plan():
             "promo_cost": 2500,
         },
     }
-
-    promo_budget = 6200
-    max_promoted_skus = 2
 
     model = Model(name="cross_border_promotion_planning")
 
@@ -79,10 +76,40 @@ def solve_promotion_plan():
 
     model.maximize(gross_contribution - promo_spend)
 
-    solution = model.solve(log_output=True)
+    solution = model.solve(log_output=log_output)
     if solution is None:
-        print("No feasible promotion plan found.")
-        return
+        return {"status": "infeasible", "message": "No feasible promotion plan found."}
+
+    sku_results = []
+    total_orders = 0
+    for sku, data in skus.items():
+        is_promoted = promote[sku].solution_value > 0.5
+        demand = data["base_demand"] * (1 + data["promo_lift"] * int(is_promoted))
+        orders = fulfilled[sku].solution_value
+        total_orders += orders
+        sku_results.append(
+            {
+                "sku": sku,
+                "promoted": is_promoted,
+                "demand": demand,
+                "fulfilled": orders,
+                "inventory": data["available_inventory"],
+            }
+        )
+
+    result = {
+        "status": "optimal",
+        "promo_budget": promo_budget,
+        "max_promoted_skus": max_promoted_skus,
+        "skus": sku_results,
+        "total_fulfilled_orders": total_orders,
+        "gross_contribution": gross_contribution.solution_value,
+        "promotion_spend": promo_spend.solution_value,
+        "net_contribution": solution.objective_value,
+    }
+
+    if not print_output:
+        return result
 
     print("Cross-border promotion planning")
     print("===============================")
@@ -90,16 +117,11 @@ def solve_promotion_plan():
     print(f"Max promoted SKUs: {max_promoted_skus}")
     print()
 
-    total_orders = 0
-    for sku, data in skus.items():
-        is_promoted = promote[sku].solution_value > 0.5
-        demand = data["base_demand"] * (1 + data["promo_lift"] * int(is_promoted))
-        orders = fulfilled[sku].solution_value
-        total_orders += orders
+    for row in sku_results:
         print(
-            f"{sku}: promoted={is_promoted}, "
-            f"demand={demand:g}, fulfilled={orders:g}, "
-            f"inventory={data['available_inventory']}"
+            f"{row['sku']}: promoted={row['promoted']}, "
+            f"demand={row['demand']:g}, fulfilled={row['fulfilled']:g}, "
+            f"inventory={row['inventory']}"
         )
 
     print()
@@ -107,6 +129,7 @@ def solve_promotion_plan():
     print(f"Gross contribution: {gross_contribution.solution_value:g}")
     print(f"Promotion spend: {promo_spend.solution_value:g}")
     print(f"Net contribution: {solution.objective_value:g}")
+    return result
 
 
 if __name__ == "__main__":
