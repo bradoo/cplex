@@ -320,7 +320,7 @@
           <label for="ocean">海运提前期周数</label>
           <input id="ocean" type="number" min="1" max="6" step="1" value="3">
         </div>
-        <div class="alert" id="note">调整参数后点击重新求解。</div>
+        <div class="alert" id="note">切换仓网模式会自动套用一组演示参数，也可以继续手工调整。</div>
       </div>
     </section>
 
@@ -342,6 +342,39 @@
     const metrics = document.getElementById('metrics');
     const bands = document.getElementById('bands');
     const note = document.getElementById('note');
+    const scenarioSelect = document.getElementById('scenario');
+    const demandInput = document.getElementById('demand');
+    const slaInput = document.getElementById('sla');
+    const penaltyInput = document.getElementById('penalty');
+    const airInput = document.getElementById('air');
+    const oceanInput = document.getElementById('ocean');
+
+    const presets = {
+      strict_sla: {
+        demand: 1,
+        sla: 0,
+        penalty: 50,
+        air: 900,
+        ocean: 3,
+        note: '严格 SLA：用正常需求和严格时效，通常需要区域海外仓。'
+      },
+      soft_capacity: {
+        demand: 1.25,
+        sla: 0,
+        penalty: 50,
+        air: 900,
+        ocean: 3,
+        note: '旺季缺口分析：需求上涨 25%，不扩容，观察哪些市场会缺履约能力。'
+      },
+      capacity_expansion: {
+        demand: 1.25,
+        sla: 0,
+        penalty: 50,
+        air: 900,
+        ocean: 3,
+        note: '旺季临时扩容：需求上涨 25%，允许购买临时仓容，比较扩容和丢单哪个更划算。'
+      }
+    };
 
     function money(value) {
       return Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -370,12 +403,12 @@
       note.textContent = 'CPLEX 正在求解当前情景。';
 
       const payload = {
-        scenario: document.getElementById('scenario').value,
-        demand_multiplier: Number(document.getElementById('demand').value),
-        sla_extra_days: Number(document.getElementById('sla').value),
-        unfulfilled_penalty: Number(document.getElementById('penalty').value),
-        air_capacity: Number(document.getElementById('air').value),
-        ocean_lead_time: Number(document.getElementById('ocean').value)
+        scenario: scenarioSelect.value,
+        demand_multiplier: Number(demandInput.value),
+        sla_extra_days: Number(slaInput.value),
+        unfulfilled_penalty: Number(penaltyInput.value),
+        air_capacity: Number(airInput.value),
+        ocean_lead_time: Number(oceanInput.value)
       };
 
       try {
@@ -395,6 +428,18 @@
       } finally {
         solveBtn.disabled = false;
       }
+    }
+
+    function applyPreset() {
+      const preset = presets[scenarioSelect.value];
+      demandInput.value = preset.demand;
+      slaInput.value = preset.sla;
+      penaltyInput.value = preset.penalty;
+      airInput.value = preset.air;
+      oceanInput.value = preset.ocean;
+      note.className = 'alert';
+      note.textContent = preset.note;
+      solve();
     }
 
     function render(data) {
@@ -456,7 +501,8 @@
     }
 
     solveBtn.addEventListener('click', solve);
-    solve();
+    scenarioSelect.addEventListener('change', applyPreset);
+    applyPreset();
   </script>
 </body>
 </html>
