@@ -1,5 +1,5 @@
 case,employees,days,binary_variables,required_shifts,status,solve_status,solve_time,fairness_spread,preference_matches,reported_mip_gap
-small,4,7,28,10,optimal,integer optimal solution,0.0144,1,5,0.0
-medium,8,14,112,35,optimal,integer optimal solution,0.0115,1,19,0.0
-large,12,21,252,94,optimal,integer optimal solution,0.0419,1,48,0.0
-xlarge,16,28,448,154,optimal,integer optimal solution,0.0358,1,80,0.0
+small,4,7,28,10,optimal,integer optimal solution,0.0134,1,5,0.0
+medium,8,14,112,35,optimal,integer optimal solution,0.0076,1,19,0.0
+large,12,21,252,94,optimal,integer optimal solution,0.0229,1,48,0.0
+xlarge,16,28,448,154,optimal,integer optimal solution,0.0286,1,80,0.0
