@@ -1,7 +1,7 @@
 from docplex.mp.model import Model
 
 
-def solve_replenishment_plan():
+def default_replenishment_data():
     weeks = ["W1", "W2", "W3", "W4"]
     lanes = {
         "air": {"lead_time_weeks": 1, "unit_cost": 5.5, "weekly_capacity": 900},
@@ -18,6 +18,27 @@ def solve_replenishment_plan():
     target_ending_inventory = 800
     holding_cost = 0.35
     stockout_penalty = 18
+
+    return {
+        "weeks": weeks,
+        "lanes": lanes,
+        "demand": demand,
+        "initial_inventory": initial_inventory,
+        "target_ending_inventory": target_ending_inventory,
+        "holding_cost": holding_cost,
+        "stockout_penalty": stockout_penalty,
+    }
+
+
+def solve_replenishment_plan(data=None, log_output=True):
+    data = data or default_replenishment_data()
+    weeks = data["weeks"]
+    lanes = data["lanes"]
+    demand = data["demand"]
+    initial_inventory = data["initial_inventory"]
+    target_ending_inventory = data["target_ending_inventory"]
+    holding_cost = data["holding_cost"]
+    stockout_penalty = data["stockout_penalty"]
 
     model = Model(name="cross_border_ecommerce_replenishment")
 
@@ -83,10 +104,49 @@ def solve_replenishment_plan():
 
     model.minimize(transport_cost + inventory_cost + stockout_cost)
 
-    solution = model.solve(log_output=True)
+    solution = model.solve(log_output=log_output)
     if solution is None:
-        print("No feasible replenishment plan found.")
+        return {
+            "status": "infeasible",
+            "message": "No feasible replenishment plan found.",
+        }
+
+    orders = {
+        (lane, week): order[lane, week].solution_value
+        for lane in lanes
+        for week in weeks
+    }
+    inventory_projection = {
+        week: {
+            "demand": demand[week],
+            "ending_inventory": ending_inventory[week].solution_value,
+            "stockout": stockout[week].solution_value,
+        }
+        for week in weeks
+    }
+
+    return {
+        "status": "optimal",
+        "orders": orders,
+        "inventory_projection": inventory_projection,
+        "transport_cost": transport_cost.solution_value,
+        "holding_cost": inventory_cost.solution_value,
+        "stockout_penalty": stockout_cost.solution_value,
+        "total_cost": solution.objective_value,
+        "total_stockout": sum(
+            stockout[week].solution_value
+            for week in weeks
+        ),
+    }
+
+
+def print_replenishment_result(result, data):
+    if result["status"] != "optimal":
+        print(result["message"])
         return
+
+    weeks = data["weeks"]
+    lanes = data["lanes"]
 
     print("Cross-border replenishment plan")
     print("===============================")
@@ -95,7 +155,7 @@ def solve_replenishment_plan():
     print("-------------")
     for week in weeks:
         for lane in lanes:
-            amount = order[lane, week].solution_value
+            amount = result["orders"][lane, week]
             if amount > 1e-6:
                 print(f"{week} {lane}: {amount:g} units")
 
@@ -103,18 +163,25 @@ def solve_replenishment_plan():
     print("Inventory projection")
     print("--------------------")
     for week in weeks:
+        projection = result["inventory_projection"][week]
         print(
-            f"{week}: demand={demand[week]}, "
-            f"ending_inventory={ending_inventory[week].solution_value:g}, "
-            f"stockout={stockout[week].solution_value:g}"
+            f"{week}: demand={projection['demand']}, "
+            f"ending_inventory={projection['ending_inventory']:g}, "
+            f"stockout={projection['stockout']:g}"
         )
 
     print()
-    print(f"Transport cost: {transport_cost.solution_value:g}")
-    print(f"Holding cost: {inventory_cost.solution_value:g}")
-    print(f"Stockout penalty: {stockout_cost.solution_value:g}")
-    print(f"Total cost: {solution.objective_value:g}")
+    print(f"Transport cost: {result['transport_cost']:g}")
+    print(f"Holding cost: {result['holding_cost']:g}")
+    print(f"Stockout penalty: {result['stockout_penalty']:g}")
+    print(f"Total cost: {result['total_cost']:g}")
+
+
+def main():
+    data = default_replenishment_data()
+    result = solve_replenishment_plan(data=data, log_output=True)
+    print_replenishment_result(result, data)
 
 
 if __name__ == "__main__":
-    solve_replenishment_plan()
+    main()
