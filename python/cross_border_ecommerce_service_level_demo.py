@@ -1,7 +1,7 @@
 from docplex.mp.model import Model
 
 
-def solve_service_level_mix():
+def solve_service_level_mix(log_output=True, print_output=True):
     markets = {
         "US West": {"demand": 5200, "max_avg_delivery_days": 4.0},
         "US East": {"demand": 4800, "max_avg_delivery_days": 4.0},
@@ -109,10 +109,49 @@ def solve_service_level_mix():
             ctname=f"capacity_if_used_{service}",
         )
 
-    solution = model.solve(log_output=True)
+    solution = model.solve(log_output=log_output)
     if solution is None:
-        print("No feasible service-level mix found.")
-        return
+        return {"status": "infeasible", "message": "No feasible service-level mix found."}
+
+    used_services = []
+    allocation = {}
+    for service in services:
+        used_orders = sum(
+            orders[service, market].solution_value
+            for market in markets
+        )
+        if used_orders > 1e-6:
+            used_services.append({"service": service, "orders": used_orders})
+
+    for market, data in markets.items():
+        weighted_days = 0
+        allocation[market] = []
+        for service in services:
+            amount = orders[service, market].solution_value
+            if amount > 1e-6:
+                days = services[service]["delivery_days"][market]
+                weighted_days += days * amount
+                allocation[market].append(
+                    {
+                        "service": service,
+                        "orders": amount,
+                        "unit_cost": services[service]["cost"][market],
+                        "delivery_days": days,
+                    }
+                )
+        allocation[market + "_average_days"] = weighted_days / data["demand"]
+
+    result = {
+        "status": "optimal",
+        "used_services": used_services,
+        "allocation": allocation,
+        "fixed_cost": fixed_cost.solution_value,
+        "variable_cost": variable_cost.solution_value,
+        "total_cost": solution.objective_value,
+    }
+
+    if not print_output:
+        return result
 
     print("Cross-border service-level mix")
     print("==============================")
@@ -120,34 +159,27 @@ def solve_service_level_mix():
     print("-------------")
     for service in services:
         if use_service[service].solution_value > 0.5:
-            used_orders = sum(
-                orders[service, market].solution_value
-                for market in markets
-            )
-            print(f"- {service}: {used_orders:g} orders")
+            used = next(item for item in used_services if item["service"] == service)
+            print(f"- {service}: {used['orders']:g} orders")
 
     print()
     print("Market allocation")
     print("-----------------")
     for market, data in markets.items():
-        weighted_days = 0
         print(f"{market}: demand={data['demand']}")
-        for service in services:
-            amount = orders[service, market].solution_value
-            if amount > 1e-6:
-                days = services[service]["delivery_days"][market]
-                weighted_days += days * amount
-                print(
-                    f"  {service}: {amount:g} orders, "
-                    f"unit_cost={services[service]['cost'][market]:g}, "
-                    f"days={days}"
-                )
-        print(f"  average_delivery_days={weighted_days / data['demand']:.2f}")
+        for item in allocation[market]:
+            print(
+                f"  {item['service']}: {item['orders']:g} orders, "
+                f"unit_cost={item['unit_cost']:g}, "
+                f"days={item['delivery_days']}"
+            )
+        print(f"  average_delivery_days={allocation[market + '_average_days']:.2f}")
 
     print()
     print(f"Monthly fixed cost: {fixed_cost.solution_value:g}")
     print(f"Monthly variable cost: {variable_cost.solution_value:g}")
     print(f"Monthly total cost: {solution.objective_value:g}")
+    return result
 
 
 if __name__ == "__main__":

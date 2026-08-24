@@ -1,0 +1,138 @@
+from copy import deepcopy
+
+from flask import Flask, jsonify, render_template, request
+
+from cross_border_ecommerce_capacity_expansion_demo import (
+    solve_capacity_expansion_network,
+)
+from cross_border_ecommerce_network_demo import (
+    default_network_data,
+    solve_cross_border_network,
+)
+from cross_border_ecommerce_replenishment_demo import (
+    default_replenishment_data,
+    solve_replenishment_plan,
+)
+from cross_border_ecommerce_service_level_demo import solve_service_level_mix
+from cross_border_ecommerce_soft_capacity_demo import solve_soft_capacity_network
+
+
+app = Flask(__name__)
+
+
+@app.get("/")
+def index():
+    return render_template("cross_border_ecommerce_app.html")
+
+
+@app.get("/api/health")
+def health():
+    return jsonify({"status": "ok", "service": "cross-border-ecommerce-simulator"})
+
+
+@app.post("/api/simulate")
+def simulate():
+    data = request.get_json(force=True) or {}
+    scenario = data.get("scenario", "strict_sla")
+    demand_multiplier = float(data.get("demand_multiplier") or 1)
+    sla_extra_days = int(data.get("sla_extra_days") or 0)
+    unfulfilled_penalty = float(data.get("unfulfilled_penalty") or 50)
+    air_capacity = int(data.get("air_capacity") or 900)
+    ocean_lead_time = int(data.get("ocean_lead_time") or 3)
+
+    if scenario == "strict_sla":
+        network = solve_network_case(demand_multiplier, sla_extra_days)
+    elif scenario == "soft_capacity":
+        network = solve_soft_capacity_network(
+            demand_multiplier=demand_multiplier,
+            unfulfilled_penalty=unfulfilled_penalty,
+            log_output=False,
+            print_output=False,
+        )
+    elif scenario == "capacity_expansion":
+        network = solve_capacity_expansion_network(
+            demand_multiplier=demand_multiplier,
+            unfulfilled_penalty=unfulfilled_penalty,
+            log_output=False,
+            print_output=False,
+        )
+    else:
+        return jsonify({"status": "error", "message": f"Unknown scenario: {scenario}"}), 400
+
+    replenishment = solve_replenishment_case(
+        air_capacity=air_capacity,
+        ocean_lead_time=ocean_lead_time,
+        stockout_penalty=unfulfilled_penalty,
+    )
+    service_mix = solve_service_level_case()
+
+    return jsonify(
+        {
+            "status": "ok",
+            "scenario": scenario,
+            "network": network,
+            "replenishment": replenishment,
+            "service_mix": service_mix,
+        }
+    )
+
+
+def solve_network_case(demand_multiplier, sla_extra_days):
+    _, markets, _, _ = default_network_data()
+    markets = deepcopy(markets)
+    for market in markets:
+        markets[market]["demand"] = round(markets[market]["demand"] * demand_multiplier)
+        markets[market]["max_delivery_days"] += sla_extra_days
+    result = solve_cross_border_network(markets=markets, log_output=False)
+    return normalize_network_result(result)
+
+
+def normalize_network_result(result):
+    if result["status"] != "optimal":
+        return result
+    return {
+        "status": "optimal",
+        "opened_warehouses": result["opened_warehouses"],
+        "fulfillment_plan": result["fulfillment_plan"],
+        "fixed_cost": round(result["fixed_cost"], 2),
+        "variable_cost": round(result["variable_cost"], 2),
+        "total_cost": round(result["total_cost"], 2),
+        "total_unfulfilled": round(result.get("total_unfulfilled", 0), 2),
+        "expansion_cost": round(result.get("expansion_cost", 0), 2),
+        "unfulfilled_cost": round(result.get("unfulfilled_cost", 0), 2),
+        "capacity_plan": result.get("capacity_plan", []),
+    }
+
+
+def solve_replenishment_case(air_capacity, ocean_lead_time, stockout_penalty):
+    data = default_replenishment_data()
+    data["lanes"]["air"]["weekly_capacity"] = air_capacity
+    data["lanes"]["ocean"]["lead_time_weeks"] = ocean_lead_time
+    data["stockout_penalty"] = stockout_penalty
+    result = solve_replenishment_plan(data=data, log_output=False)
+    if result["status"] != "optimal":
+        return result
+
+    orders = []
+    for (lane, week), amount in result["orders"].items():
+        if amount > 1e-6:
+            orders.append({"week": week, "lane": lane, "units": round(amount, 2)})
+    return {
+        "status": "optimal",
+        "orders": orders,
+        "inventory_projection": result["inventory_projection"],
+        "total_stockout": round(result["total_stockout"], 2),
+        "transport_cost": round(result["transport_cost"], 2),
+        "holding_cost": round(result["holding_cost"], 2),
+        "stockout_penalty": round(result["stockout_penalty"], 2),
+        "total_cost": round(result["total_cost"], 2),
+    }
+
+
+def solve_service_level_case():
+    result = solve_service_level_mix(log_output=False, print_output=False)
+    return result
+
+
+if __name__ == "__main__":
+    app.run(host="127.0.0.1", port=5052, debug=True)

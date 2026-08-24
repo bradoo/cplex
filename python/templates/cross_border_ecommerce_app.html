@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>跨境电商库存与运输模拟器</title>
+  <style>
+    :root {
+      --bg: #f5f7f8;
+      --panel: #ffffff;
+      --ink: #20252b;
+      --muted: #65717d;
+      --line: #dce2e8;
+      --blue: #1f6feb;
+      --green: #147d55;
+      --amber: #9a6400;
+      --red: #b8392f;
+      --soft-blue: #e8f1ff;
+      --soft-green: #e7f5ee;
+      --soft-amber: #fff3d6;
+      --soft-red: #fdecea;
+      --soft-gray: #edf1f4;
+      --shadow: 0 14px 34px rgba(28, 38, 50, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.45;
+    }
+
+    header {
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .header-inner,
+    main {
+      width: min(1240px, calc(100% - 32px));
+      margin: 0 auto;
+    }
+
+    .header-inner {
+      padding: 22px 0 18px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      align-items: end;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 28px;
+      line-height: 1.15;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin: 7px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    main {
+      padding: 22px 0 42px;
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 18px;
+      align-items: start;
+    }
+
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .section-head {
+      min-height: 58px;
+      padding: 15px 17px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 17px;
+      letter-spacing: 0;
+    }
+
+    .tag {
+      border-radius: 8px;
+      padding: 5px 9px;
+      color: var(--green);
+      background: var(--soft-green);
+      font-size: 12px;
+      font-weight: 760;
+      white-space: nowrap;
+    }
+
+    .controls,
+    .content {
+      padding: 16px 17px 18px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .field {
+      display: grid;
+      gap: 7px;
+    }
+
+    label {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 720;
+    }
+
+    select,
+    input {
+      width: 100%;
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 7px 9px;
+      background: #fff;
+      color: var(--ink);
+      font: inherit;
+      font-weight: 700;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    button {
+      min-height: 42px;
+      border: 0;
+      border-radius: 8px;
+      padding: 8px 14px;
+      background: var(--blue);
+      color: #fff;
+      font: inherit;
+      font-weight: 820;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: 0.72;
+      cursor: progress;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      min-width: 0;
+    }
+
+    .metric-label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 720;
+    }
+
+    .metric-value {
+      margin-top: 4px;
+      font-size: 22px;
+      line-height: 1.15;
+      font-weight: 850;
+      overflow-wrap: anywhere;
+    }
+
+    .bands {
+      display: grid;
+      gap: 12px;
+    }
+
+    .band {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .band-title {
+      padding: 10px 12px;
+      background: var(--soft-gray);
+      font-weight: 820;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th,
+    td {
+      border-top: 1px solid var(--line);
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      background: #fafbfc;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 8px;
+      padding: 3px 8px;
+      background: var(--soft-blue);
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 800;
+      margin: 2px 4px 2px 0;
+    }
+
+    .alert {
+      background: var(--soft-amber);
+      color: var(--amber);
+      border: 1px solid #f2d79b;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 13px;
+      font-weight: 720;
+    }
+
+    .bad {
+      background: var(--soft-red);
+      color: var(--red);
+      border-color: #f3c6c1;
+    }
+
+    @media (max-width: 900px) {
+      .header-inner,
+      main {
+        width: min(100% - 24px, 1240px);
+        grid-template-columns: 1fr;
+      }
+
+      .metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div>
+        <h1>跨境电商库存与运输模拟器</h1>
+        <p class="subtitle">仓网、缺口、扩容、补货和物流服务档位的 CPLEX 求解演示</p>
+      </div>
+      <button id="solveBtn">重新求解</button>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <div class="section-head">
+        <h2>情景参数</h2>
+        <span class="tag">CPLEX</span>
+      </div>
+      <div class="controls">
+        <div class="field">
+          <label for="scenario">仓网模式</label>
+          <select id="scenario">
+            <option value="strict_sla">严格 SLA</option>
+            <option value="soft_capacity">旺季缺口分析</option>
+            <option value="capacity_expansion">旺季临时扩容</option>
+          </select>
+        </div>
+        <div class="grid">
+          <div class="field">
+            <label for="demand">需求倍率</label>
+            <input id="demand" type="number" min="0.5" max="2" step="0.05" value="1">
+          </div>
+          <div class="field">
+            <label for="sla">SLA 放宽天数</label>
+            <input id="sla" type="number" min="0" max="10" step="1" value="0">
+          </div>
+        </div>
+        <div class="grid">
+          <div class="field">
+            <label for="penalty">未履约罚分</label>
+            <input id="penalty" type="number" min="1" max="120" step="1" value="50">
+          </div>
+          <div class="field">
+            <label for="air">空运周容量</label>
+            <input id="air" type="number" min="300" max="2000" step="50" value="900">
+          </div>
+        </div>
+        <div class="field">
+          <label for="ocean">海运提前期周数</label>
+          <input id="ocean" type="number" min="1" max="6" step="1" value="3">
+        </div>
+        <div class="alert" id="note">调整参数后点击重新求解。</div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>求解结果</h2>
+        <span class="tag" id="statusTag">ready</span>
+      </div>
+      <div class="content">
+        <div class="metrics" id="metrics"></div>
+        <div class="bands" id="bands"></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const solveBtn = document.getElementById('solveBtn');
+    const statusTag = document.getElementById('statusTag');
+    const metrics = document.getElementById('metrics');
+    const bands = document.getElementById('bands');
+    const note = document.getElementById('note');
+
+    function money(value) {
+      return Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
+    }
+
+    function num(value) {
+      return Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 1 });
+    }
+
+    function metric(label, value) {
+      return `<div class="metric"><div class="metric-label">${label}</div><div class="metric-value">${value}</div></div>`;
+    }
+
+    function table(headers, rows) {
+      return `<table><thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+    }
+
+    function band(title, html, tag = '') {
+      return `<div class="band"><div class="band-title"><span>${title}</span><span>${tag}</span></div>${html}</div>`;
+    }
+
+    async function solve() {
+      solveBtn.disabled = true;
+      statusTag.textContent = 'solving';
+      note.className = 'alert';
+      note.textContent = 'CPLEX 正在求解当前情景。';
+
+      const payload = {
+        scenario: document.getElementById('scenario').value,
+        demand_multiplier: Number(document.getElementById('demand').value),
+        sla_extra_days: Number(document.getElementById('sla').value),
+        unfulfilled_penalty: Number(document.getElementById('penalty').value),
+        air_capacity: Number(document.getElementById('air').value),
+        ocean_lead_time: Number(document.getElementById('ocean').value)
+      };
+
+      try {
+        const response = await fetch('/api/simulate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+        render(data);
+        statusTag.textContent = data.status;
+        note.textContent = '求解完成。';
+      } catch (error) {
+        statusTag.textContent = 'error';
+        note.className = 'alert bad';
+        note.textContent = error.message;
+      } finally {
+        solveBtn.disabled = false;
+      }
+    }
+
+    function render(data) {
+      const network = data.network || {};
+      const replenishment = data.replenishment || {};
+      const service = data.service_mix || {};
+
+      metrics.innerHTML = [
+        metric('仓网总成本', money(network.total_cost)),
+        metric('未履约订单', num(network.total_unfulfilled)),
+        metric('补货总成本', money(replenishment.total_cost)),
+        metric('服务组合成本', money(service.total_cost))
+      ].join('');
+
+      const opened = (network.opened_warehouses || []).map(w => `<span class="pill">${w}</span>`).join('') || '无';
+      const networkRows = [];
+      Object.entries(network.fulfillment_plan || {}).forEach(([market, assignments]) => {
+        assignments.forEach(item => {
+          networkRows.push([market, item.warehouse, num(item.orders), item.delivery_days || '']);
+        });
+      });
+
+      const capacityRows = (network.capacity_plan || []).map(row => [
+        row.warehouse,
+        num(row.used_capacity),
+        num(row.base_capacity),
+        num(row.extra_capacity || 0)
+      ]);
+
+      const replenishRows = (replenishment.orders || []).map(row => [
+        row.week,
+        row.lane,
+        num(row.units)
+      ]);
+
+      const inventoryRows = Object.entries(replenishment.inventory_projection || {}).map(([week, row]) => [
+        week,
+        num(row.demand),
+        num(row.ending_inventory),
+        num(row.stockout)
+      ]);
+
+      const serviceRows = [];
+      Object.entries(service.allocation || {}).forEach(([market, rows]) => {
+        if (!Array.isArray(rows)) return;
+        rows.forEach(row => {
+          serviceRows.push([market, row.service, num(row.orders), row.delivery_days, row.unit_cost]);
+        });
+      });
+
+      bands.innerHTML = [
+        band('启用仓库', `<div class="content">${opened}</div>`, network.status || ''),
+        band('仓网履约', table(['市场', '仓库', '订单', '天数'], networkRows)),
+        capacityRows.length ? band('容量与扩容', table(['仓库', '使用', '基础容量', '临时扩容'], capacityRows)) : '',
+        band('补货订单', table(['周', '方式', '数量'], replenishRows), `缺货 ${num(replenishment.total_stockout)}`),
+        band('库存预测', table(['周', '需求', '期末库存', '缺货'], inventoryRows)),
+        band('物流服务组合', table(['市场', '服务', '订单', '天数', '单位成本'], serviceRows), service.status || '')
+      ].join('');
+    }
+
+    solveBtn.addEventListener('click', solve);
+    solve();
+  </script>
+</body>
+</html>

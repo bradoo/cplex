@@ -8,6 +8,8 @@ from cross_border_ecommerce_network_demo import default_network_data
 def solve_capacity_expansion_network(
     demand_multiplier=1.25,
     unfulfilled_penalty=50,
+    log_output=True,
+    print_output=True,
 ):
     warehouses, markets, last_mile_cost, delivery_days = default_network_data()
     markets = deepcopy(markets)
@@ -104,10 +106,59 @@ def solve_capacity_expansion_network(
                     ctname=f"sla_block_{warehouse}_to_{market}",
                 )
 
-    solution = model.solve(log_output=True)
+    solution = model.solve(log_output=log_output)
     if solution is None:
-        print("No solution found, even with expansion and unfulfilled demand allowed.")
-        return
+        return {
+            "status": "infeasible",
+            "message": "No solution found, even with expansion and unfulfilled demand allowed.",
+        }
+
+    opened_warehouses = []
+    capacity_plan = []
+    for warehouse in warehouses:
+        if open_warehouse[warehouse].solution_value > 0.5:
+            used_capacity = sum(
+                ship[warehouse, market].solution_value
+                for market in markets
+            )
+            opened_warehouses.append(warehouse)
+            capacity_plan.append(
+                {
+                    "warehouse": warehouse,
+                    "used_capacity": used_capacity,
+                    "base_capacity": warehouses[warehouse]["capacity"],
+                    "extra_capacity": extra_capacity[warehouse].solution_value,
+                }
+            )
+
+    fulfillment_plan = {}
+    total_unfulfilled = 0
+    for market, data in markets.items():
+        market_unfulfilled = unfulfilled[market].solution_value
+        total_unfulfilled += market_unfulfilled
+        fulfillment_plan[market] = []
+        for warehouse in warehouses:
+            amount = ship[warehouse, market].solution_value
+            if amount > 1e-6:
+                fulfillment_plan[market].append(
+                    {"warehouse": warehouse, "orders": amount}
+                )
+
+    result = {
+        "status": "optimal",
+        "opened_warehouses": opened_warehouses,
+        "capacity_plan": capacity_plan,
+        "fulfillment_plan": fulfillment_plan,
+        "fixed_cost": fixed_cost.solution_value,
+        "variable_cost": variable_cost.solution_value,
+        "expansion_cost": expansion_cost.solution_value,
+        "unfulfilled_cost": unfulfilled_cost.solution_value,
+        "total_unfulfilled": total_unfulfilled,
+        "total_cost": solution.objective_value,
+    }
+
+    if not print_output:
+        return result
 
     print("Cross-border peak demand capacity expansion plan")
     print("================================================")
@@ -117,26 +168,17 @@ def solve_capacity_expansion_network(
 
     print("Warehouse capacity plan")
     print("-----------------------")
-    for warehouse in warehouses:
-        if open_warehouse[warehouse].solution_value > 0.5:
-            used_capacity = sum(
-                ship[warehouse, market].solution_value
-                for market in markets
-            )
-            extra = extra_capacity[warehouse].solution_value
-            base = warehouses[warehouse]["capacity"]
-            print(
-                f"- {warehouse}: used={used_capacity:g}, "
-                f"base={base}, extra={extra:g}"
-            )
+    for row in capacity_plan:
+        print(
+            f"- {row['warehouse']}: used={row['used_capacity']:g}, "
+            f"base={row['base_capacity']}, extra={row['extra_capacity']:g}"
+        )
 
     print()
     print("Market fulfillment")
     print("------------------")
-    total_unfulfilled = 0
     for market, data in markets.items():
         market_unfulfilled = unfulfilled[market].solution_value
-        total_unfulfilled += market_unfulfilled
         fulfilled = data["demand"] - market_unfulfilled
         print(
             f"{market}: demand={data['demand']}, "
@@ -154,6 +196,7 @@ def solve_capacity_expansion_network(
     print(f"Temporary expansion cost: {expansion_cost.solution_value:g}")
     print(f"Unfulfilled penalty cost: {unfulfilled_cost.solution_value:g}")
     print(f"Weighted total objective: {solution.objective_value:g}")
+    return result
 
 
 if __name__ == "__main__":
