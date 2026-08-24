@@ -1,7 +1,7 @@
 from docplex.mp.model import Model
 
 
-def solve_cross_border_network():
+def default_network_data():
     warehouses = {
         "Los Angeles 3PL": {
             "capacity": 9000,
@@ -79,6 +79,13 @@ def solve_cross_border_network():
         ("Shenzhen Direct Ship", "EU"): 9,
     }
 
+    return warehouses, markets, last_mile_cost, delivery_days
+
+
+def solve_cross_border_network(markets=None, log_output=True):
+    warehouses, base_markets, last_mile_cost, delivery_days = default_network_data()
+    markets = markets or base_markets
+
     model = Model(name="cross_border_ecommerce_network")
 
     open_warehouse = {
@@ -132,21 +139,21 @@ def solve_cross_border_network():
                     ctname=f"sla_block_{warehouse}_to_{market}",
                 )
 
-    solution = model.solve(log_output=True)
+    solution = model.solve(log_output=log_output)
     if solution is None:
-        print("No feasible network found. Try relaxing SLA or adding capacity.")
-        return
+        return {
+            "status": "infeasible",
+            "message": "No feasible network found. Try relaxing SLA or adding capacity.",
+        }
 
-    print("\nBest cross-border ecommerce network")
-    print("------------------------------------")
-    for warehouse in warehouses:
-        if open_warehouse[warehouse].solution_value > 0.5:
-            print(f"- Open {warehouse}")
-
-    print("\nFulfillment plan")
-    print("----------------")
-    for market, data in markets.items():
-        print(f"{market} demand: {data['demand']}")
+    opened_warehouses = [
+        warehouse
+        for warehouse in warehouses
+        if open_warehouse[warehouse].solution_value > 0.5
+    ]
+    fulfillment_plan = {}
+    for market in markets:
+        fulfillment_plan[market] = []
         for warehouse in warehouses:
             amount = ship[warehouse, market].solution_value
             if amount > 1e-6:
@@ -154,17 +161,57 @@ def solve_cross_border_network():
                     warehouses[warehouse]["handling_cost"]
                     + last_mile_cost[warehouse, market]
                 )
-                print(
-                    f"  {warehouse}: {amount:g} orders, "
-                    f"unit_cost={unit_cost:g}, "
-                    f"delivery_days={delivery_days[warehouse, market]}"
+                fulfillment_plan[market].append(
+                    {
+                        "warehouse": warehouse,
+                        "orders": amount,
+                        "unit_cost": unit_cost,
+                        "delivery_days": delivery_days[warehouse, market],
+                    }
                 )
 
+    return {
+        "status": "optimal",
+        "opened_warehouses": opened_warehouses,
+        "fulfillment_plan": fulfillment_plan,
+        "fixed_cost": fixed_cost.solution_value,
+        "variable_cost": variable_cost.solution_value,
+        "total_cost": solution.objective_value,
+    }
+
+
+def print_network_result(result, markets):
+    if result["status"] != "optimal":
+        print(result["message"])
+        return
+
+    print("\nBest cross-border ecommerce network")
+    print("------------------------------------")
+    for warehouse in result["opened_warehouses"]:
+        print(f"- Open {warehouse}")
+
+    print("\nFulfillment plan")
+    print("----------------")
+    for market, data in markets.items():
+        print(f"{market} demand: {data['demand']}")
+        for assignment in result["fulfillment_plan"][market]:
+            print(
+                f"  {assignment['warehouse']}: {assignment['orders']:g} orders, "
+                f"unit_cost={assignment['unit_cost']:g}, "
+                f"delivery_days={assignment['delivery_days']}"
+            )
+
     print()
-    print(f"Monthly fixed cost: {fixed_cost.solution_value:g}")
-    print(f"Monthly variable cost: {variable_cost.solution_value:g}")
-    print(f"Monthly total cost: {solution.objective_value:g}")
+    print(f"Monthly fixed cost: {result['fixed_cost']:g}")
+    print(f"Monthly variable cost: {result['variable_cost']:g}")
+    print(f"Monthly total cost: {result['total_cost']:g}")
+
+
+def main():
+    _, markets, _, _ = default_network_data()
+    result = solve_cross_border_network(markets=markets, log_output=True)
+    print_network_result(result, markets)
 
 
 if __name__ == "__main__":
-    solve_cross_border_network()
+    main()
