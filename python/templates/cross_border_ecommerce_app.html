@@ -167,6 +167,37 @@
       gap: 10px;
     }
 
+    .model-explain {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .explain-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fff;
+      min-width: 0;
+    }
+
+    .explain-title {
+      margin-bottom: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 820;
+    }
+
+    .explain-card ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    .explain-card li {
+      margin: 4px 0;
+      font-size: 13px;
+    }
+
     .metric {
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -267,6 +298,10 @@
       .metrics {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
+
+      .model-explain {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
@@ -352,6 +387,7 @@
         <span class="tag" id="statusTag">ready</span>
       </div>
       <div class="content">
+        <div class="model-explain" id="modelExplain"></div>
         <div class="metrics" id="metrics"></div>
         <div class="bands" id="bands"></div>
       </div>
@@ -361,6 +397,7 @@
   <script>
     const solveBtn = document.getElementById('solveBtn');
     const statusTag = document.getElementById('statusTag');
+    const modelExplain = document.getElementById('modelExplain');
     const metrics = document.getElementById('metrics');
     const bands = document.getElementById('bands');
     const note = document.getElementById('note');
@@ -510,6 +547,111 @@
       }
     };
 
+    const modelDocs = {
+      strict_sla: {
+        variables: ['open_warehouse[w]：是否启用仓库', 'ship[w,m]：仓库 w 给市场 m 发多少订单'],
+        objective: ['最小化：仓库固定成本 + 履约变动成本'],
+        constraints: ['每个市场需求必须满足', '仓库发货量不能超过容量', '超过 SLA 天数的线路禁止使用'],
+        reading: ['看启用了哪些仓', '看每个市场由哪个仓履约', '看总成本是否可接受']
+      },
+      soft_capacity: {
+        variables: ['open_warehouse[w]', 'ship[w,m]', 'unfulfilled[m]：市场 m 未履约订单'],
+        objective: ['最小化：固定成本 + 变动成本 + 未履约罚分'],
+        constraints: ['发货量 + 未履约量 = 市场需求', '仓库容量不能超', 'SLA 不合格线路禁止使用'],
+        reading: ['看缺口落在哪个市场', '看哪些仓库接近满载', '用于解释旺季为什么无解']
+      },
+      capacity_expansion: {
+        variables: ['open_warehouse[w]', 'ship[w,m]', 'extra_capacity[w]：临时扩容', 'unfulfilled[m]'],
+        objective: ['最小化：固定成本 + 履约成本 + 扩容成本 + 未履约罚分'],
+        constraints: ['发货量不能超过基础容量 + 临时扩容', '扩容只能发生在启用仓', '需求可用未履约量兜底'],
+        reading: ['看该不该扩容', '看扩容在哪个仓、扩多少', '比较扩容成本和丢单损失']
+      },
+      inventory_placement: {
+        variables: ['place[sku,market]：某 SKU 前置到海外仓数量', 'direct_ship[sku,market]：继续直邮数量'],
+        objective: ['最大化：销售贡献 - 本地配送成本 - 仓储成本 - 直邮成本'],
+        constraints: ['前置数量 + 直邮数量 = 市场需求', '每个海外仓体积容量不能超'],
+        reading: ['看哪些 SKU 值得前置', '体积大、贡献低的 SKU 通常更容易直邮']
+      },
+      profit_allocation: {
+        variables: ['fulfill[sku,market]：库存分给某 SKU/市场的数量'],
+        objective: ['最大化：单位贡献 × 履约数量'],
+        constraints: ['每个 SKU 可用库存不能超', '不能超过各市场需求', '每个市场有最低服务率'],
+        reading: ['看库存不足时优先满足谁', '看服务率底线是否刚好卡住']
+      },
+      replenishment_scenarios: {
+        variables: ['order[lane,week]：每周空运/海运下单量', 'ending_inventory[week]', 'stockout[week]'],
+        objective: ['最小化：运输成本 + 库存持有成本 + 缺货罚分'],
+        constraints: ['期末库存 = 期初库存 + 到货 - 需求 + 缺货', '空运/海运每周容量限制', '期末库存目标'],
+        reading: ['看空运和海运怎么搭配', '看缺货是否由提前期造成']
+      },
+      safety_stock: {
+        variables: ['choose[sku,level]：SKU 选择 basic/standard/premium 安全库存'],
+        objective: ['最大化：预算内的缺货保护价值'],
+        constraints: ['每个 SKU 只能选一个服务水平', '安全库存总成本不能超过预算'],
+        reading: ['看哪些 SKU 被优先保护', '预算越紧，越需要分层保护']
+      },
+      robust_inventory: {
+        variables: ['buy[sku]：采购数量', 'leftover[sku,scenario]', 'stockout[sku,scenario]'],
+        objective: ['最小化：采购成本 + 期望持有成本 + 期望缺货损失'],
+        constraints: ['每个需求场景下库存平衡', '总仓容限制', '采购预算限制'],
+        reading: ['看低/中/高需求下的剩余和缺货', '这是抗预测误差的备货方案']
+      },
+      landed_cost: {
+        variables: ['use_route[r]：是否启用路径', 'orders[r,m]：路径 r 承担市场 m 订单量'],
+        objective: ['最小化：路径固定成本 + 运费 + 关税/清关成本'],
+        constraints: ['市场需求必须满足', '路径容量限制', '平均时效 SLA'],
+        reading: ['看 DDU/DDP/保税仓如何组合', '不要只看运费，要看到岸综合成本']
+      },
+      percentile_sla: {
+        variables: ['use_route[r]', 'orders[r,m]'],
+        objective: ['最小化：路径固定成本 + 单票履约成本'],
+        constraints: ['市场需求必须满足', '路径容量限制', '至少 X% 订单在 N 天内送达'],
+        reading: ['看哪些慢线路被限制', '百分比 SLA 比平均 SLA 更像真实承诺']
+      },
+      green_logistics: {
+        variables: ['orders[route,market]：各路线承接订单量'],
+        objective: ['最小化：物流成本 + 碳价 × 碳排放'],
+        constraints: ['市场需求满足', '路线容量限制', '平均时效 SLA'],
+        reading: ['看碳价升高后是否更多使用低碳路线', '低碳不能突破时效约束']
+      },
+      channel_allocation: {
+        variables: ['orders[channel,market]：渠道承接订单量'],
+        objective: ['最大化：销售额 - 商品成本 - 履约成本 - 平台佣金'],
+        constraints: ['市场需求满足', '渠道容量限制', '每个市场最低快速履约比例'],
+        reading: ['看 FBA、3PL、直邮如何分工', '直邮利润高但会受时效比例限制']
+      },
+      returns: {
+        variables: ['refurb_local[sku,region]', 'transfer_refurb[sku,source,target]', 'scrap[sku,region]'],
+        objective: ['最大化：二次销售价值 + 回收价值 - 翻新/转运成本'],
+        constraints: ['每个退货 SKU 必须被处理', '区域翻新产能限制'],
+        reading: ['看高价值 SKU 是否优先翻新', '低价值 SKU 可能被报废回收']
+      },
+      promotion_planning: {
+        variables: ['promote[sku]：是否促销', 'fulfilled[sku]：实际履约销量'],
+        objective: ['最大化：毛利贡献 - 促销花费'],
+        constraints: ['履约不能超过促销后需求', '履约不能超过库存', '促销预算和 SKU 数限制'],
+        reading: ['看哪些 SKU 值得投放', '促销需求也会被库存卡住']
+      },
+      promotion_sensitivity: {
+        variables: ['不同预算下重复求解 promote[sku] 和 fulfilled[sku]'],
+        objective: ['比较预算变化带来的净贡献变化'],
+        constraints: ['每次求解都有预算、库存和最多促销 SKU 限制'],
+        reading: ['看预算边际收益何时停止', '找最佳促销预算区间']
+      },
+      penalty_sensitivity: {
+        variables: ['不同罚分下重复求解扩容和未履约变量'],
+        objective: ['比较未履约罚分变化对扩容决策的影响'],
+        constraints: ['每次求解都有仓容、SLA 和需求约束'],
+        reading: ['看罚分达到多少时开始扩容', '帮助校准丢单成本估值']
+      },
+      dashboard: {
+        variables: ['调用多个模型的关键结果，不新增单一优化变量'],
+        objective: ['把成本、缺口、扩容、补货和服务组合放进管理摘要'],
+        constraints: ['继承各子模型自己的约束'],
+        reading: ['适合汇报总览', '用来比较多个经营动作的成本与风险']
+      }
+    };
+
     function money(value) {
       return Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
     }
@@ -528,6 +670,21 @@
 
     function band(title, html, tag = '') {
       return `<div class="band"><div class="band-title"><span>${title}</span><span>${tag}</span></div>${html}</div>`;
+    }
+
+    function renderModelExplain() {
+      const doc = modelDocs[scenarioSelect.value] || modelDocs.strict_sla;
+      const block = (title, items) => `
+        <div class="explain-card">
+          <div class="explain-title">${title}</div>
+          <ul>${items.map(item => `<li>${item}</li>`).join('')}</ul>
+        </div>`;
+      modelExplain.innerHTML = [
+        block('决策变量', doc.variables),
+        block('目标函数', doc.objective),
+        block('主要约束', doc.constraints),
+        block('怎么看结果', doc.reading)
+      ].join('');
     }
 
     function pre(text) {
@@ -588,6 +745,7 @@
     }
 
     function render(data) {
+      renderModelExplain();
       const network = data.network || {};
       const replenishment = data.replenishment || {};
       const service = data.service_mix || {};
