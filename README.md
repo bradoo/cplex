@@ -39,6 +39,7 @@ cplex/
 ├── docs/                         # 文档与课件
 │   ├── README.en.md              # 英文版说明
 │   ├── cplex_intro_slides.md     # 分享用课件
+│   ├── cplex_core_learning_10_slides.md # CPLEX 核心学习 10 页总结
 │   ├── manager_demo.md           # 经理汇报脚本
 │   ├── cross_border_ecommerce_simulator.md  # 跨境电商模拟器说明
 │   ├── cross_border_ecommerce_lessons.md    # 跨境电商场景讲义
@@ -130,6 +131,7 @@ cplex/
 | 文档 | 用途 |
 |---|---|
 | [docs/cplex_intro_slides.md](docs/cplex_intro_slides.md) | 复习与分享用课件 |
+| [docs/cplex_core_learning_10_slides.md](docs/cplex_core_learning_10_slides.md) | CPLEX 核心学习内容 10 页分享版 |
 | [docs/manager_demo.md](docs/manager_demo.md) | 面向经理的汇报脚本 |
 | [docs/scheduling_api.md](docs/scheduling_api.md) | 排班 REST API 接口文档 |
 | [docs/cross_border_ecommerce_simulator.md](docs/cross_border_ecommerce_simulator.md) | 跨境电商模拟器使用说明，按页面实际菜单同步 35 个场景 |
