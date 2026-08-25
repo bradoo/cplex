@@ -224,6 +224,43 @@
       border-bottom: 1px solid var(--line);
     }
 
+    .data-editor {
+      display: grid;
+      gap: 8px;
+    }
+
+    .data-editor.hidden {
+      display: none;
+    }
+
+    .data-editor-title {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 820;
+    }
+
+    .data-editor-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr 1fr;
+      gap: 8px;
+      align-items: end;
+    }
+
+    .data-editor-heading {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 780;
+    }
+
+    .data-editor-name {
+      min-height: 38px;
+      display: flex;
+      align-items: center;
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 780;
+    }
+
     .grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -521,6 +558,7 @@
             <optgroup label="补货与库存">
               <option value="replenishment_scenarios">补货情景分析</option>
               <option value="supplier_sourcing">多供应商采购分配</option>
+              <option value="inventory_transfer">跨仓库存调拨</option>
               <option value="safety_stock">安全库存优化</option>
               <option value="robust_inventory">稳健库存计划</option>
             </optgroup>
@@ -556,6 +594,7 @@
             <div class="nav-group-title">补货与库存</div>
             <button type="button" class="nav-item" data-scenario="replenishment_scenarios">补货情景分析</button>
             <button type="button" class="nav-item" data-scenario="supplier_sourcing">多供应商采购分配</button>
+            <button type="button" class="nav-item" data-scenario="inventory_transfer">跨仓库存调拨</button>
             <button type="button" class="nav-item" data-scenario="safety_stock">安全库存优化</button>
             <button type="button" class="nav-item" data-scenario="robust_inventory">稳健库存计划</button>
           </div>
@@ -616,6 +655,10 @@
             <label for="ocean">海运提前期周数</label>
             <input id="ocean" type="number" min="1" max="6" step="1" value="3">
           </div>
+          <div class="data-editor hidden" id="scenarioDataEditor">
+            <div class="data-editor-title">需求与库存参数</div>
+            <div class="data-editor-grid" id="scenarioDataGrid"></div>
+          </div>
           <div class="alert" id="note">切换仓网模式会自动套用一组演示参数，也可以继续手工调整。</div>
         </div>
         <div class="model-explain" id="modelExplain"></div>
@@ -640,6 +683,8 @@
     const penaltyInput = document.getElementById('penalty');
     const airInput = document.getElementById('air');
     const oceanInput = document.getElementById('ocean');
+    const scenarioDataEditor = document.getElementById('scenarioDataEditor');
+    const scenarioDataGrid = document.getElementById('scenarioDataGrid');
     let solveRequestId = 0;
 
     const presets = {
@@ -706,6 +751,14 @@
         air: 900,
         ocean: 3,
         note: '多供应商采购分配：在采购价、起订量、交期和可靠性之间选择供应商组合。'
+      },
+      inventory_transfer: {
+        demand: 1,
+        sla: 0,
+        penalty: 50,
+        air: 900,
+        ocean: 3,
+        note: '跨仓库存调拨：海外仓库存不均时，比较跨仓调拨、国内补货和缺货成本。'
       },
       safety_stock: {
         demand: 1,
@@ -870,6 +923,12 @@
         constraints: ['每个 SKU 要覆盖需求和安全库存', '供应商有产能和起订量', '平均交期不能超过目标', '平均可靠性必须达标'],
         reading: ['看低价供应商为什么不能全拿', '看本地备份供应商如何拉低交期、提高可靠性']
       },
+      inventory_transfer: {
+        variables: ['transfer[from,to]：从一个海外仓调到另一个海外仓的数量', 'replenish[warehouse]：从国内补货数量', 'shortage[warehouse]：仓库缺口', 'ending_inventory[warehouse]：期末库存'],
+        objective: ['最小化：跨仓调拨成本 + 国内补货成本 + 缺货罚分'],
+        constraints: ['每个仓库满足库存平衡', '跨仓调拨线路有容量限制', '国内补货总量有限', '期末库存和缺口不能为负'],
+        reading: ['看哪些仓库有富余库存', '看调拨和国内补货哪个更便宜', '避免一个仓爆仓、另一个仓缺货']
+      },
       safety_stock: {
         variables: ['choose[sku,level]：SKU 选择 basic/standard/premium 安全库存'],
         objective: ['最大化：预算内的缺货保护价值'],
@@ -953,6 +1012,18 @@
         objective: ['把成本、缺口、扩容、补货和服务组合放进管理摘要'],
         constraints: ['继承各子模型自己的约束'],
         reading: ['适合汇报总览', '用来比较多个经营动作的成本与风险']
+      }
+    };
+
+    const scenarioParamDefaults = {
+      inventory_transfer: {
+        title: '需求与库存参数',
+        warehouses: {
+          LA_3PL: { initial: 5200, demand: 3300 },
+          NJ_3PL: { initial: 1100, demand: 2800 },
+          Rotterdam: { initial: 900, demand: 2400 },
+          Sydney: { initial: 2600, demand: 1200 }
+        }
       }
     };
 
@@ -1098,6 +1169,41 @@
       });
     }
 
+    function renderScenarioDataEditor() {
+      const config = scenarioParamDefaults[scenarioSelect.value];
+      if (!config) {
+        scenarioDataEditor.classList.add('hidden');
+        scenarioDataGrid.innerHTML = '';
+        return;
+      }
+
+      scenarioDataEditor.classList.remove('hidden');
+      scenarioDataEditor.querySelector('.data-editor-title').textContent = config.title;
+      scenarioDataGrid.innerHTML = [
+        '<div class="data-editor-heading">仓库</div>',
+        '<div class="data-editor-heading">初始库存</div>',
+        '<div class="data-editor-heading">需求</div>',
+        ...Object.entries(config.warehouses).flatMap(([warehouse, values]) => [
+          `<div class="data-editor-name">${warehouse}</div>`,
+          `<input class="scenario-data-input" data-group="warehouses" data-name="${warehouse}" data-field="initial" type="number" min="0" step="100" value="${values.initial}">`,
+          `<input class="scenario-data-input" data-group="warehouses" data-name="${warehouse}" data-field="demand" type="number" min="0" step="100" value="${values.demand}">`
+        ])
+      ].join('');
+    }
+
+    function readScenarioParams() {
+      const params = {};
+      scenarioDataGrid.querySelectorAll('.scenario-data-input').forEach(input => {
+        const group = input.dataset.group;
+        const name = input.dataset.name;
+        const field = input.dataset.field;
+        params[group] = params[group] || {};
+        params[group][name] = params[group][name] || {};
+        params[group][name][field] = Number(input.value);
+      });
+      return params;
+    }
+
     function pre(text) {
       return `<pre style="margin:0;padding:14px;overflow:auto;white-space:pre;font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;">${escapeHtml(text || '')}</pre>`;
     }
@@ -1123,7 +1229,8 @@
         sla_extra_days: Number(slaInput.value),
         unfulfilled_penalty: Number(penaltyInput.value),
         air_capacity: Number(airInput.value),
-        ocean_lead_time: Number(oceanInput.value)
+        ocean_lead_time: Number(oceanInput.value),
+        scenario_params: readScenarioParams()
       };
 
       try {
@@ -1157,6 +1264,7 @@
       penaltyInput.value = preset.penalty;
       airInput.value = preset.air;
       oceanInput.value = preset.ocean;
+      renderScenarioDataEditor();
       note.className = 'alert';
       note.textContent = preset.note;
       renderModelExplain();
@@ -1247,6 +1355,7 @@
         applyPreset();
       });
     });
+    scenarioDataGrid.addEventListener('change', solve);
     applyPreset();
   </script>
 </body>

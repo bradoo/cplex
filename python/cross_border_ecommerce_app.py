@@ -2,6 +2,8 @@ from copy import deepcopy
 from pathlib import Path
 import subprocess
 import sys
+import json
+import os
 
 from flask import Flask, jsonify, render_template, request
 
@@ -28,6 +30,7 @@ SCRIPT_SCENARIOS = {
     "market_entry": "cross_border_ecommerce_market_entry_demo.py",
     "replenishment_scenarios": "cross_border_ecommerce_replenishment_scenarios_demo.py",
     "supplier_sourcing": "cross_border_ecommerce_supplier_sourcing_demo.py",
+    "inventory_transfer": "cross_border_ecommerce_inventory_transfer_demo.py",
     "profit_allocation": "cross_border_ecommerce_allocation_demo.py",
     "landed_cost": "cross_border_ecommerce_landed_cost_demo.py",
     "percentile_sla": "cross_border_ecommerce_percentile_sla_demo.py",
@@ -65,9 +68,10 @@ def simulate():
     unfulfilled_penalty = float(data.get("unfulfilled_penalty") or 50)
     air_capacity = int(data.get("air_capacity") or 900)
     ocean_lead_time = int(data.get("ocean_lead_time") or 3)
+    scenario_params = data.get("scenario_params") or {}
 
     if scenario in SCRIPT_SCENARIOS:
-        return jsonify(run_script_scenario(scenario))
+        return jsonify(run_script_scenario(scenario, scenario_params))
 
     if scenario == "strict_sla":
         network = solve_network_case(demand_multiplier, sla_extra_days)
@@ -163,11 +167,14 @@ def solve_service_level_case():
     return result
 
 
-def run_script_scenario(scenario):
+def run_script_scenario(scenario, scenario_params=None):
     script_path = Path(__file__).resolve().parent / SCRIPT_SCENARIOS[scenario]
+    env = os.environ.copy()
+    env["CROSS_BORDER_SCENARIO_PARAMS"] = json.dumps(scenario_params or {})
     completed = subprocess.run(
         [sys.executable, str(script_path)],
         cwd=script_path.parent,
+        env=env,
         text=True,
         capture_output=True,
         check=False,
