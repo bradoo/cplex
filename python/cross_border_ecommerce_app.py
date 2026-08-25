@@ -25,6 +25,7 @@ app = Flask(__name__)
 
 SCRIPT_SCENARIOS = {
     "inventory_placement": "cross_border_ecommerce_inventory_placement_demo.py",
+    "market_entry": "cross_border_ecommerce_market_entry_demo.py",
     "replenishment_scenarios": "cross_border_ecommerce_replenishment_scenarios_demo.py",
     "profit_allocation": "cross_border_ecommerce_allocation_demo.py",
     "landed_cost": "cross_border_ecommerce_landed_cost_demo.py",
