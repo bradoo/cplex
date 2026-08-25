@@ -138,6 +138,63 @@
       font-weight: 700;
     }
 
+    .scenario-select-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+
+    .scenario-nav {
+      display: grid;
+      gap: 13px;
+    }
+
+    .nav-group {
+      display: grid;
+      gap: 7px;
+    }
+
+    .nav-group-title {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 820;
+    }
+
+    .nav-item {
+      width: 100%;
+      min-height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 10px;
+      background: #fff;
+      color: var(--ink);
+      text-align: left;
+      font-size: 13px;
+      font-weight: 780;
+      line-height: 1.25;
+      box-shadow: none;
+    }
+
+    .nav-item:hover {
+      border-color: #b8c4d1;
+      background: #f8fafc;
+    }
+
+    .nav-item.active {
+      border-color: #b6caff;
+      background: var(--soft-blue);
+      color: var(--blue);
+    }
+
+    .parameter-divider {
+      height: 1px;
+      background: var(--line);
+      margin: 2px 0;
+    }
+
     .grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -319,13 +376,13 @@
   <main>
     <section>
       <div class="section-head">
-        <h2>情景参数</h2>
+        <h2>场景导航与参数</h2>
         <span class="tag">CPLEX</span>
       </div>
       <div class="controls">
-        <div class="field">
+        <div class="field scenario-select-hidden">
           <label for="scenario">演示场景</label>
-          <select id="scenario">
+          <select id="scenario" aria-label="演示场景">
             <optgroup label="仓网与履约">
               <option value="strict_sla">严格 SLA</option>
               <option value="soft_capacity">旺季缺口分析</option>
@@ -353,6 +410,38 @@
             </optgroup>
           </select>
         </div>
+        <nav class="scenario-nav" id="scenarioNav" aria-label="演示场景导航">
+          <div class="nav-group">
+            <div class="nav-group-title">仓网与履约</div>
+            <button type="button" class="nav-item" data-scenario="strict_sla">严格 SLA</button>
+            <button type="button" class="nav-item" data-scenario="soft_capacity">旺季缺口分析</button>
+            <button type="button" class="nav-item" data-scenario="capacity_expansion">旺季临时扩容</button>
+            <button type="button" class="nav-item" data-scenario="inventory_placement">库存前置分配</button>
+            <button type="button" class="nav-item" data-scenario="profit_allocation">库存不足利润优先分配</button>
+          </div>
+          <div class="nav-group">
+            <div class="nav-group-title">补货与库存</div>
+            <button type="button" class="nav-item" data-scenario="replenishment_scenarios">补货情景分析</button>
+            <button type="button" class="nav-item" data-scenario="safety_stock">安全库存优化</button>
+            <button type="button" class="nav-item" data-scenario="robust_inventory">稳健库存计划</button>
+          </div>
+          <div class="nav-group">
+            <div class="nav-group-title">物流路径与服务</div>
+            <button type="button" class="nav-item" data-scenario="landed_cost">Landed Cost 路径选择</button>
+            <button type="button" class="nav-item" data-scenario="percentile_sla">百分比 SLA 路径选择</button>
+            <button type="button" class="nav-item" data-scenario="green_logistics">绿色物流成本/碳排</button>
+            <button type="button" class="nav-item" data-scenario="channel_allocation">渠道分配优化</button>
+          </div>
+          <div class="nav-group">
+            <div class="nav-group-title">经营动作</div>
+            <button type="button" class="nav-item" data-scenario="returns">退货逆向物流</button>
+            <button type="button" class="nav-item" data-scenario="promotion_planning">促销预算计划</button>
+            <button type="button" class="nav-item" data-scenario="promotion_sensitivity">促销预算敏感性</button>
+            <button type="button" class="nav-item" data-scenario="penalty_sensitivity">未履约罚分敏感性</button>
+            <button type="button" class="nav-item" data-scenario="dashboard">经营看板汇总</button>
+          </div>
+        </nav>
+        <div class="parameter-divider"></div>
         <div class="grid">
           <div class="field">
             <label for="demand">需求倍率</label>
@@ -402,6 +491,7 @@
     const bands = document.getElementById('bands');
     const note = document.getElementById('note');
     const scenarioSelect = document.getElementById('scenario');
+    const scenarioNav = document.getElementById('scenarioNav');
     const demandInput = document.getElementById('demand');
     const slaInput = document.getElementById('sla');
     const penaltyInput = document.getElementById('penalty');
@@ -687,6 +777,12 @@
       ].join('');
     }
 
+    function updateScenarioNav() {
+      scenarioNav.querySelectorAll('.nav-item').forEach(button => {
+        button.classList.toggle('active', button.dataset.scenario === scenarioSelect.value);
+      });
+    }
+
     function pre(text) {
       return `<pre style="margin:0;padding:14px;overflow:auto;white-space:pre;font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;">${escapeHtml(text || '')}</pre>`;
     }
@@ -734,6 +830,7 @@
 
     function applyPreset() {
       const preset = presets[scenarioSelect.value];
+      updateScenarioNav();
       demandInput.value = preset.demand;
       slaInput.value = preset.sla;
       penaltyInput.value = preset.penalty;
@@ -819,6 +916,12 @@
 
     solveBtn.addEventListener('click', solve);
     scenarioSelect.addEventListener('change', applyPreset);
+    scenarioNav.querySelectorAll('.nav-item').forEach(button => {
+      button.addEventListener('click', () => {
+        scenarioSelect.value = button.dataset.scenario;
+        applyPreset();
+      });
+    });
     applyPreset();
   </script>
 </body>
