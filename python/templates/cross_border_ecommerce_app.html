@@ -421,6 +421,7 @@
               <option value="landed_cost">Landed Cost 路径选择</option>
               <option value="percentile_sla">百分比 SLA 路径选择</option>
               <option value="green_logistics">绿色物流成本/碳排</option>
+              <option value="multi_objective">多目标权衡</option>
               <option value="channel_allocation">渠道分配优化</option>
             </optgroup>
             <optgroup label="经营动作">
@@ -452,6 +453,7 @@
             <button type="button" class="nav-item" data-scenario="landed_cost">Landed Cost 路径选择</button>
             <button type="button" class="nav-item" data-scenario="percentile_sla">百分比 SLA 路径选择</button>
             <button type="button" class="nav-item" data-scenario="green_logistics">绿色物流成本/碳排</button>
+            <button type="button" class="nav-item" data-scenario="multi_objective">多目标权衡</button>
             <button type="button" class="nav-item" data-scenario="channel_allocation">渠道分配优化</button>
           </div>
           <div class="nav-group">
@@ -615,6 +617,14 @@
         ocean: 3,
         note: '绿色物流：比较成本和碳排放之间的取舍。'
       },
+      multi_objective: {
+        demand: 1,
+        sla: 0,
+        penalty: 50,
+        air: 900,
+        ocean: 3,
+        note: '多目标权衡：把成本、速度、碳排和履约风险放进同一个评分函数里比较。'
+      },
       channel_allocation: {
         demand: 1,
         sla: 0,
@@ -731,6 +741,12 @@
         objective: ['最小化：物流成本 + 碳价 × 碳排放'],
         constraints: ['市场需求满足', '路线容量限制', '平均时效 SLA'],
         reading: ['看碳价升高后是否更多使用低碳路线', '低碳不能突破时效约束']
+      },
+      multi_objective: {
+        variables: ['orders[route,market]：每条物流路径服务每个市场的订单量'],
+        objective: ['最小化：物流成本 + 速度权重 × 总送达天数 + 碳权重 × 碳排 + 风险权重 × 预计风险订单'],
+        constraints: ['每个市场需求必须满足', '每条路径不能超过容量', '每个市场平均送达天数不能超过 SLA'],
+        reading: ['看权重变化如何改变路线组合', '这是把多个经营目标转成同一把尺子的做法']
       },
       channel_allocation: {
         variables: ['orders[channel,market]：渠道承接订单量'],
