@@ -29,6 +29,7 @@ SCRIPT_SCENARIOS = {
     "profit_allocation": "cross_border_ecommerce_allocation_demo.py",
     "landed_cost": "cross_border_ecommerce_landed_cost_demo.py",
     "percentile_sla": "cross_border_ecommerce_percentile_sla_demo.py",
+    "sla_sensitivity": "cross_border_ecommerce_sla_sensitivity_demo.py",
     "returns": "cross_border_ecommerce_returns_demo.py",
     "safety_stock": "cross_border_ecommerce_safety_stock_demo.py",
     "green_logistics": "cross_border_ecommerce_green_logistics_demo.py",
