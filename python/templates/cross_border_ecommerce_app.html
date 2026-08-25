@@ -613,6 +613,7 @@
               <option value="marketplace_allocation">多平台库存分配</option>
               <option value="ad_inventory">广告库存联动</option>
               <option value="support_staffing">客服售后排班</option>
+              <option value="wave_picking">订单波次排程</option>
               <option value="promotion_planning">促销预算计划</option>
               <option value="promotion_sensitivity">促销预算敏感性</option>
               <option value="markdown_clearance">清仓折扣优化</option>
@@ -669,6 +670,7 @@
             <button type="button" class="nav-item" data-scenario="marketplace_allocation">多平台库存分配</button>
             <button type="button" class="nav-item" data-scenario="ad_inventory">广告库存联动</button>
             <button type="button" class="nav-item" data-scenario="support_staffing">客服售后排班</button>
+            <button type="button" class="nav-item" data-scenario="wave_picking">订单波次排程</button>
             <button type="button" class="nav-item" data-scenario="promotion_planning">促销预算计划</button>
               <button type="button" class="nav-item" data-scenario="promotion_sensitivity">促销预算敏感性</button>
               <button type="button" class="nav-item" data-scenario="markdown_clearance">清仓折扣优化</button>
@@ -980,6 +982,14 @@
         ocean: 3,
         note: '客服售后排班：根据时区、语言技能、工单量和外包成本安排客服班次。'
       },
+      wave_picking: {
+        demand: 1,
+        sla: 0,
+        penalty: 50,
+        air: 900,
+        ocean: 3,
+        note: '订单波次排程：根据拣货/打包产能、截止波次和加班成本安排当天出库波次。'
+      },
       promotion_planning: {
         demand: 1,
         sla: 0,
@@ -1196,6 +1206,12 @@
         objective: ['最小化：内部排班成本 + 加班成本 + 外包成本'],
         constraints: ['每个时段/语言的工单工时要被覆盖', '客服只能处理自己会的语言', '每人最多排指定班次数', '每班容量和加班上限', '外包占比不能过高'],
         reading: ['看多语言客服如何分配到不同时区', '看什么时候该外包，而不是盲目加班']
+      },
+      wave_picking: {
+        variables: ['assign[group,wave]：订单组分配到哪个出库波次', 'pick_overtime[wave] / pack_overtime[wave]：每个波次的拣货/打包加班小时', 'late_orders[group]：超过承诺截止波次的延期订单量'],
+        objective: ['最小化：延期罚分 + 拣货加班成本 + 打包加班成本'],
+        constraints: ['每个订单组只能分配到一个出库波次', '每个波次的拣货/打包工时不能超过常规产能 + 加班', '加班小时有上限', '晚于截止波次会产生延期订单'],
+        reading: ['看高优先级订单是否被提前处理', '看哪些波次需要加班', '仓内执行能力也会影响履约 SLA']
       },
       promotion_planning: {
         variables: ['promote[sku]：是否促销', 'fulfilled[sku]：实际履约销量'],

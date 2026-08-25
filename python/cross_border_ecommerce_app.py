@@ -52,6 +52,7 @@ SCRIPT_SCENARIOS = {
     "marketplace_allocation": "cross_border_ecommerce_marketplace_allocation_demo.py",
     "ad_inventory": "cross_border_ecommerce_ad_inventory_demo.py",
     "support_staffing": "cross_border_ecommerce_support_staffing_demo.py",
+    "wave_picking": "cross_border_ecommerce_wave_picking_demo.py",
     "promotion_planning": "cross_border_ecommerce_promotion_planning_demo.py",
     "promotion_sensitivity": "cross_border_ecommerce_promotion_sensitivity_demo.py",
     "markdown_clearance": "cross_border_ecommerce_markdown_clearance_demo.py",
