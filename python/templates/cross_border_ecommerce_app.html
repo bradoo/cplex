@@ -603,6 +603,7 @@
               <option value="green_logistics">绿色物流成本/碳排</option>
               <option value="multi_objective">多目标权衡</option>
               <option value="resilience">物流韧性预案</option>
+              <option value="packaging">包装箱型与运费优化</option>
               <option value="channel_allocation">渠道分配优化</option>
             </optgroup>
             <optgroup label="经营动作">
@@ -654,6 +655,7 @@
               <button type="button" class="nav-item" data-scenario="green_logistics">绿色物流成本/碳排</button>
               <button type="button" class="nav-item" data-scenario="multi_objective">多目标权衡</button>
               <button type="button" class="nav-item" data-scenario="resilience">物流韧性预案</button>
+              <button type="button" class="nav-item" data-scenario="packaging">包装箱型与运费优化</button>
               <button type="button" class="nav-item" data-scenario="channel_allocation">渠道分配优化</button>
             </div>
           </div>
@@ -912,6 +914,14 @@
         ocean: 3,
         note: '物流韧性预案：比较不预留备份能力和提前预留应急能力的差异。'
       },
+      packaging: {
+        demand: 1,
+        sla: 0,
+        penalty: 50,
+        air: 900,
+        ocean: 3,
+        note: '包装箱型与运费优化：选择箱型和包材，平衡体积重、包材成本和破损风险。'
+      },
       channel_allocation: {
         demand: 1,
         sla: 0,
@@ -1128,6 +1138,12 @@
         objective: ['精益方案：只最小化正常成本', '韧性方案：最小化正常成本 + 预留成本 + 故障缺口罚分'],
         constraints: ['正常和故障场景都要满足需求平衡', '线路有正常容量和故障容量', '故障时只能使用平时铺好的能力 + 预留能力'],
         reading: ['看便宜方案在压力测试下会不会缺货', '看少量预留能力如何换来故障时不断供']
+      },
+      packaging: {
+        variables: ['assign[order_type,box]：每类订单使用某种箱型/包材的数量'],
+        objective: ['最小化：运输体积重成本 + 包材成本 + 预计破损成本'],
+        constraints: ['每类订单必须选择可装得下的箱型', '箱型有重量和体积限制', '整体预计破损率不能超过目标'],
+        reading: ['看哪些商品不能用便宜袋子', '看缓冲包材如何降低破损但增加体积重', '包装也是物流成本优化的一部分']
       },
       channel_allocation: {
         variables: ['orders[channel,market]：渠道承接订单量'],
