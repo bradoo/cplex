@@ -33,6 +33,7 @@ SCRIPT_SCENARIOS = {
     "safety_stock": "cross_border_ecommerce_safety_stock_demo.py",
     "green_logistics": "cross_border_ecommerce_green_logistics_demo.py",
     "multi_objective": "cross_border_ecommerce_multi_objective_demo.py",
+    "resilience": "cross_border_ecommerce_resilience_demo.py",
     "robust_inventory": "cross_border_ecommerce_robust_inventory_demo.py",
     "channel_allocation": "cross_border_ecommerce_channel_allocation_demo.py",
     "promotion_planning": "cross_border_ecommerce_promotion_planning_demo.py",
