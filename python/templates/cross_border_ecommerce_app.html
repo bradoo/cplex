@@ -591,6 +591,7 @@
               <option value="supplier_sourcing">多供应商采购分配</option>
               <option value="supplier_scorecard">供应商评分体系</option>
               <option value="cashflow_inventory">采购现金流约束</option>
+              <option value="container_replenishment">整柜拼箱空运补货</option>
               <option value="inventory_transfer">跨仓库存调拨</option>
               <option value="safety_stock">安全库存优化</option>
               <option value="robust_inventory">稳健库存计划</option>
@@ -638,9 +639,10 @@
             <div class="nav-group-items">
               <button type="button" class="nav-item" data-scenario="replenishment_scenarios">补货情景分析</button>
               <button type="button" class="nav-item" data-scenario="supplier_sourcing">多供应商采购分配</button>
-              <button type="button" class="nav-item" data-scenario="supplier_scorecard">供应商评分体系</button>
-              <button type="button" class="nav-item" data-scenario="cashflow_inventory">采购现金流约束</button>
-              <button type="button" class="nav-item" data-scenario="inventory_transfer">跨仓库存调拨</button>
+            <button type="button" class="nav-item" data-scenario="supplier_scorecard">供应商评分体系</button>
+            <button type="button" class="nav-item" data-scenario="cashflow_inventory">采购现金流约束</button>
+            <button type="button" class="nav-item" data-scenario="container_replenishment">整柜拼箱空运补货</button>
+            <button type="button" class="nav-item" data-scenario="inventory_transfer">跨仓库存调拨</button>
               <button type="button" class="nav-item" data-scenario="safety_stock">安全库存优化</button>
               <button type="button" class="nav-item" data-scenario="robust_inventory">稳健库存计划</button>
             </div>
@@ -833,6 +835,14 @@
         air: 900,
         ocean: 3,
         note: '采购现金流约束：在月度现金预算、账期、库存覆盖和缺货风险之间安排采购。'
+      },
+      container_replenishment: {
+        demand: 1,
+        sla: 0,
+        penalty: 50,
+        air: 900,
+        ocean: 3,
+        note: '整柜拼箱空运补货：在 FCL、LCL、空运之间平衡成本、起运量、提前期和缺货风险。'
       },
       inventory_transfer: {
         demand: 1,
@@ -1078,6 +1088,12 @@
         objective: ['最小化：采购成本 + 库存持有成本 + 缺货罚分'],
         constraints: ['每月库存平衡', '每月现金支出不能超过预算', '采购付款分成本月和下月账期', '仓库总库存不能超过容量', '期末要保留最低覆盖'],
         reading: ['看现金预算是否成为瓶颈', '看为什么有些 SKU 要提前买、有些 SKU 会被迫缺货']
+      },
+      container_replenishment: {
+        variables: ['batches[mode,week]：每周选择几批空运/拼箱/整柜', 'inventory[week]：每周期末库存', 'stockout[week]：每周缺货量'],
+        objective: ['最小化：运输订货成本 + 库存持有成本 + 缺货罚分'],
+        constraints: ['库存随提前期到货滚动平衡', '每种运输方式有每周批次数上限', '拼箱和整柜有固定费用和批量大小', '仓库容量和期末库存目标必须满足'],
+        reading: ['看空运如何救急', '看整柜为何要提前下单', '看拼箱如何作为成本和速度之间的中间方案']
       },
       inventory_transfer: {
         variables: ['transfer[from,to]：从一个海外仓调到另一个海外仓的数量', 'replenish[warehouse]：从国内补货数量', 'shortage[warehouse]：仓库缺口', 'ending_inventory[warehouse]：期末库存'],

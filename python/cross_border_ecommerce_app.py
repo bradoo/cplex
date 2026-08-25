@@ -32,6 +32,7 @@ SCRIPT_SCENARIOS = {
     "supplier_sourcing": "cross_border_ecommerce_supplier_sourcing_demo.py",
     "supplier_scorecard": "cross_border_ecommerce_supplier_scorecard_demo.py",
     "cashflow_inventory": "cross_border_ecommerce_cashflow_inventory_demo.py",
+    "container_replenishment": "cross_border_ecommerce_container_replenishment_demo.py",
     "inventory_transfer": "cross_border_ecommerce_inventory_transfer_demo.py",
     "weather_risk_network": "cross_border_ecommerce_weather_risk_network_demo.py",
     "profit_allocation": "cross_border_ecommerce_allocation_demo.py",
