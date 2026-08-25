@@ -575,6 +575,7 @@
               <option value="returns">退货逆向物流</option>
               <option value="promotion_planning">促销预算计划</option>
               <option value="promotion_sensitivity">促销预算敏感性</option>
+              <option value="markdown_clearance">清仓折扣优化</option>
               <option value="penalty_sensitivity">未履约罚分敏感性</option>
               <option value="dashboard">经营看板汇总</option>
             </optgroup>
@@ -613,6 +614,7 @@
             <button type="button" class="nav-item" data-scenario="returns">退货逆向物流</button>
             <button type="button" class="nav-item" data-scenario="promotion_planning">促销预算计划</button>
             <button type="button" class="nav-item" data-scenario="promotion_sensitivity">促销预算敏感性</button>
+            <button type="button" class="nav-item" data-scenario="markdown_clearance">清仓折扣优化</button>
             <button type="button" class="nav-item" data-scenario="penalty_sensitivity">未履约罚分敏感性</button>
             <button type="button" class="nav-item" data-scenario="dashboard">经营看板汇总</button>
           </div>
@@ -856,6 +858,14 @@
         ocean: 3,
         note: '促销预算敏感性：预算增加时，促销组合和净贡献如何变化。'
       },
+      markdown_clearance: {
+        demand: 1,
+        sla: 0,
+        penalty: 50,
+        air: 900,
+        ocean: 3,
+        note: '清仓折扣优化：库存积压时，为每个 SKU 选择最合适的折扣档。'
+      },
       penalty_sensitivity: {
         demand: 1,
         sla: 0,
@@ -1000,6 +1010,12 @@
         objective: ['比较预算变化带来的净贡献变化'],
         constraints: ['每次求解都有预算、库存和最多促销 SKU 限制'],
         reading: ['看预算边际收益何时停止', '找最佳促销预算区间']
+      },
+      markdown_clearance: {
+        variables: ['choose[sku,discount]：SKU 是否选择某个折扣档', 'sell[sku,discount]：该折扣下卖出的数量', 'leftover[sku]：清仓后剩余库存'],
+        objective: ['最大化：销售收入 - 商品成本 - 持有成本 - 品牌折损罚分'],
+        constraints: ['每个 SKU 只能选一个折扣档', '销量不能超过该折扣带来的需求上限', '销售量 + 剩余库存 = 当前库存', '清仓后库存不能超过仓容目标'],
+        reading: ['看哪些 SKU 需要深折，哪些不该打折', '折扣要同时看需求拉动、毛利损失和库存压力']
       },
       penalty_sensitivity: {
         variables: ['不同罚分下重复求解扩容和未履约变量'],
