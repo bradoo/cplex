@@ -576,6 +576,7 @@
             <optgroup label="经营动作">
               <option value="returns">退货逆向物流</option>
               <option value="return_grading">退货分级再销售</option>
+              <option value="ad_inventory">广告库存联动</option>
               <option value="promotion_planning">促销预算计划</option>
               <option value="promotion_sensitivity">促销预算敏感性</option>
               <option value="markdown_clearance">清仓折扣优化</option>
@@ -618,6 +619,7 @@
             <div class="nav-group-title">经营动作</div>
             <button type="button" class="nav-item" data-scenario="returns">退货逆向物流</button>
             <button type="button" class="nav-item" data-scenario="return_grading">退货分级再销售</button>
+            <button type="button" class="nav-item" data-scenario="ad_inventory">广告库存联动</button>
             <button type="button" class="nav-item" data-scenario="promotion_planning">促销预算计划</button>
             <button type="button" class="nav-item" data-scenario="promotion_sensitivity">促销预算敏感性</button>
             <button type="button" class="nav-item" data-scenario="markdown_clearance">清仓折扣优化</button>
@@ -872,6 +874,14 @@
         ocean: 3,
         note: '退货分级再销售：按成色把退货分配到正价翻新、Outlet、批发清仓等渠道。'
       },
+      ad_inventory: {
+        demand: 1,
+        sla: 0,
+        penalty: 50,
+        air: 900,
+        ocean: 3,
+        note: '广告库存联动：根据库存、毛利和履约能力决定每个 SKU 的广告投放档位。'
+      },
       promotion_planning: {
         demand: 1,
         sla: 0,
@@ -1046,6 +1056,12 @@
         objective: ['最大化：回收销售价值 - 检测/翻新/处理成本'],
         constraints: ['每个退货批次必须被处理', '每个渠道有处理容量', 'C 级品不能进入正价翻新渠道'],
         reading: ['看高成色货是否占用正价翻新能力', '看低成色货何时转 Outlet、批发或回收']
+      },
+      ad_inventory: {
+        variables: ['choose[sku,level]：每个 SKU 选择 none/test/standard/aggressive 广告档位', 'fulfilled[sku]：实际履约销量', 'lost_sales[sku]：广告带来但无法履约的损失销量'],
+        objective: ['最大化：毛利 + 品牌增益 - 广告花费 - 缺货损失'],
+        constraints: ['每个 SKU 只能选一个广告档位', '销量不能超过库存', '销量不能超过履约能力', '总广告预算有限', '强投 SKU 数量有限'],
+        reading: ['看预算是否投给高毛利且有库存的 SKU', '避免广告把需求打到无法履约的商品上']
       },
       promotion_planning: {
         variables: ['promote[sku]：是否促销', 'fulfilled[sku]：实际履约销量'],

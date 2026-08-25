@@ -45,6 +45,7 @@ SCRIPT_SCENARIOS = {
     "resilience": "cross_border_ecommerce_resilience_demo.py",
     "robust_inventory": "cross_border_ecommerce_robust_inventory_demo.py",
     "channel_allocation": "cross_border_ecommerce_channel_allocation_demo.py",
+    "ad_inventory": "cross_border_ecommerce_ad_inventory_demo.py",
     "promotion_planning": "cross_border_ecommerce_promotion_planning_demo.py",
     "promotion_sensitivity": "cross_border_ecommerce_promotion_sensitivity_demo.py",
     "markdown_clearance": "cross_border_ecommerce_markdown_clearance_demo.py",
