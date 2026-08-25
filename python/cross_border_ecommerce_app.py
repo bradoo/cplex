@@ -36,6 +36,7 @@ SCRIPT_SCENARIOS = {
     "percentile_sla": "cross_border_ecommerce_percentile_sla_demo.py",
     "sla_sensitivity": "cross_border_ecommerce_sla_sensitivity_demo.py",
     "returns": "cross_border_ecommerce_returns_demo.py",
+    "return_grading": "cross_border_ecommerce_return_grading_demo.py",
     "safety_stock": "cross_border_ecommerce_safety_stock_demo.py",
     "green_logistics": "cross_border_ecommerce_green_logistics_demo.py",
     "multi_objective": "cross_border_ecommerce_multi_objective_demo.py",
