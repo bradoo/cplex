@@ -34,6 +34,7 @@ SCRIPT_SCENARIOS = {
     "weather_risk_network": "cross_border_ecommerce_weather_risk_network_demo.py",
     "profit_allocation": "cross_border_ecommerce_allocation_demo.py",
     "landed_cost": "cross_border_ecommerce_landed_cost_demo.py",
+    "tariff_sensitivity": "cross_border_ecommerce_tariff_sensitivity_demo.py",
     "percentile_sla": "cross_border_ecommerce_percentile_sla_demo.py",
     "sla_sensitivity": "cross_border_ecommerce_sla_sensitivity_demo.py",
     "returns": "cross_border_ecommerce_returns_demo.py",

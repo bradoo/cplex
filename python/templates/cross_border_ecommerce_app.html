@@ -565,6 +565,7 @@
             </optgroup>
             <optgroup label="物流路径与服务">
               <option value="landed_cost">Landed Cost 路径选择</option>
+              <option value="tariff_sensitivity">关税政策敏感性</option>
               <option value="percentile_sla">百分比 SLA 路径选择</option>
               <option value="sla_sensitivity">SLA 敏感性分析</option>
               <option value="green_logistics">绿色物流成本/碳排</option>
@@ -605,6 +606,7 @@
           <div class="nav-group">
             <div class="nav-group-title">物流路径与服务</div>
             <button type="button" class="nav-item" data-scenario="landed_cost">Landed Cost 路径选择</button>
+            <button type="button" class="nav-item" data-scenario="tariff_sensitivity">关税政策敏感性</button>
             <button type="button" class="nav-item" data-scenario="percentile_sla">百分比 SLA 路径选择</button>
             <button type="button" class="nav-item" data-scenario="sla_sensitivity">SLA 敏感性分析</button>
             <button type="button" class="nav-item" data-scenario="green_logistics">绿色物流成本/碳排</button>
@@ -798,6 +800,14 @@
         ocean: 3,
         note: 'Landed Cost：把运费、税费和清关路径一起纳入成本。'
       },
+      tariff_sensitivity: {
+        demand: 1,
+        sla: 0,
+        penalty: 50,
+        air: 900,
+        ocean: 3,
+        note: '关税政策敏感性：比较税率、低价值免税和 DDU 合规成本变化下的路径切换。'
+      },
       percentile_sla: {
         demand: 1,
         sla: 0,
@@ -982,6 +992,12 @@
         objective: ['最小化：路径固定成本 + 运费 + 关税/清关成本'],
         constraints: ['市场需求必须满足', '路径容量限制', '平均时效 SLA'],
         reading: ['看 DDU/DDP/保税仓如何组合', '不要只看运费，要看到岸综合成本']
+      },
+      tariff_sensitivity: {
+        variables: ['重复求解 use_route[r] 和 orders[r,m]：不同政策情景下的路径选择'],
+        objective: ['每个情景都最小化：固定成本 + 运费 + 关税 + 清关/合规成本'],
+        constraints: ['市场需求必须满足', '路径容量限制', '平均时效 SLA'],
+        reading: ['看税率上涨时总成本如何变', '看 DDU 合规成本上升后是否切到 DDP', '用于解释政策变化对物流方案的影响']
       },
       percentile_sla: {
         variables: ['use_route[r]', 'orders[r,m]'],
