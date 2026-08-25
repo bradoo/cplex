@@ -1,4 +1,7 @@
 from copy import deepcopy
+from pathlib import Path
+import subprocess
+import sys
 
 from flask import Flask, jsonify, render_template, request
 
@@ -20,6 +23,24 @@ from cross_border_ecommerce_soft_capacity_demo import solve_soft_capacity_networ
 app = Flask(__name__)
 
 
+SCRIPT_SCENARIOS = {
+    "inventory_placement": "cross_border_ecommerce_inventory_placement_demo.py",
+    "replenishment_scenarios": "cross_border_ecommerce_replenishment_scenarios_demo.py",
+    "profit_allocation": "cross_border_ecommerce_allocation_demo.py",
+    "landed_cost": "cross_border_ecommerce_landed_cost_demo.py",
+    "percentile_sla": "cross_border_ecommerce_percentile_sla_demo.py",
+    "returns": "cross_border_ecommerce_returns_demo.py",
+    "safety_stock": "cross_border_ecommerce_safety_stock_demo.py",
+    "green_logistics": "cross_border_ecommerce_green_logistics_demo.py",
+    "robust_inventory": "cross_border_ecommerce_robust_inventory_demo.py",
+    "channel_allocation": "cross_border_ecommerce_channel_allocation_demo.py",
+    "promotion_planning": "cross_border_ecommerce_promotion_planning_demo.py",
+    "promotion_sensitivity": "cross_border_ecommerce_promotion_sensitivity_demo.py",
+    "penalty_sensitivity": "cross_border_ecommerce_penalty_sensitivity_demo.py",
+    "dashboard": "cross_border_ecommerce_dashboard_demo.py",
+}
+
+
 @app.get("/")
 def index():
     return render_template("cross_border_ecommerce_app.html")
@@ -39,6 +60,9 @@ def simulate():
     unfulfilled_penalty = float(data.get("unfulfilled_penalty") or 50)
     air_capacity = int(data.get("air_capacity") or 900)
     ocean_lead_time = int(data.get("ocean_lead_time") or 3)
+
+    if scenario in SCRIPT_SCENARIOS:
+        return jsonify(run_script_scenario(scenario))
 
     if scenario == "strict_sla":
         network = solve_network_case(demand_multiplier, sla_extra_days)
@@ -132,6 +156,24 @@ def solve_replenishment_case(air_capacity, ocean_lead_time, stockout_penalty):
 def solve_service_level_case():
     result = solve_service_level_mix(log_output=False, print_output=False)
     return result
+
+
+def run_script_scenario(scenario):
+    script_path = Path(__file__).resolve().parent / SCRIPT_SCENARIOS[scenario]
+    completed = subprocess.run(
+        [sys.executable, str(script_path)],
+        cwd=script_path.parent,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    return {
+        "status": "ok" if completed.returncode == 0 else "error",
+        "scenario": scenario,
+        "text_output": completed.stdout.strip(),
+        "error_output": completed.stderr.strip(),
+        "return_code": completed.returncode,
+    }
 
 
 if __name__ == "__main__":

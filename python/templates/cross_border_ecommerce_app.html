@@ -275,7 +275,7 @@
     <div class="header-inner">
       <div>
         <h1>跨境电商库存与运输模拟器</h1>
-        <p class="subtitle">仓网、缺口、扩容、补货和物流服务档位的 CPLEX 求解演示</p>
+        <p class="subtitle">仓网、库存、补货、服务等级、促销、退货和绿色物流的 CPLEX 求解演示</p>
       </div>
       <button id="solveBtn">重新求解</button>
     </div>
@@ -289,11 +289,33 @@
       </div>
       <div class="controls">
         <div class="field">
-          <label for="scenario">仓网模式</label>
+          <label for="scenario">演示场景</label>
           <select id="scenario">
-            <option value="strict_sla">严格 SLA</option>
-            <option value="soft_capacity">旺季缺口分析</option>
-            <option value="capacity_expansion">旺季临时扩容</option>
+            <optgroup label="仓网与履约">
+              <option value="strict_sla">严格 SLA</option>
+              <option value="soft_capacity">旺季缺口分析</option>
+              <option value="capacity_expansion">旺季临时扩容</option>
+              <option value="inventory_placement">库存前置分配</option>
+              <option value="profit_allocation">库存不足利润优先分配</option>
+            </optgroup>
+            <optgroup label="补货与库存">
+              <option value="replenishment_scenarios">补货情景分析</option>
+              <option value="safety_stock">安全库存优化</option>
+              <option value="robust_inventory">稳健库存计划</option>
+            </optgroup>
+            <optgroup label="物流路径与服务">
+              <option value="landed_cost">Landed Cost 路径选择</option>
+              <option value="percentile_sla">百分比 SLA 路径选择</option>
+              <option value="green_logistics">绿色物流成本/碳排</option>
+              <option value="channel_allocation">渠道分配优化</option>
+            </optgroup>
+            <optgroup label="经营动作">
+              <option value="returns">退货逆向物流</option>
+              <option value="promotion_planning">促销预算计划</option>
+              <option value="promotion_sensitivity">促销预算敏感性</option>
+              <option value="penalty_sensitivity">未履约罚分敏感性</option>
+              <option value="dashboard">经营看板汇总</option>
+            </optgroup>
           </select>
         </div>
         <div class="grid">
@@ -373,6 +395,118 @@
         air: 900,
         ocean: 3,
         note: '旺季临时扩容：需求上涨 25%，允许购买临时仓容，比较扩容和丢单哪个更划算。'
+      },
+      inventory_placement: {
+        demand: 1,
+        sla: 0,
+        penalty: 50,
+        air: 900,
+        ocean: 3,
+        note: '库存前置分配：看哪些 SKU 适合放进海外仓，哪些继续直邮。'
+      },
+      profit_allocation: {
+        demand: 1,
+        sla: 0,
+        penalty: 50,
+        air: 900,
+        ocean: 3,
+        note: '库存不足利润优先分配：在库存有限时优先满足高贡献市场，并守住服务底线。'
+      },
+      replenishment_scenarios: {
+        demand: 1,
+        sla: 0,
+        penalty: 18,
+        air: 900,
+        ocean: 3,
+        note: '补货情景分析：比较空运扩容、缺货罚分和海运提前期变化。'
+      },
+      safety_stock: {
+        demand: 1,
+        sla: 0,
+        penalty: 50,
+        air: 900,
+        ocean: 3,
+        note: '安全库存优化：预算有限时，为不同 SKU 选择服务水平。'
+      },
+      robust_inventory: {
+        demand: 1,
+        sla: 0,
+        penalty: 50,
+        air: 900,
+        ocean: 3,
+        note: '稳健库存计划：同时考虑低/中/高需求场景下的持有和缺货风险。'
+      },
+      landed_cost: {
+        demand: 1,
+        sla: 0,
+        penalty: 50,
+        air: 900,
+        ocean: 3,
+        note: 'Landed Cost：把运费、税费和清关路径一起纳入成本。'
+      },
+      percentile_sla: {
+        demand: 1,
+        sla: 0,
+        penalty: 50,
+        air: 900,
+        ocean: 3,
+        note: '百分比 SLA：不是看平均时效，而是要求一定比例订单 N 天内送达。'
+      },
+      green_logistics: {
+        demand: 1,
+        sla: 0,
+        penalty: 50,
+        air: 900,
+        ocean: 3,
+        note: '绿色物流：比较成本和碳排放之间的取舍。'
+      },
+      channel_allocation: {
+        demand: 1,
+        sla: 0,
+        penalty: 50,
+        air: 900,
+        ocean: 3,
+        note: '渠道分配：在 FBA、品牌 3PL、直邮之间分配订单。'
+      },
+      returns: {
+        demand: 1,
+        sla: 0,
+        penalty: 50,
+        air: 900,
+        ocean: 3,
+        note: '退货逆向物流：决定退货件翻新、转仓还是报废。'
+      },
+      promotion_planning: {
+        demand: 1,
+        sla: 0,
+        penalty: 50,
+        air: 900,
+        ocean: 3,
+        note: '促销预算计划：决定哪些 SKU 值得投促销预算。'
+      },
+      promotion_sensitivity: {
+        demand: 1,
+        sla: 0,
+        penalty: 50,
+        air: 900,
+        ocean: 3,
+        note: '促销预算敏感性：预算增加时，促销组合和净贡献如何变化。'
+      },
+      penalty_sensitivity: {
+        demand: 1,
+        sla: 0,
+        penalty: 50,
+        air: 900,
+        ocean: 3,
+        note: '未履约罚分敏感性：观察罚分达到多少时模型开始选择扩容。'
+      },
+      dashboard: {
+        demand: 1,
+        sla: 0,
+        penalty: 50,
+        air: 900,
+        ocean: 3,
+        note: '经营看板汇总：把仓网、缺口、扩容、补货和服务组合放在一张管理表里。'
       }
     };
 
@@ -394,6 +528,17 @@
 
     function band(title, html, tag = '') {
       return `<div class="band"><div class="band-title"><span>${title}</span><span>${tag}</span></div>${html}</div>`;
+    }
+
+    function pre(text) {
+      return `<pre style="margin:0;padding:14px;overflow:auto;white-space:pre;font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;">${escapeHtml(text || '')}</pre>`;
+    }
+
+    function escapeHtml(text) {
+      return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
     }
 
     async function solve() {
@@ -446,6 +591,20 @@
       const network = data.network || {};
       const replenishment = data.replenishment || {};
       const service = data.service_mix || {};
+
+      if (data.text_output !== undefined) {
+        metrics.innerHTML = [
+          metric('场景', scenarioSelect.options[scenarioSelect.selectedIndex].text),
+          metric('状态', data.status),
+          metric('返回码', data.return_code || 0),
+          metric('输出行数', (data.text_output || '').split('\n').filter(Boolean).length)
+        ].join('');
+        bands.innerHTML = [
+          band('求解输出', pre(data.text_output), data.scenario || ''),
+          data.error_output ? band('错误输出', pre(data.error_output), 'stderr') : ''
+        ].join('');
+        return;
+      }
 
       metrics.innerHTML = [
         metric('仓网总成本', money(network.total_cost)),
