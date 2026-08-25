@@ -1,6 +1,6 @@
 # CPLEX / DOcplex 学习笔记
 
-这个仓库是一组 **CPLEX / DOcplex** 入门到进阶的可运行示例，围绕「数学优化建模」和「员工排班系统」两条主线，配套课件、汇报脚本、REST API 和自动化测试，适合自学和团队分享。
+这个仓库是一组 **CPLEX / DOcplex** 入门到进阶的可运行示例，围绕「数学优化建模」「员工排班系统」和「跨境电商库存与物流优化」三条主线，配套课件、汇报脚本、REST API、交互式模拟器和自动化测试，适合自学和团队分享。
 
 > 英文版说明见 [docs/README.en.md](docs/README.en.md)
 
@@ -40,6 +40,8 @@ cplex/
 │   ├── README.en.md              # 英文版说明
 │   ├── cplex_intro_slides.md     # 分享用课件
 │   ├── manager_demo.md           # 经理汇报脚本
+│   ├── cross_border_ecommerce_simulator.md  # 跨境电商模拟器说明
+│   ├── cross_border_ecommerce_lessons.md    # 跨境电商场景讲义
 │   └── scheduling_api.md         # 排班 REST API 文档
 │
 ├── opl/                          # CPLEX Studio / OPL 示例
@@ -54,7 +56,7 @@ cplex/
     └── tests/                    # 回归测试
 ```
 
-经典优化示例与排班示例都在 `python/` 目录，命名统一以 `*_docplex.py` / `scheduling_*_demo.py` 区分，详见下方[示例速查表](#示例速查表)。
+经典优化示例、排班示例和跨境电商模拟器都在 `python/` 目录，命名统一以 `*_docplex.py`、`scheduling_*_demo.py`、`cross_border_ecommerce_*_demo.py` 区分，详见下方[示例速查表](#示例速查表)。
 
 ---
 
@@ -113,6 +115,14 @@ cplex/
 20. `scheduling_benchmark_demo.py` — 不同规模的性能基准
 21. `scheduling_app.py` + `scheduling_api_client_demo.py` — REST API 化部署
 
+**第六阶段 · 跨境电商业务优化模拟器**
+
+22. `cross_border_ecommerce_app.py` — 跨境电商库存与物流模拟器，页面端口 `5052`
+23. 仓网与履约 — 严格 SLA、旺季缺口、临时扩容、库存前置、新市场进入、天气风险、库存不足利润优先分配
+24. 补货与库存 — 补货情景、多供应商采购、供应商评分、现金流约束、整柜/拼箱/空运、跨仓调拨、安全库存、稳健库存
+25. 物流路径与服务 — Landed Cost、关税敏感性、百分比 SLA、绿色物流、多目标权衡、韧性预案、包装箱型、渠道分配
+26. 经营动作 — 退货、再销售、多平台库存、广告库存联动、客服排班、订单波次、促销、清仓、罚分敏感性、经营看板
+
 ---
 
 ## 文档与课件
@@ -122,6 +132,8 @@ cplex/
 | [docs/cplex_intro_slides.md](docs/cplex_intro_slides.md) | 复习与分享用课件 |
 | [docs/manager_demo.md](docs/manager_demo.md) | 面向经理的汇报脚本 |
 | [docs/scheduling_api.md](docs/scheduling_api.md) | 排班 REST API 接口文档 |
+| [docs/cross_border_ecommerce_simulator.md](docs/cross_border_ecommerce_simulator.md) | 跨境电商模拟器使用说明，按页面实际菜单同步 35 个场景 |
+| [docs/cross_border_ecommerce_lessons.md](docs/cross_border_ecommerce_lessons.md) | 跨境电商 35 个场景的讲课版讲义 |
 | [docs/README.en.md](docs/README.en.md) | 英文版说明 |
 
 ---
@@ -166,7 +178,17 @@ cplex/
 | `scheduling_app.py` | Flask 服务，`http://127.0.0.1:5050`，含交互模拟器与 JSON API |
 | `scheduling_api_client_demo.py` | 调用 `/api/health`、`/api/problem`、`/api/solve` 的 Python 客户端 |
 | `bmi_app.py` | BMI / 热量 / 运动量优化页面，`http://127.0.0.1:5051` |
+| `cross_border_ecommerce_app.py` | 跨境电商库存与物流模拟器，`http://127.0.0.1:5052`，含 35 个业务场景 |
 | `scheduling_solution.html` | 静态排班展示页（浏览器直接打开） |
+
+### 跨境电商优化模拟器
+
+| 场景组 | 覆盖内容 |
+|---|---|
+| 仓网与履约 | 严格 SLA、旺季缺口、临时扩容、库存前置、新市场进入、天气风险、利润优先分配 |
+| 补货与库存 | 补货情景、供应商采购、供应商评分、现金流、整柜拼箱空运、跨仓调拨、安全库存、稳健库存 |
+| 物流路径与服务 | Landed Cost、关税、百分比 SLA、SLA 敏感性、绿色物流、多目标、韧性、包装、渠道分配 |
+| 经营动作 | 退货、再销售、多平台库存、广告库存、客服排班、订单波次、促销、清仓、罚分敏感性、看板 |
 
 运行任意脚本：
 
@@ -189,6 +211,19 @@ python bmi_app.py
 
 ```text
 http://127.0.0.1:5051
+```
+
+启动跨境电商库存与物流模拟器：
+
+```bash
+cd python
+python cross_border_ecommerce_app.py
+```
+
+打开：
+
+```text
+http://127.0.0.1:5052
 ```
 
 一个更紧张的需求场景（硬约束无解会自动切换软约束兜底）：
