@@ -187,12 +187,34 @@
       border-color: #b6caff;
       background: var(--soft-blue);
       color: var(--blue);
+      box-shadow: inset 4px 0 0 var(--blue);
     }
 
     .parameter-divider {
       height: 1px;
       background: var(--line);
       margin: 2px 0;
+    }
+
+    .current-scenario {
+      display: grid;
+      gap: 4px;
+      padding: 10px 11px;
+      border: 1px solid #b6caff;
+      border-radius: 8px;
+      background: var(--soft-blue);
+    }
+
+    .current-scenario-label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 780;
+    }
+
+    .current-scenario-name {
+      color: var(--blue);
+      font-size: 15px;
+      font-weight: 850;
     }
 
     .grid {
@@ -441,6 +463,10 @@
             <button type="button" class="nav-item" data-scenario="dashboard">经营看板汇总</button>
           </div>
         </nav>
+        <div class="current-scenario">
+          <div class="current-scenario-label">当前场景</div>
+          <div class="current-scenario-name" id="currentScenarioName">严格 SLA</div>
+        </div>
         <div class="parameter-divider"></div>
         <div class="grid">
           <div class="field">
@@ -492,11 +518,13 @@
     const note = document.getElementById('note');
     const scenarioSelect = document.getElementById('scenario');
     const scenarioNav = document.getElementById('scenarioNav');
+    const currentScenarioName = document.getElementById('currentScenarioName');
     const demandInput = document.getElementById('demand');
     const slaInput = document.getElementById('sla');
     const penaltyInput = document.getElementById('penalty');
     const airInput = document.getElementById('air');
     const oceanInput = document.getElementById('ocean');
+    let solveRequestId = 0;
 
     const presets = {
       strict_sla: {
@@ -778,6 +806,7 @@
     }
 
     function updateScenarioNav() {
+      currentScenarioName.textContent = scenarioSelect.options[scenarioSelect.selectedIndex].text;
       scenarioNav.querySelectorAll('.nav-item').forEach(button => {
         button.classList.toggle('active', button.dataset.scenario === scenarioSelect.value);
       });
@@ -795,10 +824,12 @@
     }
 
     async function solve() {
+      const selectedScenarioName = scenarioSelect.options[scenarioSelect.selectedIndex].text;
+      const requestId = ++solveRequestId;
       solveBtn.disabled = true;
       statusTag.textContent = 'solving';
       note.className = 'alert';
-      note.textContent = 'CPLEX 正在求解当前情景。';
+      note.textContent = `CPLEX 正在求解：${selectedScenarioName}`;
 
       const payload = {
         scenario: scenarioSelect.value,
@@ -816,15 +847,19 @@
           body: JSON.stringify(payload)
         });
         const data = await response.json();
+        if (requestId !== solveRequestId) return;
         render(data);
         statusTag.textContent = data.status;
-        note.textContent = '求解完成。';
+        note.textContent = `求解完成：${selectedScenarioName}`;
       } catch (error) {
+        if (requestId !== solveRequestId) return;
         statusTag.textContent = 'error';
         note.className = 'alert bad';
         note.textContent = error.message;
       } finally {
-        solveBtn.disabled = false;
+        if (requestId === solveRequestId) {
+          solveBtn.disabled = false;
+        }
       }
     }
 
@@ -838,6 +873,7 @@
       oceanInput.value = preset.ocean;
       note.className = 'alert';
       note.textContent = preset.note;
+      renderModelExplain();
       solve();
     }
 
