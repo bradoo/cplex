@@ -217,6 +217,13 @@
       font-weight: 850;
     }
 
+    .scenario-summary {
+      display: grid;
+      gap: 14px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
     .grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -467,36 +474,6 @@
             <button type="button" class="nav-item" data-scenario="dashboard">经营看板汇总</button>
           </div>
         </nav>
-        <div class="current-scenario">
-          <div class="current-scenario-label">当前场景</div>
-          <div class="current-scenario-name" id="currentScenarioName">严格 SLA</div>
-        </div>
-        <div class="parameter-divider"></div>
-        <div class="grid">
-          <div class="field">
-            <label for="demand">需求倍率</label>
-            <input id="demand" type="number" min="0.5" max="2" step="0.05" value="1">
-          </div>
-          <div class="field">
-            <label for="sla">SLA 放宽天数</label>
-            <input id="sla" type="number" min="0" max="10" step="1" value="0">
-          </div>
-        </div>
-        <div class="grid">
-          <div class="field">
-            <label for="penalty">未履约罚分</label>
-            <input id="penalty" type="number" min="1" max="120" step="1" value="50">
-          </div>
-          <div class="field">
-            <label for="air">空运周容量</label>
-            <input id="air" type="number" min="300" max="2000" step="50" value="900">
-          </div>
-        </div>
-        <div class="field">
-          <label for="ocean">海运提前期周数</label>
-          <input id="ocean" type="number" min="1" max="6" step="1" value="3">
-        </div>
-        <div class="alert" id="note">切换仓网模式会自动套用一组演示参数，也可以继续手工调整。</div>
       </div>
     </section>
 
@@ -506,6 +483,37 @@
         <span class="tag" id="statusTag">ready</span>
       </div>
       <div class="content">
+        <div class="scenario-summary">
+          <div class="current-scenario">
+            <div class="current-scenario-label">当前场景</div>
+            <div class="current-scenario-name" id="currentScenarioName">严格 SLA</div>
+          </div>
+          <div class="grid">
+            <div class="field">
+              <label for="demand">需求倍率</label>
+              <input id="demand" type="number" min="0.5" max="2" step="0.05" value="1">
+            </div>
+            <div class="field">
+              <label for="sla">SLA 放宽天数</label>
+              <input id="sla" type="number" min="0" max="10" step="1" value="0">
+            </div>
+          </div>
+          <div class="grid">
+            <div class="field">
+              <label for="penalty">未履约罚分</label>
+              <input id="penalty" type="number" min="1" max="120" step="1" value="50">
+            </div>
+            <div class="field">
+              <label for="air">空运周容量</label>
+              <input id="air" type="number" min="300" max="2000" step="50" value="900">
+            </div>
+          </div>
+          <div class="field">
+            <label for="ocean">海运提前期周数</label>
+            <input id="ocean" type="number" min="1" max="6" step="1" value="3">
+          </div>
+          <div class="alert" id="note">切换仓网模式会自动套用一组演示参数，也可以继续手工调整。</div>
+        </div>
         <div class="model-explain" id="modelExplain"></div>
         <div class="metrics" id="metrics"></div>
         <div class="bands" id="bands"></div>
