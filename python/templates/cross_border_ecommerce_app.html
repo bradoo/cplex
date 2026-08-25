@@ -559,6 +559,7 @@
             <optgroup label="补货与库存">
               <option value="replenishment_scenarios">补货情景分析</option>
               <option value="supplier_sourcing">多供应商采购分配</option>
+              <option value="supplier_scorecard">供应商评分体系</option>
               <option value="cashflow_inventory">采购现金流约束</option>
               <option value="inventory_transfer">跨仓库存调拨</option>
               <option value="safety_stock">安全库存优化</option>
@@ -601,6 +602,7 @@
             <div class="nav-group-title">补货与库存</div>
             <button type="button" class="nav-item" data-scenario="replenishment_scenarios">补货情景分析</button>
             <button type="button" class="nav-item" data-scenario="supplier_sourcing">多供应商采购分配</button>
+            <button type="button" class="nav-item" data-scenario="supplier_scorecard">供应商评分体系</button>
             <button type="button" class="nav-item" data-scenario="cashflow_inventory">采购现金流约束</button>
             <button type="button" class="nav-item" data-scenario="inventory_transfer">跨仓库存调拨</button>
             <button type="button" class="nav-item" data-scenario="safety_stock">安全库存优化</button>
@@ -771,6 +773,14 @@
         air: 900,
         ocean: 3,
         note: '多供应商采购分配：在采购价、起订量、交期和可靠性之间选择供应商组合。'
+      },
+      supplier_scorecard: {
+        demand: 1,
+        sla: 0,
+        penalty: 50,
+        air: 900,
+        ocean: 3,
+        note: '供应商评分体系：把评级、风险、天气、可靠性、售后、准时率和响应能力纳入采购分配。'
       },
       cashflow_inventory: {
         demand: 1,
@@ -988,6 +998,12 @@
         objective: ['最小化：采购成本 + 供应商启用成本 + 缺货罚分'],
         constraints: ['每个 SKU 要覆盖需求和安全库存', '供应商有产能和起订量', '平均交期不能超过目标', '平均可靠性必须达标'],
         reading: ['看低价供应商为什么不能全拿', '看本地备份供应商如何拉低交期、提高可靠性']
+      },
+      supplier_scorecard: {
+        variables: ['use_supplier[s]：供应商是否入选', 'buy[s,sku]：从供应商采购 SKU 数量', 'shortage[sku]：采购缺口'],
+        objective: ['最小化：采购成本 + 启用成本 + 质量/法律风险成本 + 天气/地理风险成本 + 缺货罚分 - 服务响应加分'],
+        constraints: ['总评估等级、风险、可靠性、准时率、响应能力必须过门槛', '供应商有产能和起订量', '单一供应商占比不能过高', '每个 SKU 要覆盖需求和安全库存'],
+        reading: ['看低价但风险差的供应商为何被排除', '看评分高的供应商如何获得更多分配', '这是把供应商评估表转成优化模型']
       },
       cashflow_inventory: {
         variables: ['buy[sku,month]：每月每个 SKU 采购量', 'inventory[sku,month]：月末库存', 'shortage[sku,month]：当月缺口'],
