@@ -520,6 +520,7 @@
             </optgroup>
             <optgroup label="补货与库存">
               <option value="replenishment_scenarios">补货情景分析</option>
+              <option value="supplier_sourcing">多供应商采购分配</option>
               <option value="safety_stock">安全库存优化</option>
               <option value="robust_inventory">稳健库存计划</option>
             </optgroup>
@@ -554,6 +555,7 @@
           <div class="nav-group">
             <div class="nav-group-title">补货与库存</div>
             <button type="button" class="nav-item" data-scenario="replenishment_scenarios">补货情景分析</button>
+            <button type="button" class="nav-item" data-scenario="supplier_sourcing">多供应商采购分配</button>
             <button type="button" class="nav-item" data-scenario="safety_stock">安全库存优化</button>
             <button type="button" class="nav-item" data-scenario="robust_inventory">稳健库存计划</button>
           </div>
@@ -696,6 +698,14 @@
         air: 900,
         ocean: 3,
         note: '补货情景分析：比较空运扩容、缺货罚分和海运提前期变化。'
+      },
+      supplier_sourcing: {
+        demand: 1,
+        sla: 0,
+        penalty: 50,
+        air: 900,
+        ocean: 3,
+        note: '多供应商采购分配：在采购价、起订量、交期和可靠性之间选择供应商组合。'
       },
       safety_stock: {
         demand: 1,
@@ -853,6 +863,12 @@
         objective: ['最小化：运输成本 + 库存持有成本 + 缺货罚分'],
         constraints: ['期末库存 = 期初库存 + 到货 - 需求 + 缺货', '空运/海运每周容量限制', '期末库存目标'],
         reading: ['看空运和海运怎么搭配', '看缺货是否由提前期造成']
+      },
+      supplier_sourcing: {
+        variables: ['use_supplier[s]：是否启用供应商', 'buy[s,sku]：从供应商 s 采购 SKU 数量', 'shortage[sku]：采购缺口'],
+        objective: ['最小化：采购成本 + 供应商启用成本 + 缺货罚分'],
+        constraints: ['每个 SKU 要覆盖需求和安全库存', '供应商有产能和起订量', '平均交期不能超过目标', '平均可靠性必须达标'],
+        reading: ['看低价供应商为什么不能全拿', '看本地备份供应商如何拉低交期、提高可靠性']
       },
       safety_stock: {
         variables: ['choose[sku,level]：SKU 选择 basic/standard/premium 安全库存'],
