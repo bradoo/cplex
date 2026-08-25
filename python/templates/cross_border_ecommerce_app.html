@@ -553,6 +553,7 @@
               <option value="capacity_expansion">旺季临时扩容</option>
               <option value="inventory_placement">库存前置分配</option>
               <option value="market_entry">新市场进入决策</option>
+              <option value="weather_risk_network">天气风险建仓选址</option>
               <option value="profit_allocation">库存不足利润优先分配</option>
             </optgroup>
             <optgroup label="补货与库存">
@@ -590,6 +591,7 @@
             <button type="button" class="nav-item" data-scenario="capacity_expansion">旺季临时扩容</button>
             <button type="button" class="nav-item" data-scenario="inventory_placement">库存前置分配</button>
             <button type="button" class="nav-item" data-scenario="market_entry">新市场进入决策</button>
+            <button type="button" class="nav-item" data-scenario="weather_risk_network">天气风险建仓选址</button>
             <button type="button" class="nav-item" data-scenario="profit_allocation">库存不足利润优先分配</button>
           </div>
           <div class="nav-group">
@@ -731,6 +733,14 @@
         air: 900,
         ocean: 3,
         note: '新市场进入决策：判断新国家市场先直邮试水，还是启用区域仓或本地 3PL。'
+      },
+      weather_risk_network: {
+        demand: 1,
+        sla: 0,
+        penalty: 50,
+        air: 900,
+        ocean: 3,
+        note: '天气风险建仓选址：把极端天气导致的中断风险纳入仓库选址和分仓。'
       },
       profit_allocation: {
         demand: 1,
@@ -924,6 +934,12 @@
         objective: ['最大化：销售毛利 - 履约变动成本 - 市场进入固定成本'],
         constraints: ['每个新市场需求必须满足', '每个履约渠道有容量上限', '每个市场必须达到最低快速履约比例'],
         reading: ['看新市场是否值得开本地能力', '看直邮试水和本地履约之间如何搭配', '固定成本高时模型会更谨慎']
+      },
+      weather_risk_network: {
+        variables: ['open_warehouse[w]：是否启用候选仓', 'ship[w,m]：仓库 w 给市场 m 发货量'],
+        objective: ['最小化：仓库固定成本 + 履约成本 + 天气风险成本'],
+        constraints: ['每个市场需求必须满足', '仓库容量不能超', '不满足 SLA 的线路禁止使用', '高天气风险仓承接订单比例不能过高', '整体平均天气风险不能超标'],
+        reading: ['看模型是否避开高风险仓', '看成本更低但天气风险更高的仓是否被限制', '这是把天气因素转成风险成本和风险约束']
       },
       profit_allocation: {
         variables: ['fulfill[sku,market]：库存分给某 SKU/市场的数量'],
