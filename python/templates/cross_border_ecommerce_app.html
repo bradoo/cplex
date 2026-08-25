@@ -610,6 +610,7 @@
               <option value="return_grading">退货分级再销售</option>
               <option value="marketplace_allocation">多平台库存分配</option>
               <option value="ad_inventory">广告库存联动</option>
+              <option value="support_staffing">客服售后排班</option>
               <option value="promotion_planning">促销预算计划</option>
               <option value="promotion_sensitivity">促销预算敏感性</option>
               <option value="markdown_clearance">清仓折扣优化</option>
@@ -661,9 +662,10 @@
             <div class="nav-group-items">
               <button type="button" class="nav-item" data-scenario="returns">退货逆向物流</button>
               <button type="button" class="nav-item" data-scenario="return_grading">退货分级再销售</button>
-              <button type="button" class="nav-item" data-scenario="marketplace_allocation">多平台库存分配</button>
-              <button type="button" class="nav-item" data-scenario="ad_inventory">广告库存联动</button>
-              <button type="button" class="nav-item" data-scenario="promotion_planning">促销预算计划</button>
+            <button type="button" class="nav-item" data-scenario="marketplace_allocation">多平台库存分配</button>
+            <button type="button" class="nav-item" data-scenario="ad_inventory">广告库存联动</button>
+            <button type="button" class="nav-item" data-scenario="support_staffing">客服售后排班</button>
+            <button type="button" class="nav-item" data-scenario="promotion_planning">促销预算计划</button>
               <button type="button" class="nav-item" data-scenario="promotion_sensitivity">促销预算敏感性</button>
               <button type="button" class="nav-item" data-scenario="markdown_clearance">清仓折扣优化</button>
               <button type="button" class="nav-item" data-scenario="penalty_sensitivity">未履约罚分敏感性</button>
@@ -950,6 +952,14 @@
         ocean: 3,
         note: '广告库存联动：根据库存、毛利和履约能力决定每个 SKU 的广告投放档位。'
       },
+      support_staffing: {
+        demand: 1,
+        sla: 0,
+        penalty: 50,
+        air: 900,
+        ocean: 3,
+        note: '客服售后排班：根据时区、语言技能、工单量和外包成本安排客服班次。'
+      },
       promotion_planning: {
         demand: 1,
         sla: 0,
@@ -1148,6 +1158,12 @@
         objective: ['最大化：毛利 + 品牌增益 - 广告花费 - 缺货损失'],
         constraints: ['每个 SKU 只能选一个广告档位', '销量不能超过库存', '销量不能超过履约能力', '总广告预算有限', '强投 SKU 数量有限'],
         reading: ['看预算是否投给高毛利且有库存的 SKU', '避免广告把需求打到无法履约的商品上']
+      },
+      support_staffing: {
+        variables: ['assign[agent,shift]：客服是否上某个班次', 'handled[agent,shift,language]：客服处理的语言工时', 'overtime[agent,shift]：加班小时', 'outsource[shift,language]：外包工时'],
+        objective: ['最小化：内部排班成本 + 加班成本 + 外包成本'],
+        constraints: ['每个时段/语言的工单工时要被覆盖', '客服只能处理自己会的语言', '每人最多排指定班次数', '每班容量和加班上限', '外包占比不能过高'],
+        reading: ['看多语言客服如何分配到不同时区', '看什么时候该外包，而不是盲目加班']
       },
       promotion_planning: {
         variables: ['promote[sku]：是否促销', 'fulfilled[sku]：实际履约销量'],
