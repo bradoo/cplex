@@ -1,24 +1,25 @@
-# CPLEX / DOcplex 学习笔记
+# CPLEX / DOcplex 业务优化项目作品集
 
-这个仓库是一组 **CPLEX / DOcplex** 入门到进阶的可运行示例，围绕「数学优化建模」「员工排班系统」和「跨境电商库存与物流优化」三条主线，配套课件、汇报脚本、REST API、交互式模拟器和自动化测试，适合自学和团队分享。
+这是一个基于 **IBM CPLEX / DOcplex** 的业务优化学习与作品集项目，展示如何把排班、仓网、补货、物流、促销等复杂业务决策，转成变量、目标和约束，并落地为可运行的 Web 模拟器、API 服务、文档讲义和管理层汇报材料。
 
 > 英文版说明见 [docs/README.en.md](docs/README.en.md)
 
 ---
 
-## 目录
+## 项目亮点
 
-- [环境准备](#环境准备)
-- [仓库结构](#仓库结构)
-- [学习路线](#学习路线)
-- [文档与课件](#文档与课件)
-- [示例速查表](#示例速查表)
-- [自动化测试](#自动化测试)
-- [CPLEX vs Gurobi](#cplex-vs-gurobi)
+- 覆盖从基础数学优化到业务系统的完整学习路径。
+- 包含员工排班 Web/API 系统，支持软约束、偏好、多目标和结果解释。
+- 包含跨境电商库存与物流模拟器，覆盖 35 个仓网、补货、物流和经营优化场景。
+- 练习了无解诊断、罚分权重、敏感性分析、候选方案比较、稳健优化和模型版本管理。
+- 提供经理汇报 PPT、10 页核心总结、讲课版文档和上午复习笔记。
+- 包含自动化测试、API 示例、CSV/JSON 报表和工程化演示。
 
 ---
 
-## 环境准备
+## 快速体验
+
+准备环境：
 
 ```bash
 python3 -m venv .venv
@@ -26,196 +27,7 @@ source .venv/bin/activate
 pip install -r python/requirements.txt
 ```
 
-> Python 示例默认从 `python/` 目录运行（`data/` 与 `reports/` 使用相对路径）。
-
----
-
-## 仓库结构
-
-```text
-cplex/
-├── README.md                     # 本文件：入口与索引
-│
-├── docs/                         # 文档与课件
-│   ├── README.en.md              # 英文版说明
-│   ├── cplex_intro_slides.md     # 分享用课件
-│   ├── cplex_core_learning_10_slides.md # CPLEX 核心学习 10 页总结
-│   ├── manager_demo.md           # 经理汇报脚本
-│   ├── cross_border_ecommerce_simulator.md  # 跨境电商模拟器说明
-│   ├── cross_border_ecommerce_lessons.md    # 跨境电商场景讲义
-│   └── scheduling_api.md         # 排班 REST API 文档
-│
-├── opl/                          # CPLEX Studio / OPL 示例
-└── python/                       # Python / DOcplex 示例与相关文件
-    ├── requirements.txt          # 依赖：docplex / cplex / flask
-    ├── run_tests.py              # 一键运行全部测试
-    ├── scheduling_solver.py      # 核心排班求解器
-    ├── scheduling_app.py         # Flask 交互式排班服务 + API
-    ├── data/                     # 示例业务数据
-    ├── reports/                  # 示例输出
-    ├── templates/                # Flask 页面模板
-    └── tests/                    # 回归测试
-```
-
-经典优化示例、排班示例和跨境电商模拟器都在 `python/` 目录，命名统一以 `*_docplex.py`、`scheduling_*_demo.py`、`cross_border_ecommerce_*_demo.py` 区分，详见下方[示例速查表](#示例速查表)。
-
----
-
-## 学习路线
-
-建议按下面顺序循序渐进：
-
-**第一阶段 · 数学优化基础**（理解「变量 / 目标 / 约束」三要素）
-
-1. `knapsack_docplex.py` — 背包问题（0/1 变量 + 最大化价值）
-2. `transportation_docplex.py` — 运输问题（连续变量 + 供需平衡）
-3. `facility_location_docplex.py` — 仓库选址（0/1 + 连续混合，关联约束）
-4. `bmi_calorie_optimizer_demo.py` — BMI、热量摄入和运动量优化示例
-
-**第二阶段 · 排班建模入门**
-
-5. `scheduling_docplex.py` — 最基础排班模型
-6. `scheduling_from_csv.py` — 从 CSV 读业务数据；硬约束无解自动切软约束
-7. `scheduling_parameters_demo.py` — 求解参数（`time_limit` / `mip_gap`）
-
-**CPLEX Studio / OPL 入门**
-
-- `opl/pmedian_quickstart/` — 官方 Quick Start 风格的 P-Median 仓库分配模型
-- `opl/staff_scheduling_quickstart/` — CPLEX Studio 里的最小排班模型，并导出 CSV 结果
-- `opl/staff_scheduling_quickstart/*_schedule_matrix.csv` — 对应 Displaying solutions，把变量值整理成表格
-- `opl/staff_scheduling_quickstart/baseline.dat` 与 `weekend_peak.dat` — 同一模型切换不同数据场景
-- `opl/staff_scheduling_quickstart/run_all_scenarios.sh` — 用 `oplrun` 批量运行多个 OPL 数据场景
-- `opl/staff_scheduling_quickstart/scenario_summary.csv` — 汇总多个 OPL 场景的公平性和工作量
-- `opl/staff_scheduling_cost/` — 在 OPL 排班模型中加入成本目标，练习业务取舍
-- `opl/staff_scheduling_soft_constraints/` — 用缺口变量把硬需求改成可解释的软约束
-- `opl/cp_optimizer_quickstart/` — 对应 Quick Start 的 Two solving engines，使用 `using CP;` 切换到 CP Optimizer
-- `opl/debugging_quickstart/` — 对应 Quick Start 的 Debugging，练习语法错误、数据错误和无解错误
-- 建议在 Studio 中全部使用英文项目名、英文文件名、英文 Run Configuration 名
-
-**第三阶段 · 多目标与业务规则**
-
-7. `scheduling_multi_objective_demo.py` — 公平性 + 员工偏好
-8. `scheduling_consecutive_demo.py` — 最多连续上班 N 天
-9. `scheduling_skills_demo.py` — 技能覆盖（如每天至少 1 名 senior）
-10. `scheduling_cost_demo.py` — 加入排班成本优化
-
-**第四阶段 · 软约束、诊断与取舍**
-
-11. `scheduling_conflict_diagnosis_demo.py` — 无解时定位冲突来源
-12. `scheduling_soft_constraints_demo.py` — 人数缺口 + 技能缺口量化
-13. `scheduling_penalty_weights_demo.py` — 罚分权重如何改变模型取舍
-14. `scheduling_two_stage_demo.py` — 两阶段求解：先保覆盖、再优化偏好
-15. `scheduling_manual_overrides_demo.py` — 人工干预：锁定上班 / 禁止上班
-
-**第五阶段 · 工程化（情景 / 解释 / 实验 / 基准 / API）**
-
-16. `scheduling_alternatives_demo.py` — 生成多个候选排班方案并对比指标
-17. `scheduling_scenarios_demo.py` — 批量情景分析 + 报表导出
-18. `scheduling_explain_demo.py` — 自动解释排班结果
-19. `scheduling_experiment_log_demo.py` — 记录每次实验配置与指标
-20. `scheduling_benchmark_demo.py` — 不同规模的性能基准
-21. `scheduling_app.py` + `scheduling_api_client_demo.py` — REST API 化部署
-
-**第六阶段 · 跨境电商业务优化模拟器**
-
-22. `cross_border_ecommerce_app.py` — 跨境电商库存与物流模拟器，页面端口 `5052`
-23. 仓网与履约 — 严格 SLA、旺季缺口、临时扩容、库存前置、新市场进入、天气风险、库存不足利润优先分配
-24. 补货与库存 — 补货情景、多供应商采购、供应商评分、现金流约束、整柜/拼箱/空运、跨仓调拨、安全库存、稳健库存
-25. 物流路径与服务 — Landed Cost、关税敏感性、百分比 SLA、绿色物流、多目标权衡、韧性预案、包装箱型、渠道分配
-26. 经营动作 — 退货、再销售、多平台库存、广告库存联动、客服排班、订单波次、促销、清仓、罚分敏感性、经营看板
-
----
-
-## 文档与课件
-
-| 文档 | 用途 |
-|---|---|
-| [docs/cplex_intro_slides.md](docs/cplex_intro_slides.md) | 复习与分享用课件 |
-| [docs/cplex_core_learning_10_slides.md](docs/cplex_core_learning_10_slides.md) | CPLEX 核心学习内容 10 页分享版 |
-| [docs/manager_demo.md](docs/manager_demo.md) | 面向经理的汇报脚本 |
-| [docs/scheduling_api.md](docs/scheduling_api.md) | 排班 REST API 接口文档 |
-| [docs/cross_border_ecommerce_simulator.md](docs/cross_border_ecommerce_simulator.md) | 跨境电商模拟器使用说明，按页面实际菜单同步 35 个场景 |
-| [docs/cross_border_ecommerce_lessons.md](docs/cross_border_ecommerce_lessons.md) | 跨境电商 35 个场景的讲课版讲义 |
-| [docs/README.en.md](docs/README.en.md) | 英文版说明 |
-
----
-
-## 示例速查表
-
-### 经典数学优化
-
-| 脚本 | 主题 | 关键概念 |
-|---|---|---|
-| `knapsack_docplex.py` | 背包问题 | 0/1 变量、最大化目标、容量约束 |
-| `transportation_docplex.py` | 运输问题 | 连续变量、供应/需求约束 |
-| `facility_location_docplex.py` | 仓库选址 | 0/1+连续混合、开仓固定成本、关联约束 |
-| `bmi_calorie_optimizer_demo.py` | BMI / 热量 / 运动优化 | 连续变量、健康边界、目标体重 |
-
-### 排班系统（核心：`scheduling_solver.py`）
-
-| 脚本 | 主题 | 产出 |
-|---|---|---|
-| `scheduling_docplex.py` | 基础排班 | — |
-| `scheduling_from_csv.py` | 读 CSV / 软约束兜底 | — |
-| `scheduling_parameters_demo.py` | 求解参数 | — |
-| `scheduling_multi_objective_demo.py` | 公平性 + 偏好 | — |
-| `scheduling_consecutive_demo.py` | 连续上班限制 | — |
-| `scheduling_skills_demo.py` | 技能覆盖约束 | — |
-| `scheduling_cost_demo.py` | 成本优化 | — |
-| `scheduling_conflict_diagnosis_demo.py` | 冲突诊断 | — |
-| `scheduling_soft_constraints_demo.py` | 软约束进阶 | — |
-| `scheduling_penalty_weights_demo.py` | 罚分权重取舍 | — |
-| `scheduling_two_stage_demo.py` | 两阶段求解（先覆盖后偏好） | — |
-| `scheduling_manual_overrides_demo.py` | 人工干预（锁定 / 禁止班次） | — |
-| `scheduling_alternatives_demo.py` | 候选方案对比 | — |
-| `scheduling_scenarios_demo.py` | 批量情景分析 | `reports/scenario_*.{csv,json}` |
-| `scheduling_explain_demo.py` | 结果自动解释 | `reports/baseline_explanation.md` |
-| `scheduling_experiment_log_demo.py` | 实验记录 | `reports/experiments.jsonl` / `_summary.csv` |
-| `scheduling_benchmark_demo.py` | 性能基准 | `reports/benchmark_results.csv` |
-
-### 部署与展示
-
-| 脚本 / 文件 | 说明 |
-|---|---|
-| `scheduling_app.py` | Flask 服务，`http://127.0.0.1:5050`，含交互模拟器与 JSON API |
-| `scheduling_api_client_demo.py` | 调用 `/api/health`、`/api/problem`、`/api/solve` 的 Python 客户端 |
-| `bmi_app.py` | BMI / 热量 / 运动量优化页面，`http://127.0.0.1:5051` |
-| `cross_border_ecommerce_app.py` | 跨境电商库存与物流模拟器，`http://127.0.0.1:5052`，含 35 个业务场景 |
-| `scheduling_solution.html` | 静态排班展示页（浏览器直接打开） |
-
-### 跨境电商优化模拟器
-
-| 场景组 | 覆盖内容 |
-|---|---|
-| 仓网与履约 | 严格 SLA、旺季缺口、临时扩容、库存前置、新市场进入、天气风险、利润优先分配 |
-| 补货与库存 | 补货情景、供应商采购、供应商评分、现金流、整柜拼箱空运、跨仓调拨、安全库存、稳健库存 |
-| 物流路径与服务 | Landed Cost、关税、百分比 SLA、SLA 敏感性、绿色物流、多目标、韧性、包装、渠道分配 |
-| 经营动作 | 退货、再销售、多平台库存、广告库存、客服排班、订单波次、促销、清仓、罚分敏感性、看板 |
-
-运行任意脚本：
-
-```bash
-cd python
-python <脚本名>.py
-# 例如
-python knapsack_docplex.py
-python scheduling_scenarios_demo.py
-```
-
-启动 BMI 优化互动页面：
-
-```bash
-cd python
-python bmi_app.py
-```
-
-打开：
-
-```text
-http://127.0.0.1:5051
-```
-
-启动跨境电商库存与物流模拟器：
+优先体验跨境电商模拟器：
 
 ```bash
 cd python
@@ -228,12 +40,182 @@ python cross_border_ecommerce_app.py
 http://127.0.0.1:5052
 ```
 
-一个更紧张的需求场景（硬约束无解会自动切换软约束兜底）：
+推荐演示路径：
+
+```text
+1. 旺季缺口分析
+2. 旺季临时扩容
+3. 跨仓库存调拨
+4. 供应商评分体系
+5. 订单波次排程
+6. 经营看板汇总
+```
+
+---
+
+## 可运行应用
+
+| 应用 | 启动命令 | 地址 | 说明 |
+|---|---|---|---|
+| 排班优化系统 | `python scheduling_app.py` | `http://127.0.0.1:5050` | 员工排班优化、软约束兜底、JSON API |
+| BMI 优化示例 | `python bmi_app.py` | `http://127.0.0.1:5051` | BMI、热量摄入和运动量优化 |
+| 跨境电商模拟器 | `python cross_border_ecommerce_app.py` | `http://127.0.0.1:5052` | 35 个库存、物流和经营优化场景 |
+
+Python 示例默认从 `python/` 目录运行：
 
 ```bash
 cd python
-python scheduling_from_csv.py --employees data/employees_limited.csv --demand data/demand_hard.csv
+python knapsack_docplex.py
+python scheduling_scenarios_demo.py
 ```
+
+---
+
+## 核心业务场景
+
+### 基础数学优化
+
+| 脚本 | 主题 | 关键概念 |
+|---|---|---|
+| `knapsack_docplex.py` | 背包问题 | 0/1 变量、最大化目标、容量约束 |
+| `transportation_docplex.py` | 运输问题 | 连续变量、供应/需求约束 |
+| `facility_location_docplex.py` | 仓库选址 | 0/1+连续混合、开仓固定成本、关联约束 |
+| `bmi_calorie_optimizer_demo.py` | BMI / 热量 / 运动优化 | 连续变量、健康边界、目标体重 |
+
+### 员工排班优化
+
+| 能力 | 对应内容 |
+|---|---|
+| 基础排班 | 覆盖需求、员工可用性、最大班次 |
+| 软约束兜底 | 硬约束无解时输出最小缺口方案 |
+| 多目标优化 | 公平性、员工偏好、成本和技能覆盖 |
+| 工程化 | Flask 页面、REST API、CSV 输入、报表导出 |
+| 质量保障 | 自动化测试、性能基准、实验记录 |
+
+### 跨境电商优化模拟器
+
+| 场景组 | 覆盖内容 |
+|---|---|
+| 仓网与履约 | 严格 SLA、旺季缺口、临时扩容、库存前置、新市场进入、天气风险、利润优先分配 |
+| 补货与库存 | 补货情景、供应商采购、供应商评分、现金流、整柜拼箱空运、跨仓调拨、安全库存、稳健库存 |
+| 物流路径与服务 | Landed Cost、关税、百分比 SLA、SLA 敏感性、绿色物流、多目标、韧性、包装、渠道分配 |
+| 经营动作 | 退货、再销售、多平台库存、广告库存、客服排班、订单波次、促销、清仓、罚分敏感性、看板 |
+
+---
+
+## 技术栈
+
+| 类别 | 技术 |
+|---|---|
+| 优化建模 | IBM CPLEX、DOcplex、MILP/MIP、CP Optimizer / OPL 示例 |
+| 后端服务 | Python、Flask、JSON API |
+| 前端展示 | HTML、CSS、JavaScript、可视化图表 |
+| 数据与报表 | CSV、JSON、JSONL、Markdown、PowerPoint |
+| 工程质量 | 自动化测试、实验记录、性能基准、Git 版本管理 |
+
+---
+
+## 文档与汇报材料
+
+| 文档 | 用途 |
+|---|---|
+| [docs/cplex_learning_manager_share.pptx](docs/cplex_learning_manager_share.pptx) | 给经理分享学习成果的 10 页 PPT |
+| [docs/cplex_core_learning_10_slides.md](docs/cplex_core_learning_10_slides.md) | CPLEX 核心学习内容 10 页 Markdown 版 |
+| [docs/cplex_intro_slides.md](docs/cplex_intro_slides.md) | 入门到业务优化的完整分享课件 |
+| [docs/manager_demo.md](docs/manager_demo.md) | 面向经理的现场演示脚本 |
+| [docs/cplex_morning_review.md](docs/cplex_morning_review.md) | CPLEX 项目落地方法论复习笔记 |
+| [docs/cross_border_ecommerce_simulator.md](docs/cross_border_ecommerce_simulator.md) | 跨境电商模拟器说明，按页面实际菜单同步 35 个场景 |
+| [docs/cross_border_ecommerce_lessons.md](docs/cross_border_ecommerce_lessons.md) | 跨境电商 35 个场景讲课版讲义 |
+| [docs/scheduling_api.md](docs/scheduling_api.md) | 排班 REST API 接口文档 |
+| [docs/README.en.md](docs/README.en.md) | 英文版项目说明 |
+
+---
+
+## 仓库结构
+
+```text
+cplex/
+├── README.md
+├── docs/
+│   ├── cplex_learning_manager_share.pptx
+│   ├── cplex_core_learning_10_slides.md
+│   ├── cplex_intro_slides.md
+│   ├── cplex_morning_review.md
+│   ├── cross_border_ecommerce_simulator.md
+│   ├── cross_border_ecommerce_lessons.md
+│   ├── manager_demo.md
+│   └── scheduling_api.md
+├── opl/
+│   ├── pmedian_quickstart/
+│   ├── staff_scheduling_quickstart/
+│   ├── staff_scheduling_cost/
+│   ├── staff_scheduling_soft_constraints/
+│   ├── cp_optimizer_quickstart/
+│   └── debugging_quickstart/
+└── python/
+    ├── requirements.txt
+    ├── run_tests.py
+    ├── scheduling_solver.py
+    ├── scheduling_app.py
+    ├── cross_border_ecommerce_app.py
+    ├── cross_border_ecommerce_*_demo.py
+    ├── scheduling_*_demo.py
+    ├── data/
+    ├── reports/
+    ├── templates/
+    └── tests/
+```
+
+---
+
+## 学习路线
+
+**第一阶段 · 数学优化基础**
+
+1. `knapsack_docplex.py`：背包问题，理解 0/1 决策。
+2. `transportation_docplex.py`：运输问题，理解连续变量和供需平衡。
+3. `facility_location_docplex.py`：仓库选址，理解固定成本和关联约束。
+4. `bmi_calorie_optimizer_demo.py`：用连续变量表达健康目标。
+
+**第二阶段 · 排班建模**
+
+5. `scheduling_docplex.py`：最基础排班模型。
+6. `scheduling_from_csv.py`：从 CSV 读取业务数据，硬约束无解时切换软约束。
+7. `scheduling_parameters_demo.py`：求解参数 `time_limit` 和 `mip_gap`。
+8. `scheduling_multi_objective_demo.py`：公平性和员工偏好。
+9. `scheduling_skills_demo.py`：技能覆盖。
+10. `scheduling_cost_demo.py`：成本优化。
+
+**第三阶段 · 软约束、诊断和工程化**
+
+11. `scheduling_conflict_diagnosis_demo.py`：无解诊断。
+12. `scheduling_soft_constraints_demo.py`：人数和技能缺口软约束。
+13. `scheduling_penalty_weights_demo.py`：罚分权重取舍。
+14. `scheduling_two_stage_demo.py`：两阶段求解。
+15. `scheduling_manual_overrides_demo.py`：人工干预。
+16. `scheduling_alternatives_demo.py`：候选方案对比。
+17. `scheduling_scenarios_demo.py`：批量情景分析。
+18. `scheduling_explain_demo.py`：自动解释结果。
+19. `scheduling_experiment_log_demo.py`：实验记录。
+20. `scheduling_benchmark_demo.py`：性能基准。
+21. `scheduling_app.py`：REST API 和 Web 页面。
+
+**第四阶段 · CPLEX Studio / OPL**
+
+- `opl/pmedian_quickstart/`：P-Median 仓库分配模型。
+- `opl/staff_scheduling_quickstart/`：CPLEX Studio 最小排班模型。
+- `opl/staff_scheduling_cost/`：排班成本目标。
+- `opl/staff_scheduling_soft_constraints/`：软约束建模。
+- `opl/cp_optimizer_quickstart/`：使用 `using CP;` 切换到 CP Optimizer。
+- `opl/debugging_quickstart/`：语法错误、数据错误和无解错误排查。
+
+**第五阶段 · 跨境电商业务优化**
+
+22. `cross_border_ecommerce_app.py`：跨境电商模拟器。
+23. 仓网与履约：SLA、扩容、天气风险、新市场进入。
+24. 补货与库存：供应商、现金流、调拨、安全库存、稳健库存。
+25. 物流路径与服务：DDU/DDP、Landed Cost、关税、碳排、韧性。
+26. 经营动作：退货、广告、促销、清仓、客服、订单波次和经营看板。
 
 ---
 
@@ -246,33 +228,30 @@ python run_tests.py
 
 覆盖范围：
 
-- 默认排班求解
-- 软约束缺口场景
-- API 健康检查与求解接口
-- API 请求校验
-- 情景分析报表导出
+- 默认排班求解。
+- 软约束缺口场景。
+- API 健康检查与求解接口。
+- API 请求校验。
+- 情景分析报表导出。
 
 ---
 
-## 排班模型学到的内容
+## 能力总结
 
-- **0/1 决策变量**：`work_employee_day = 1` 表示某员工某天上班
-- **覆盖约束**：每天必须有足够员工
-- **可用性约束**：员工只能在可用日期上班
-- **工作量约束**：每人有最大班次数
-- **公平性目标**：最忙与最闲员工的班次差距尽量小
-- **CSV 数据读取**：从业务表格读取员工、需求、可用性
-- **求解参数**：`time_limit` 与 `mip_gap`，更贴近生产
-- **多目标建模**：公平性之外平衡员工偏好
-- **情景分析**：批量运行多个业务场景并对比
-- **结果导出 / 解释**：写入 CSV/JSON，并自动说明排班理由
-- **API 化部署**：通过 JSON API 提供求解能力
-- **自动化测试**：回归测试防止后续改动破坏模型/API/报表
-- **性能基准**：对比不同规模下的变量数、求解时间与质量
-- **规则扩展**：最多连续上班天数等真实约束
-- **技能覆盖 / 成本优化 / 软约束 / 罚分权重**：更贴近真实业务的取舍
-- **人工干预**：支持经理锁定或禁止某些班次，再由模型重排剩余安排
-- **候选方案对比**：同一问题生成多套排班，比较缺口、公平性、偏好和成本
+通过这个项目，系统练习了：
+
+- 把业务问题抽象成变量、目标和约束。
+- 用 CPLEX / DOcplex 构建 LP、MIP/MILP 和排班优化模型。
+- 处理无解、软约束、罚分权重、多目标和敏感性分析。
+- 将模型包装成 API 和 Web 模拟器。
+- 用图表、指标、行动清单和解释理由呈现优化结果。
+- 从 ROI、试点、审批、人工干预和复盘角度思考优化项目落地。
+
+一句话总结：
+
+```text
+CPLEX 的价值不是替人拍脑袋，而是让业务决策在约束清楚、目标清楚、取舍清楚的基础上变得可计算。
+```
 
 ---
 
