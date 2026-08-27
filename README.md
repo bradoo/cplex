@@ -124,6 +124,7 @@ python scheduling_scenarios_demo.py
 | [docs/cplex_intro_slides.md](docs/cplex_intro_slides.md) | 入门到业务优化的完整分享课件 |
 | [docs/manager_demo.md](docs/manager_demo.md) | 面向经理的现场演示脚本 |
 | [docs/cplex_morning_review.md](docs/cplex_morning_review.md) | CPLEX 项目落地方法论复习笔记 |
+| [docs/cplex_afternoon_review.md](docs/cplex_afternoon_review.md) | CPLEX 业务上线、平台化和作品集复习笔记 |
 | [docs/cross_border_ecommerce_simulator.md](docs/cross_border_ecommerce_simulator.md) | 跨境电商模拟器说明，按页面实际菜单同步 35 个场景 |
 | [docs/cross_border_ecommerce_lessons.md](docs/cross_border_ecommerce_lessons.md) | 跨境电商 35 个场景讲课版讲义 |
 | [docs/scheduling_api.md](docs/scheduling_api.md) | 排班 REST API 接口文档 |
@@ -141,6 +142,7 @@ cplex/
 │   ├── cplex_core_learning_10_slides.md
 │   ├── cplex_intro_slides.md
 │   ├── cplex_morning_review.md
+│   ├── cplex_afternoon_review.md
 │   ├── cross_border_ecommerce_simulator.md
 │   ├── cross_border_ecommerce_lessons.md
 │   ├── manager_demo.md
