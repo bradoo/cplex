@@ -84,6 +84,9 @@ def load_starrocks_orders_into_upstream_data(data):
     limit = config["sample_limit"]
     with starrocks_connection() as connection:
         with connection.cursor() as cursor:
+            data["network"] = load_starrocks_network(cursor)
+            data["replenishment"] = load_starrocks_replenishment(cursor)
+            data["service_level"] = load_starrocks_service_level(cursor)
             cursor.execute(f"SELECT COUNT(*) AS order_line_count FROM `{table}`")
             order_line_count = int(cursor.fetchone()["order_line_count"])
             cursor.execute(
@@ -102,6 +105,107 @@ def load_starrocks_orders_into_upstream_data(data):
     metadata["order_sample_limit"] = limit
     metadata["upstream_storage"] = f"starrocks://{config['host']}:{config['port']}/{config['database']}.{table}"
     return data
+
+
+def load_starrocks_network(cursor):
+    cursor.execute("SELECT warehouse, capacity, fixed_cost, handling_cost FROM upstream_network_warehouses ORDER BY warehouse")
+    warehouses = {
+        row["warehouse"]: {
+            "capacity": int(row["capacity"]),
+            "fixed_cost": float(row["fixed_cost"]),
+            "handling_cost": float(row["handling_cost"]),
+        }
+        for row in cursor.fetchall()
+    }
+    cursor.execute("SELECT market, demand, max_delivery_days FROM upstream_network_markets ORDER BY market")
+    markets = {
+        row["market"]: {
+            "demand": int(row["demand"]),
+            "max_delivery_days": int(row["max_delivery_days"]),
+        }
+        for row in cursor.fetchall()
+    }
+    cursor.execute("SELECT warehouse, market, last_mile_cost, delivery_days FROM upstream_network_lanes ORDER BY warehouse, market")
+    lanes = [
+        {
+            "warehouse": row["warehouse"],
+            "market": row["market"],
+            "last_mile_cost": float(row["last_mile_cost"]),
+            "delivery_days": int(row["delivery_days"]),
+        }
+        for row in cursor.fetchall()
+    ]
+    cursor.execute("SELECT warehouse, max_extra_capacity, unit_cost FROM upstream_network_expansion_options ORDER BY warehouse")
+    expansion_options = {
+        row["warehouse"]: {
+            "max_extra_capacity": int(row["max_extra_capacity"]),
+            "unit_cost": float(row["unit_cost"]),
+        }
+        for row in cursor.fetchall()
+    }
+    return {
+        "warehouses": warehouses,
+        "markets": markets,
+        "lanes": lanes,
+        "expansion_options": expansion_options,
+    }
+
+
+def load_starrocks_replenishment(cursor):
+    cursor.execute("SELECT week_name FROM upstream_replenishment_weeks ORDER BY week_index")
+    weeks = [row["week_name"] for row in cursor.fetchall()]
+    cursor.execute("SELECT week_name, demand FROM upstream_replenishment_demand ORDER BY week_name")
+    demand = {row["week_name"]: int(row["demand"]) for row in cursor.fetchall()}
+    cursor.execute("SELECT lane, lead_time_weeks, unit_cost, weekly_capacity FROM upstream_replenishment_lanes ORDER BY lane")
+    lanes = {
+        row["lane"]: {
+            "lead_time_weeks": int(row["lead_time_weeks"]),
+            "unit_cost": float(row["unit_cost"]),
+            "weekly_capacity": int(row["weekly_capacity"]),
+        }
+        for row in cursor.fetchall()
+    }
+    cursor.execute("SELECT initial_inventory, target_ending_inventory, holding_cost, stockout_penalty FROM upstream_replenishment_parameters LIMIT 1")
+    parameters = cursor.fetchone() or {}
+    return {
+        "weeks": weeks,
+        "demand": demand,
+        "lanes": lanes,
+        "initial_inventory": int(parameters.get("initial_inventory", 0)),
+        "target_ending_inventory": int(parameters.get("target_ending_inventory", 0)),
+        "holding_cost": float(parameters.get("holding_cost", 0)),
+        "stockout_penalty": float(parameters.get("stockout_penalty", 0)),
+    }
+
+
+def load_starrocks_service_level(cursor):
+    cursor.execute("SELECT market, demand, max_avg_delivery_days FROM upstream_service_markets ORDER BY market")
+    markets = {
+        row["market"]: {
+            "demand": int(row["demand"]),
+            "max_avg_delivery_days": int(row["max_avg_delivery_days"]),
+        }
+        for row in cursor.fetchall()
+    }
+    cursor.execute("SELECT service, capacity, fixed_cost FROM upstream_service_providers ORDER BY service")
+    services = {
+        row["service"]: {
+            "capacity": int(row["capacity"]),
+            "fixed_cost": float(row["fixed_cost"]),
+            "unit_cost_by_market": {},
+            "delivery_days_by_market": {},
+        }
+        for row in cursor.fetchall()
+    }
+    cursor.execute("SELECT service, market, unit_cost, delivery_days FROM upstream_service_provider_market_terms ORDER BY service, market")
+    for row in cursor.fetchall():
+        service = services[row["service"]]
+        service["unit_cost_by_market"][row["market"]] = float(row["unit_cost"])
+        service["delivery_days_by_market"][row["market"]] = int(row["delivery_days"])
+    return {
+        "markets": markets,
+        "services": services,
+    }
 
 
 def playbooks():

@@ -47,11 +47,261 @@ def create_schema(args):
                 PROPERTIES ("replication_num" = "{args.replication_num}")
                 """
             )
+            cursor.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS upstream_network_warehouses (
+                  warehouse VARCHAR(64) NOT NULL,
+                  capacity INT NOT NULL,
+                  fixed_cost DOUBLE NOT NULL,
+                  handling_cost DOUBLE NOT NULL
+                )
+                PRIMARY KEY(warehouse)
+                DISTRIBUTED BY HASH(warehouse) BUCKETS 4
+                PROPERTIES ("replication_num" = "{args.replication_num}")
+                """
+            )
+            cursor.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS upstream_network_markets (
+                  market VARCHAR(64) NOT NULL,
+                  demand INT NOT NULL,
+                  max_delivery_days INT NOT NULL
+                )
+                PRIMARY KEY(market)
+                DISTRIBUTED BY HASH(market) BUCKETS 4
+                PROPERTIES ("replication_num" = "{args.replication_num}")
+                """
+            )
+            cursor.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS upstream_network_lanes (
+                  warehouse VARCHAR(64) NOT NULL,
+                  market VARCHAR(64) NOT NULL,
+                  last_mile_cost DOUBLE NOT NULL,
+                  delivery_days INT NOT NULL
+                )
+                DUPLICATE KEY(warehouse, market)
+                DISTRIBUTED BY HASH(warehouse, market) BUCKETS 8
+                PROPERTIES ("replication_num" = "{args.replication_num}")
+                """
+            )
+            cursor.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS upstream_network_expansion_options (
+                  warehouse VARCHAR(64) NOT NULL,
+                  max_extra_capacity INT NOT NULL,
+                  unit_cost DOUBLE NOT NULL
+                )
+                PRIMARY KEY(warehouse)
+                DISTRIBUTED BY HASH(warehouse) BUCKETS 4
+                PROPERTIES ("replication_num" = "{args.replication_num}")
+                """
+            )
+            cursor.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS upstream_replenishment_weeks (
+                  week_name VARCHAR(32) NOT NULL,
+                  week_index INT NOT NULL
+                )
+                PRIMARY KEY(week_name)
+                DISTRIBUTED BY HASH(week_name) BUCKETS 4
+                PROPERTIES ("replication_num" = "{args.replication_num}")
+                """
+            )
+            cursor.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS upstream_replenishment_demand (
+                  week_name VARCHAR(32) NOT NULL,
+                  demand INT NOT NULL
+                )
+                PRIMARY KEY(week_name)
+                DISTRIBUTED BY HASH(week_name) BUCKETS 4
+                PROPERTIES ("replication_num" = "{args.replication_num}")
+                """
+            )
+            cursor.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS upstream_replenishment_lanes (
+                  lane VARCHAR(64) NOT NULL,
+                  lead_time_weeks INT NOT NULL,
+                  unit_cost DOUBLE NOT NULL,
+                  weekly_capacity INT NOT NULL
+                )
+                PRIMARY KEY(lane)
+                DISTRIBUTED BY HASH(lane) BUCKETS 4
+                PROPERTIES ("replication_num" = "{args.replication_num}")
+                """
+            )
+            cursor.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS upstream_replenishment_parameters (
+                  parameter_id VARCHAR(32) NOT NULL,
+                  initial_inventory INT NOT NULL,
+                  target_ending_inventory INT NOT NULL,
+                  holding_cost DOUBLE NOT NULL,
+                  stockout_penalty DOUBLE NOT NULL
+                )
+                PRIMARY KEY(parameter_id)
+                DISTRIBUTED BY HASH(parameter_id) BUCKETS 4
+                PROPERTIES ("replication_num" = "{args.replication_num}")
+                """
+            )
+            cursor.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS upstream_service_markets (
+                  market VARCHAR(64) NOT NULL,
+                  demand INT NOT NULL,
+                  max_avg_delivery_days INT NOT NULL
+                )
+                PRIMARY KEY(market)
+                DISTRIBUTED BY HASH(market) BUCKETS 4
+                PROPERTIES ("replication_num" = "{args.replication_num}")
+                """
+            )
+            cursor.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS upstream_service_providers (
+                  service VARCHAR(64) NOT NULL,
+                  capacity INT NOT NULL,
+                  fixed_cost DOUBLE NOT NULL
+                )
+                PRIMARY KEY(service)
+                DISTRIBUTED BY HASH(service) BUCKETS 4
+                PROPERTIES ("replication_num" = "{args.replication_num}")
+                """
+            )
+            cursor.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS upstream_service_provider_market_terms (
+                  service VARCHAR(64) NOT NULL,
+                  market VARCHAR(64) NOT NULL,
+                  unit_cost DOUBLE NOT NULL,
+                  delivery_days INT NOT NULL
+                )
+                DUPLICATE KEY(service, market)
+                DISTRIBUTED BY HASH(service, market) BUCKETS 8
+                PROPERTIES ("replication_num" = "{args.replication_num}")
+                """
+            )
 
 
 def batched(rows, size):
     for start in range(0, len(rows), size):
         yield rows[start:start + size]
+
+
+def load_dimension_tables(cursor, source_data):
+    tables = [
+        "upstream_network_warehouses",
+        "upstream_network_markets",
+        "upstream_network_lanes",
+        "upstream_network_expansion_options",
+        "upstream_replenishment_weeks",
+        "upstream_replenishment_demand",
+        "upstream_replenishment_lanes",
+        "upstream_replenishment_parameters",
+        "upstream_service_markets",
+        "upstream_service_providers",
+        "upstream_service_provider_market_terms",
+    ]
+    for table in tables:
+        cursor.execute(f"TRUNCATE TABLE `{table}`")
+
+    network = source_data["network"]
+    cursor.executemany(
+        "INSERT INTO upstream_network_warehouses (warehouse, capacity, fixed_cost, handling_cost) VALUES (%s, %s, %s, %s)",
+        [
+            (warehouse, values["capacity"], values["fixed_cost"], values["handling_cost"])
+            for warehouse, values in network["warehouses"].items()
+        ],
+    )
+    cursor.executemany(
+        "INSERT INTO upstream_network_markets (market, demand, max_delivery_days) VALUES (%s, %s, %s)",
+        [
+            (market, values["demand"], values["max_delivery_days"])
+            for market, values in network["markets"].items()
+        ],
+    )
+    cursor.executemany(
+        "INSERT INTO upstream_network_lanes (warehouse, market, last_mile_cost, delivery_days) VALUES (%s, %s, %s, %s)",
+        [
+            (row["warehouse"], row["market"], row["last_mile_cost"], row["delivery_days"])
+            for row in network["lanes"]
+        ],
+    )
+    cursor.executemany(
+        "INSERT INTO upstream_network_expansion_options (warehouse, max_extra_capacity, unit_cost) VALUES (%s, %s, %s)",
+        [
+            (warehouse, values["max_extra_capacity"], values["unit_cost"])
+            for warehouse, values in network["expansion_options"].items()
+        ],
+    )
+
+    replenishment = source_data["replenishment"]
+    cursor.executemany(
+        "INSERT INTO upstream_replenishment_weeks (week_name, week_index) VALUES (%s, %s)",
+        [(week, index) for index, week in enumerate(replenishment["weeks"])],
+    )
+    cursor.executemany(
+        "INSERT INTO upstream_replenishment_demand (week_name, demand) VALUES (%s, %s)",
+        list(replenishment["demand"].items()),
+    )
+    cursor.executemany(
+        "INSERT INTO upstream_replenishment_lanes (lane, lead_time_weeks, unit_cost, weekly_capacity) VALUES (%s, %s, %s, %s)",
+        [
+            (lane, values["lead_time_weeks"], values["unit_cost"], values["weekly_capacity"])
+            for lane, values in replenishment["lanes"].items()
+        ],
+    )
+    cursor.execute(
+        """
+        INSERT INTO upstream_replenishment_parameters
+        (parameter_id, initial_inventory, target_ending_inventory, holding_cost, stockout_penalty)
+        VALUES (%s, %s, %s, %s, %s)
+        """,
+        (
+            "default",
+            replenishment["initial_inventory"],
+            replenishment["target_ending_inventory"],
+            replenishment["holding_cost"],
+            replenishment["stockout_penalty"],
+        ),
+    )
+
+    service_level = source_data["service_level"]
+    cursor.executemany(
+        "INSERT INTO upstream_service_markets (market, demand, max_avg_delivery_days) VALUES (%s, %s, %s)",
+        [
+            (market, values["demand"], values["max_avg_delivery_days"])
+            for market, values in service_level["markets"].items()
+        ],
+    )
+    cursor.executemany(
+        "INSERT INTO upstream_service_providers (service, capacity, fixed_cost) VALUES (%s, %s, %s)",
+        [
+            (service, values["capacity"], values["fixed_cost"])
+            for service, values in service_level["services"].items()
+        ],
+    )
+    terms = []
+    for service, values in service_level["services"].items():
+        for market, unit_cost in values["unit_cost_by_market"].items():
+            terms.append((service, market, unit_cost, values["delivery_days_by_market"][market]))
+    cursor.executemany(
+        "INSERT INTO upstream_service_provider_market_terms (service, market, unit_cost, delivery_days) VALUES (%s, %s, %s, %s)",
+        terms,
+    )
+    return {
+        "network_warehouses": len(network["warehouses"]),
+        "network_markets": len(network["markets"]),
+        "network_lanes": len(network["lanes"]),
+        "network_expansion_options": len(network["expansion_options"]),
+        "replenishment_weeks": len(replenishment["weeks"]),
+        "replenishment_lanes": len(replenishment["lanes"]),
+        "service_markets": len(service_level["markets"]),
+        "service_providers": len(service_level["services"]),
+        "service_provider_market_terms": len(terms),
+    }
 
 
 def load_orders(args):
@@ -62,6 +312,8 @@ def load_orders(args):
     started_at = time.perf_counter()
     with connect(args, args.database) as connection:
         with connection.cursor() as cursor:
+            dimension_counts = load_dimension_tables(cursor, source_data)
+            dimensions_loaded_at = time.perf_counter()
             if args.truncate:
                 cursor.execute(f"TRUNCATE TABLE `{args.table}`")
             inserted = 0
@@ -113,8 +365,10 @@ def load_orders(args):
         "table": args.table,
         "target_order_lines": args.orders,
         "loaded_order_lines": order_line_count,
+        "dimension_rows": dimension_counts,
         "timings_seconds": {
-            "insert_orders": round(loaded_at - started_at, 3),
+            "load_dimensions": round(dimensions_loaded_at - started_at, 3),
+            "insert_orders": round(loaded_at - dimensions_loaded_at, 3),
             "count_orders": round(count_ready_at - counted_at, 3),
             "aggregate_by_market": round(aggregated_at - count_ready_at, 3),
         },
