@@ -97,6 +97,7 @@ def build_run_history_record(result):
             "headline": difference.get("headline", ""),
             "management_readout": difference.get("management_readout", ""),
         },
+        "next_action": summary["execution_plan"][0]["action"] if summary.get("execution_plan") else "",
     }
 
 
@@ -168,12 +169,26 @@ def build_demo_report_markdown(result, timestamp):
     lines.extend(f"- {driver}" for driver in difference["drivers"])
     lines.extend(["", "## 5. 建议动作", ""])
     lines.extend(f"- {action}" for action in summary["actions"])
-    lines.extend(["", "## 6. 风险提示", ""])
+    lines.extend(
+        [
+            "",
+            "## 6. 执行计划",
+            "",
+            "| 负责人 | 优先级 | 触发条件 | 执行动作 |",
+            "| --- | --- | --- | --- |",
+        ]
+    )
+    for row in summary["execution_plan"]:
+        lines.append(
+            f"| {markdown_cell(row['owner'])} | {markdown_cell(row['priority'])} | "
+            f"{markdown_cell(row['trigger'])} | {markdown_cell(row['action'])} |"
+        )
+    lines.extend(["", "## 7. 风险提示", ""])
     lines.extend(f"- {risk}" for risk in summary["risks"])
     lines.extend(
         [
             "",
-            "## 7. 模型结果摘要",
+            "## 8. 模型结果摘要",
             "",
             "| 模型 | 状态 | 摘要 |",
             "| --- | --- | --- |",
@@ -182,7 +197,7 @@ def build_demo_report_markdown(result, timestamp):
             f"| 服务水平组合 | {markdown_cell(result['service_mix']['status'])} | 成本 {format_number(result['service_mix'].get('total_cost') or 0)} |",
             f"| 人员排班 | {markdown_cell(result['staffing']['status'])} | 模式 {markdown_cell(result['staffing'].get('mode') or '-')}，缺口 {format_number(result['staffing'].get('total_shortage') or 0)} |",
             "",
-            "## 8. 数据链路",
+            "## 9. 数据链路",
             "",
             f"- 上游数据：{result['model_inputs']['lineage']['upstream_source']}",
             f"- 场景配置：{result['model_inputs']['lineage']['scenario_config_source']}",
@@ -1391,9 +1406,60 @@ def build_management_summary(network, replenishment, service_mix, staffing, conf
         "approval_level": approval_level,
         "actions": actions,
         "risks": risks,
+        "execution_plan": build_execution_plan(network, replenishment, staffing, approval_level),
         "decision_note": decision_note(approval_level, total_shortage, network_cost + replenishment_cost),
         "message": "这不是单个模型 demo，而是把仓网、补货、服务和排班接到同一个决策入口。",
     }
+
+
+def build_execution_plan(network, replenishment, staffing, approval_level):
+    plan = []
+    if network.get("opened_warehouses"):
+        plan.append(
+            {
+                "owner": "仓网运营",
+                "priority": "P0" if network.get("total_unfulfilled", 0) else "P1",
+                "trigger": "仓网模型已输出开仓与履约分配",
+                "action": f"确认 {', '.join(network['opened_warehouses'])} 的启用窗口、预算和容量排期。",
+            }
+        )
+    if replenishment.get("orders"):
+        first_orders = replenishment["orders"][:2]
+        plan.append(
+            {
+                "owner": "补货计划",
+                "priority": "P0" if replenishment.get("total_stockout", 0) else "P1",
+                "trigger": "补货模型已输出运输渠道与周计划",
+                "action": "锁定" + "、".join(f"{row['week']}周{row['lane']} {row['units']:g}件" for row in first_orders) + "等首批补货动作。",
+            }
+        )
+    if staffing.get("total_shortage", 0):
+        plan.append(
+            {
+                "owner": "客服/仓内排班",
+                "priority": "P0",
+                "trigger": f"排班模型发现 {staffing['total_shortage']:g} 人班缺口",
+                "action": "安排临时人力、加班池或降低低优先级服务承诺。",
+            }
+        )
+    else:
+        plan.append(
+            {
+                "owner": "客服/仓内排班",
+                "priority": "P2",
+                "trigger": "排班模型覆盖所有每日需求",
+                "action": "按当前排班执行，并保留异常订单应急班次。",
+            }
+        )
+    plan.append(
+        {
+            "owner": "业务负责人",
+            "priority": "P0" if approval_level == "管理层审批" else "P1",
+            "trigger": f"审批分层为 {approval_level}",
+            "action": "确认是否按建议动作执行，并在运行记录中保留本次决策口径。",
+        }
+    )
+    return plan
 
 
 def build_difference_explanation(playbook_id, config, summary, network, replenishment, service_mix, staffing):
