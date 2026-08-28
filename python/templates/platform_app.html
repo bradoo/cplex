@@ -270,8 +270,7 @@
     }
 
     input,
-    select,
-    textarea {
+    select {
       width: 100%;
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -282,16 +281,6 @@
     }
 
     input, select { min-height: 36px; }
-
-    textarea {
-      min-height: 420px;
-      resize: vertical;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-      font-size: 12px;
-      line-height: 1.5;
-      font-weight: 500;
-      background: #f8fafc;
-    }
 
     .button-row {
       display: grid;
@@ -619,21 +608,6 @@
       min-height: 32px;
     }
 
-    pre {
-      margin: 0;
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 12px;
-      background: #f8fafc;
-      color: #334155;
-      font-size: 12px;
-      line-height: 1.5;
-      max-height: 520px;
-      overflow: auto;
-    }
-
     @media (max-width: 1040px) {
       .top, .page, .two-col { grid-template-columns: 1fr; }
       .flow, .grid, .readiness-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -677,7 +651,7 @@
   <main class="wrap">
     <div class="page" data-layer="upstream">
       <section>
-        <div class="section-head"><h2>上游数据接入层</h2><span class="pill">Source</span></div>
+        <div class="section-head"><h2>上游数据接入层</h2><span id="upstreamSource" class="pill">Source</span></div>
         <div class="content">
           <p class="small">这一层模拟从 OMS、WMS、TMS、HR 同步来的原始业务数据，还没有进入优化模型。</p>
           <div id="upstreamSummary" class="rows"></div>
@@ -726,19 +700,11 @@
               </table>
             </div>
           </div>
-        </div>
-      </section>
-      <section>
-        <div class="section-head"><h2>上游数据 JSON</h2><span id="upstreamSource" class="pill">加载中</span></div>
-        <div class="content">
-          <textarea id="upstreamEditor" spellcheck="false"></textarea>
           <div class="button-row">
-            <button id="formatUpstream">格式化</button>
-            <button id="reloadUpstream">重载</button>
-            <button class="run" id="saveUpstream">保存</button>
+            <button id="reloadUpstream">重载上游数据</button>
+            <button class="run" id="saveUpstream">保存上游数据</button>
           </div>
-          <div id="upstreamStatus" class="status-line">这里编辑的是上游业务原始数据，会影响后续 CPLEX 模型入参。</div>
-          <pre id="upstreamJson">加载上游业务原始数据。</pre>
+          <div id="upstreamStatus" class="status-line">表格修改后点击保存，会写入上游数据层。</div>
         </div>
       </section>
     </div>
@@ -767,18 +733,6 @@
             </div>
           </div>
           <button class="run" id="runFromConfig">保存临时参数并运行</button>
-        </div>
-      </section>
-      <section>
-        <div class="section-head"><h2>平台配置数据层</h2></div>
-        <div class="content">
-          <textarea id="dataEditor" spellcheck="false"></textarea>
-          <div class="button-row">
-            <button id="formatData">格式化</button>
-            <button id="reloadData">重载</button>
-            <button class="run" id="saveData">保存</button>
-          </div>
-          <div id="saveStatus" class="status-line">这里编辑的是场景配置，不是上游原始业务表。</div>
         </div>
       </section>
     </div>
@@ -810,7 +764,6 @@
             </thead>
             <tbody id="inputRows"></tbody>
           </table>
-          <pre id="modelInputJson">运行后显示当前模型实际入参。</pre>
         </div>
       </section>
     </div>
@@ -881,10 +834,6 @@
               </thead>
               <tbody id="historyRows"></tbody>
             </table>
-          </div>
-          <div>
-            <h3>接口响应摘要</h3>
-            <pre id="raw">点击运行后显示 API 返回的核心字段。</pre>
           </div>
         </div>
       </section>
@@ -1011,8 +960,7 @@
       const response = await fetch("/api/platform/data");
       const data = await response.json();
       platformData = data.data;
-      field("dataEditor").value = JSON.stringify(platformData, null, 2);
-      field("saveStatus").textContent = `已加载：${data.data_source}`;
+      field("configSource").textContent = data.data_source;
     }
 
     async function loadUpstreamData() {
@@ -1023,9 +971,7 @@
       field("upstreamSummary").innerHTML = upstreamRows(data).map(([name, value, meaning]) => (
         `<div class="row"><strong>${name}</strong><span class="small">${meaning}</span><span class="status">${value}</span></div>`
       )).join("");
-      field("upstreamEditor").value = JSON.stringify(data.data, null, 2);
       field("upstreamStatus").textContent = `已加载：${data.data_source}`;
-      field("upstreamJson").textContent = JSON.stringify(data.data, null, 2);
       renderUpstreamTables();
     }
 
@@ -1222,9 +1168,7 @@
       } else if (scope === "replenishment_demand") {
         upstreamData.replenishment.demand[name] = value;
       }
-      field("upstreamEditor").value = JSON.stringify(upstreamData, null, 2);
-      field("upstreamJson").textContent = JSON.stringify(upstreamData, null, 2);
-      field("upstreamStatus").textContent = "表格修改已同步到 JSON，点击保存后写入上游数据层。";
+      field("upstreamStatus").textContent = "表格修改已暂存，点击保存后写入上游数据层。";
     }
 
     function selectPlaybook(id) {
@@ -1308,16 +1252,6 @@
       renderBars(summary);
       renderModelRows(data);
       renderDifference(data.difference);
-      field("raw").textContent = JSON.stringify({
-        playbook: data.playbook_name,
-        config: data.config,
-        data_lineage: data.model_inputs.lineage,
-        model_input_sections: Object.keys(data.model_inputs).filter((key) => key !== "lineage"),
-        summary,
-        difference: data.difference,
-        opened_warehouses: data.network.opened_warehouses,
-        staffing_mode: data.staffing.mode
-      }, null, 2);
     }
 
     function renderLineage(lineage) {
@@ -1422,7 +1356,6 @@
           <td>${change ? `<span class="change-pill">${change}</span>` : "-"}</td>
         </tr>`
       )).join("");
-      field("modelInputJson").textContent = JSON.stringify(input, null, 2);
     }
 
     function modelInputRows(key, input) {
@@ -1616,67 +1549,8 @@
       }
     }
 
-    function formatDataLayer() {
-      try {
-        const data = JSON.parse(field("dataEditor").value);
-        field("dataEditor").value = JSON.stringify(data, null, 2);
-        field("saveStatus").textContent = "JSON 格式正确。";
-      } catch (error) {
-        field("saveStatus").textContent = `JSON 格式错误：${error.message}`;
-      }
-    }
-
-    function formatUpstreamData() {
-      try {
-        const data = JSON.parse(field("upstreamEditor").value);
-        upstreamData = data;
-        field("upstreamEditor").value = JSON.stringify(data, null, 2);
-        field("upstreamJson").textContent = JSON.stringify(data, null, 2);
-        renderUpstreamTables();
-        field("upstreamStatus").textContent = "JSON 格式正确。";
-      } catch (error) {
-        field("upstreamStatus").textContent = `JSON 格式错误：${error.message}`;
-      }
-    }
-
-    async function saveDataLayer() {
-      let data;
-      try {
-        data = JSON.parse(field("dataEditor").value);
-      } catch (error) {
-        field("saveStatus").textContent = `JSON 格式错误：${error.message}`;
-        return;
-      }
-
-      field("saveStatus").textContent = "保存中...";
-      const response = await fetch("/api/platform/data", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data })
-      });
-      const result = await response.json();
-      if (!response.ok) {
-        field("saveStatus").textContent = `保存失败：${result.message}`;
-        return;
-      }
-      field("saveStatus").textContent = `已保存：${result.data_source}`;
-      await loadOverview();
-      if (!playbookDefaults[selected]) {
-        selected = Object.keys(playbookDefaults)[0];
-      }
-      selectPlaybook(selected);
-      await Promise.all([run(), compare(), loadDataLayer()]);
-    }
-
     async function saveUpstreamData() {
-      let data;
-      try {
-        data = JSON.parse(field("upstreamEditor").value);
-      } catch (error) {
-        field("upstreamStatus").textContent = `JSON 格式错误：${error.message}`;
-        return;
-      }
-
+      const data = upstreamData;
       field("upstreamStatus").textContent = "保存中...";
       const response = await fetch("/api/platform/upstream-data", {
         method: "PUT",
@@ -1698,10 +1572,6 @@
     field("runFromInputs").addEventListener("click", () => run(true));
     field("compare").addEventListener("click", compare);
     field("exportReport").addEventListener("click", exportReport);
-    field("formatData").addEventListener("click", formatDataLayer);
-    field("reloadData").addEventListener("click", loadDataLayer);
-    field("saveData").addEventListener("click", saveDataLayer);
-    field("formatUpstream").addEventListener("click", formatUpstreamData);
     field("reloadUpstream").addEventListener("click", loadUpstreamData);
     field("saveUpstream").addEventListener("click", saveUpstreamData);
     field("modelInputSelect").addEventListener("change", renderInputs);

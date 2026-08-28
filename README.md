@@ -86,8 +86,8 @@ http://127.0.0.1:5053/constraints 模型约束解释
 6. 约束解释：用业务语言解释每个模型的变量、目标函数、核心约束和输出字段
 ```
 
-POC 的方案配置来自 `python/data/platform_poc_data.json`，上游业务数据来自 `python/data/platform_upstream_data.json`。页面会同时展示上游原始数据、场景参数和 CPLEX 模型运行入参；上游数据和场景配置都可以在页面中编辑并保存，便于讲清“业务数据进入优化模型”的链路。
-四个页面共享同一份浏览器运行上下文，在场景配置页调整的临时参数会带到模型入参页和求解结果页。
+POC 的方案配置来自 `python/data/platform_poc_data.json`，上游业务数据来自 `python/data/platform_upstream_data.json`。页面会用业务表格和参数表单展示上游原始数据、场景参数和 CPLEX 模型运行入参，避免把 JSON 文件编辑器暴露在主流程里。
+六个页面共享同一份浏览器运行上下文，在场景配置页调整的临时参数会带到模型入参页和求解结果页。
 
 ---
 
