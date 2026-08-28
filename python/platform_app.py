@@ -724,6 +724,8 @@ def public_config(config):
         "ocean_lead_time",
         "unfulfilled_penalty",
         "network_mode",
+        "staff_peak",
+        "soft_staffing",
     ]
     return {key: config[key] for key in keys if key in config}
 

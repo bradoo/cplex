@@ -306,6 +306,22 @@
       font-weight: 760;
     }
 
+    .changed-input {
+      background: #fff8e8;
+    }
+
+    .change-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      border-radius: 999px;
+      padding: 3px 8px;
+      background: var(--soft-amber);
+      color: var(--amber);
+      font-size: 12px;
+      font-weight: 820;
+    }
+
     .lineage-diagram {
       display: grid;
       gap: 12px;
@@ -709,9 +725,10 @@
       <section>
         <div class="section-head"><h2>CPLEX 模型运行入参</h2></div>
         <div class="content">
+          <p class="small"><span class="change-pill">高亮</span> 表示该入参受当前方案参数影响，便于追踪业务假设如何进入 CPLEX 模型。</p>
           <table>
             <thead>
-              <tr><th>字段</th><th>当前值</th><th>业务含义</th></tr>
+              <tr><th>字段</th><th>当前值</th><th>业务含义</th><th>变化来源</th></tr>
             </thead>
             <tbody id="inputRows"></tbody>
           </table>
@@ -834,6 +851,7 @@
     let playbookDefaults = {};
     let platformData = null;
     let latestModelInputs = null;
+    let latestConfig = null;
     let upstreamData = null;
     let runHistoryRows = [];
     const activeLayer = document.body.dataset.activeLayer || "upstream";
@@ -1114,6 +1132,7 @@
       field("totalCard").className = `metric ${summary.approval_level === "管理层审批" ? "warn" : ""}`;
       field("actions").innerHTML = summary.actions.map((item) => `<li>${item}</li>`).join("");
       field("risks").innerHTML = summary.risks.map((item) => `<div class="item"><strong>${item}</strong></div>`).join("");
+      latestConfig = data.config;
       latestModelInputs = data.model_inputs;
       renderLineage(data.model_inputs.lineage);
       renderInputs();
@@ -1204,13 +1223,19 @@
       const key = field("modelInputSelect").value;
       const input = latestModelInputs[key];
       const rows = modelInputRows(key, input);
-      field("inputRows").innerHTML = rows.map(([name, value, meaning]) => (
-        `<tr><td><strong>${name}</strong></td><td>${value}</td><td>${meaning}</td></tr>`
+      field("inputRows").innerHTML = rows.map(([name, value, meaning, change]) => (
+        `<tr class="${change ? "changed-input" : ""}">
+          <td><strong>${name}</strong></td>
+          <td>${value}</td>
+          <td>${meaning}</td>
+          <td>${change ? `<span class="change-pill">${change}</span>` : "-"}</td>
+        </tr>`
       )).join("");
       field("modelInputJson").textContent = JSON.stringify(input, null, 2);
     }
 
     function modelInputRows(key, input) {
+      const reasons = inputChangeReasons(key);
       if (key === "network") {
         const allowedLanes = input.lane_costs_and_sla.filter((lane) => lane.allowed_by_sla).length;
         const blockedLanes = input.lane_costs_and_sla.length - allowedLanes;
@@ -1218,10 +1243,10 @@
           ["model_name", input.model_name, "实际调用的仓网优化模型"],
           ["warehouses", input.sets.warehouses.length, "候选仓库数量"],
           ["markets", input.sets.markets.length, "目标市场数量"],
-          ["total_demand", sumObject(input.markets, "demand"), "进入模型的总订单需求"],
+          ["total_demand", sumObject(input.markets, "demand"), "进入模型的总订单需求", reasons.demand_multiplier],
           ["total_capacity", sumObject(input.warehouses, "capacity"), "候选仓库基础总容量"],
-          ["allowed_lanes", allowedLanes, "满足 SLA、允许分配的仓库-市场线路"],
-          ["blocked_lanes", blockedLanes, "因配送时效超过 SLA 被禁止的线路"]
+          ["allowed_lanes", allowedLanes, "满足 SLA、允许分配的仓库-市场线路", reasons.sla_extra_days || reasons.network_mode],
+          ["blocked_lanes", blockedLanes, "因配送时效超过 SLA 被禁止的线路", reasons.sla_extra_days || reasons.network_mode]
         ];
       }
       if (key === "replenishment") {
@@ -1232,7 +1257,9 @@
           ["total_demand", Object.values(input.demand).reduce((a, b) => a + b, 0), "四周预测需求"],
           ["initial_inventory", input.parameters.initial_inventory, "期初可用库存"],
           ["target_ending_inventory", input.parameters.target_ending_inventory, "期末目标库存"],
-          ["stockout_penalty", input.parameters.stockout_penalty, "缺货惩罚权重"]
+          ["air.weekly_capacity", input.lanes.air.weekly_capacity, "空运每周可用运力", reasons.air_capacity],
+          ["ocean.lead_time_weeks", input.lanes.ocean.lead_time_weeks, "海运提前期", reasons.ocean_lead_time],
+          ["stockout_penalty", input.parameters.stockout_penalty, "缺货惩罚权重", reasons.unfulfilled_penalty]
         ];
       }
       if (key === "service_level") {
@@ -1248,10 +1275,30 @@
         ["model_name", input.model_name, "实际调用的排班模型"],
         ["employees", input.sets.employees.join(", "), "可排班员工集合"],
         ["days", input.sets.days.join(", "), "排班周期"],
-        ["total_required_staff", Object.values(input.required_staff).reduce((a, b) => a + b, 0), "总人班需求"],
-        ["max_shifts_per_employee", input.parameters.max_shifts_per_employee, "每人最多班次数"],
-        ["soft_constraints", input.parameters.soft_constraints, "是否允许缺口并用罚分兜底"]
+        ["total_required_staff", Object.values(input.required_staff).reduce((a, b) => a + b, 0), "总人班需求", reasons.staff_peak],
+        ["max_shifts_per_employee", input.parameters.max_shifts_per_employee, "每人最多班次数", reasons.staff_peak],
+        ["soft_constraints", input.parameters.soft_constraints, "是否允许缺口并用罚分兜底", reasons.soft_staffing]
       ];
+    }
+
+    function inputChangeReasons(key) {
+      const baseline = playbookDefaults.baseline || {};
+      const config = latestConfig || {};
+      const reason = (fieldName, label) => (
+        config[fieldName] !== undefined && baseline[fieldName] !== undefined && config[fieldName] !== baseline[fieldName]
+          ? `${label}: ${baseline[fieldName]} -> ${config[fieldName]}`
+          : ""
+      );
+      return {
+        demand_multiplier: reason("demand_multiplier", "需求倍率"),
+        sla_extra_days: reason("sla_extra_days", "SLA 放宽"),
+        network_mode: reason("network_mode", "仓网模式"),
+        air_capacity: reason("air_capacity", "空运容量"),
+        ocean_lead_time: reason("ocean_lead_time", "海运提前期"),
+        unfulfilled_penalty: reason("unfulfilled_penalty", "缺口罚分"),
+        staff_peak: config.staff_peak !== baseline.staff_peak && key === "staffing" ? "旺季排班开关影响人力需求" : "",
+        soft_staffing: config.soft_staffing !== baseline.soft_staffing && key === "staffing" ? "软约束开关影响缺口处理" : ""
+      };
     }
 
     function sumObject(object, key) {
