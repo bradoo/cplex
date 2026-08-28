@@ -86,7 +86,7 @@
       padding: 14px 0 16px;
       border-top: 1px solid var(--line);
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: repeat(6, minmax(0, 1fr));
       gap: 10px;
     }
 
@@ -523,6 +523,46 @@
       font-weight: 700;
     }
 
+    .explain-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .explain-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fff;
+      display: grid;
+      gap: 10px;
+      align-content: start;
+    }
+
+    .explain-list {
+      display: grid;
+      gap: 7px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .explain-list li {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px;
+      background: #fbfcfe;
+      display: grid;
+      gap: 3px;
+    }
+
+    .formula {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      color: #435161;
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
     .actions {
       display: grid;
       gap: 8px;
@@ -568,6 +608,7 @@
     @media (max-width: 1040px) {
       .top, .page, .two-col { grid-template-columns: 1fr; }
       .flow, .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .explain-grid { grid-template-columns: 1fr; }
       .diff-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .lineage-diagram { overflow-x: auto; padding-bottom: 6px; }
       .lineage-legend, .lineage-flow { min-width: 940px; }
@@ -600,6 +641,7 @@
       <a class="flow-step" data-layer-link="inputs" href="/inputs"><strong>3. 模型入参</strong><span>转换后的 CPLEX 数据</span></a>
       <a class="flow-step" data-layer-link="results" href="/results"><strong>4. 求解结果</strong><span>KPI、风险与建议动作</span></a>
       <a class="flow-step" data-layer-link="lineage" href="/lineage"><strong>5. 数据血缘</strong><span>字段映射与转换规则</span></a>
+      <a class="flow-step" data-layer-link="constraints" href="/constraints"><strong>6. 约束解释</strong><span>变量、目标与约束</span></a>
     </nav>
   </header>
 
@@ -844,6 +886,16 @@
         </div>
       </section>
     </div>
+
+    <div class="page" data-layer="constraints">
+      <section>
+        <div class="section-head"><h2>模型约束解释</h2><span class="pill">Model Logic</span></div>
+        <div class="content">
+          <p class="small">这一页用业务语言说明每个 CPLEX 模型在决定什么、优化什么，以及关键约束为什么存在。</p>
+          <div id="constraintCards" class="explain-grid"></div>
+        </div>
+      </section>
+    </div>
   </main>
 
   <script>
@@ -962,6 +1014,49 @@
           <td>${row.used_by}</td>
         </tr>`
       )).join("");
+    }
+
+    async function loadConstraintExplanations() {
+      const response = await fetch("/api/platform/model-explanations");
+      const data = await response.json();
+      field("constraintCards").innerHTML = data.models.map((model) => `
+        <div class="explain-card">
+          <div>
+            <h3>${model.name}</h3>
+            <p class="small">${model.business_question}</p>
+          </div>
+          <div>
+            <strong>决策变量</strong>
+            <ul class="explain-list">
+              ${model.variables.map((item) => `
+                <li><strong>${item.name}</strong><span class="small">${item.type}：${item.meaning}</span></li>
+              `).join("")}
+            </ul>
+          </div>
+          <div>
+            <strong>目标函数</strong>
+            <p class="small">${model.objective}</p>
+          </div>
+          <div>
+            <strong>核心约束</strong>
+            <ul class="explain-list">
+              ${model.constraints.map((item) => `
+                <li>
+                  <strong>${item.name}</strong>
+                  <span class="formula">${item.formula}</span>
+                  <span class="small">${item.meaning}</span>
+                </li>
+              `).join("")}
+            </ul>
+          </div>
+          <div>
+            <strong>输出字段</strong>
+            <div class="lineage-tags">
+              ${model.outputs.map((item) => `<span class="lineage-tag">${item}</span>`).join("")}
+            </div>
+          </div>
+        </div>
+      `).join("");
     }
 
     function renderLineageDiagram(data) {
@@ -1510,7 +1605,7 @@
     field("reloadUpstream").addEventListener("click", loadUpstreamData);
     field("saveUpstream").addEventListener("click", saveUpstreamData);
     field("modelInputSelect").addEventListener("change", renderInputs);
-    loadOverview().then(() => Promise.all([run(false), compare(), loadDataLayer(), loadUpstreamData(), loadLineage(), loadRunHistory()]));
+    loadOverview().then(() => Promise.all([run(false), compare(), loadDataLayer(), loadUpstreamData(), loadLineage(), loadRunHistory(), loadConstraintExplanations()]));
   </script>
 </body>
 </html>

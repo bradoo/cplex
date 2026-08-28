@@ -366,6 +366,11 @@ def lineage_page():
     return render_template("platform_app.html", active_layer="lineage")
 
 
+@app.get("/constraints")
+def constraints_page():
+    return render_template("platform_app.html", active_layer="constraints")
+
+
 @app.get("/api/health")
 def health():
     return jsonify({"status": "ok", "service": "cplex-optimization-platform-poc"})
@@ -552,6 +557,85 @@ def get_lineage():
                 {"business_field": "运输渠道能力", "upstream_path": "replenishment.lanes.*", "model_input_path": "replenishment.lanes.*", "used_by": "补货容量约束和成本目标"},
                 {"business_field": "服务商能力", "upstream_path": "service_level.services.*.capacity", "model_input_path": "service_level.services.*.capacity", "used_by": "服务商容量约束"},
                 {"business_field": "排班需求", "upstream_path": "staffing scenario defaults", "model_input_path": "staffing.required_staff", "used_by": "每日人力覆盖约束"},
+            ],
+        }
+    )
+
+
+@app.get("/api/platform/model-explanations")
+def get_model_explanations():
+    return jsonify(
+        {
+            "status": "ok",
+            "models": [
+                {
+                    "id": "network",
+                    "name": "仓网选址与履约模型",
+                    "business_question": "决定开哪些仓、每个市场由哪个仓履约，以及在高峰或扩容场景下如何处理不可满足需求。",
+                    "variables": [
+                        {"name": "open_warehouse[w]", "type": "0/1 变量", "meaning": "仓库 w 是否启用"},
+                        {"name": "ship[w,m]", "type": "连续变量", "meaning": "仓库 w 发往市场 m 的订单量"},
+                        {"name": "unfulfilled[m]", "type": "连续变量", "meaning": "软容量或扩容模式下市场 m 的未履约订单量"},
+                        {"name": "extra_capacity[w]", "type": "连续变量", "meaning": "扩容模式下仓库 w 购买的临时产能"},
+                    ],
+                    "objective": "最小化固定开仓成本、处理成本、末端配送成本、临时扩容成本和未履约罚分。",
+                    "constraints": [
+                        {"name": "需求覆盖", "formula": "sum_w ship[w,m] + unfulfilled[m] = demand[m]", "meaning": "每个市场的需求要么被仓库履约，要么显式计入缺口"},
+                        {"name": "仓库容量", "formula": "sum_m ship[w,m] <= capacity[w] * open_warehouse[w] + extra_capacity[w]", "meaning": "未启用仓不能发货，启用仓不能超过基础或临时容量"},
+                        {"name": "SLA 可用线路", "formula": "ship[w,m] = 0 if delivery_days[w,m] > max_delivery_days[m]", "meaning": "超过承诺时效的线路不能被 CPLEX 选择"},
+                    ],
+                    "outputs": ["opened_warehouses", "fulfillment_plan", "capacity_plan", "total_unfulfilled", "total_cost"],
+                },
+                {
+                    "id": "replenishment",
+                    "name": "跨境补货模型",
+                    "business_question": "决定每周走空运还是海运补货，平衡运输成本、持有成本和缺货风险。",
+                    "variables": [
+                        {"name": "orders[lane,week]", "type": "连续变量", "meaning": "某周通过某运输渠道发出的补货量"},
+                        {"name": "inventory[week]", "type": "连续变量", "meaning": "每周末剩余库存"},
+                        {"name": "stockout[week]", "type": "连续变量", "meaning": "每周未满足需求"},
+                    ],
+                    "objective": "最小化运输成本、库存持有成本和缺货罚分。",
+                    "constraints": [
+                        {"name": "库存平衡", "formula": "inventory[t] = inventory[t-1] + arrivals[t] - demand[t] + stockout[t]", "meaning": "把采购到货、需求消耗、库存和缺货连成时间序列"},
+                        {"name": "渠道容量", "formula": "orders[lane,t] <= weekly_capacity[lane]", "meaning": "空运等渠道不能超过每周可用能力"},
+                        {"name": "期末库存", "formula": "inventory[last_week] >= target_ending_inventory", "meaning": "避免方案只顾眼前缺货、不保留安全库存"},
+                    ],
+                    "outputs": ["orders", "inventory_projection", "total_stockout", "transport_cost", "total_cost"],
+                },
+                {
+                    "id": "service_level",
+                    "name": "服务水平组合模型",
+                    "business_question": "决定使用哪些服务商，以及各市场订单如何分配，满足平均时效承诺并控制成本。",
+                    "variables": [
+                        {"name": "use_service[s]", "type": "0/1 变量", "meaning": "服务商 s 是否启用"},
+                        {"name": "orders[s,m]", "type": "连续变量", "meaning": "服务商 s 承接市场 m 的订单量"},
+                    ],
+                    "objective": "最小化服务商固定成本和订单履约变动成本。",
+                    "constraints": [
+                        {"name": "市场需求", "formula": "sum_s orders[s,m] = demand[m]", "meaning": "每个市场的订单必须全部分配给服务商"},
+                        {"name": "平均时效", "formula": "sum_s delivery_days[s,m] * orders[s,m] <= max_avg_days[m] * demand[m]", "meaning": "用加权平均时效控制市场 SLA"},
+                        {"name": "服务商容量", "formula": "sum_m orders[s,m] <= capacity[s] * use_service[s]", "meaning": "未启用服务商不能接单，启用后也不能超过能力"},
+                    ],
+                    "outputs": ["used_services", "allocation", "average_days", "total_cost"],
+                },
+                {
+                    "id": "staffing",
+                    "name": "门店/仓内排班模型",
+                    "business_question": "决定员工每天是否上班，满足每日人力和技能覆盖，同时控制班次成本和偏好损失。",
+                    "variables": [
+                        {"name": "work[e,d]", "type": "0/1 变量", "meaning": "员工 e 在日期 d 是否排班"},
+                        {"name": "shortage[d]", "type": "连续变量", "meaning": "软约束模式下日期 d 的人力缺口"},
+                    ],
+                    "objective": "最小化排班成本、偏好违背罚分和软约束缺口罚分。",
+                    "constraints": [
+                        {"name": "每日覆盖", "formula": "sum_e work[e,d] + shortage[d] >= required_staff[d]", "meaning": "每天至少满足需求，软约束模式允许显式缺口"},
+                        {"name": "员工可用性", "formula": "work[e,d] <= availability[e,d]", "meaning": "员工不可用的日期不能被排班"},
+                        {"name": "技能覆盖", "formula": "sum_e skill[e,k] * work[e,d] >= skill_requirement[d,k]", "meaning": "关键岗位或技能每天都要有人覆盖"},
+                        {"name": "最大班次数", "formula": "sum_d work[e,d] <= max_shifts_per_employee", "meaning": "控制员工工作负荷，避免排班不可执行"},
+                    ],
+                    "outputs": ["assignments", "total_shortage", "coverage", "total_cost"],
+                },
             ],
         }
     )
