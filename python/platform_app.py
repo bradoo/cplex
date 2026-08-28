@@ -39,17 +39,25 @@ def playbooks():
 
 
 def save_platform_data(data):
-    DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
+    save_json_file(DATA_PATH, data)
+
+
+def save_upstream_data(data):
+    save_json_file(UPSTREAM_DATA_PATH, data)
+
+
+def save_json_file(path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(
         "w",
         encoding="utf-8",
-        dir=DATA_PATH.parent,
+        dir=path.parent,
         delete=False,
     ) as file:
         json.dump(data, file, ensure_ascii=False, indent=2)
         file.write("\n")
         temp_path = Path(file.name)
-    temp_path.replace(DATA_PATH)
+    temp_path.replace(path)
 
 
 def validate_platform_data(data):
@@ -102,6 +110,80 @@ def validate_platform_data(data):
     return None
 
 
+def validate_upstream_data(data):
+    if not isinstance(data, dict):
+        return "data must be a JSON object"
+
+    for key in ("metadata", "network", "replenishment", "service_level"):
+        if key not in data:
+            return f"upstream data is missing required key: {key}"
+
+    network = data["network"]
+    for key in ("warehouses", "markets", "lanes", "expansion_options"):
+        if key not in network:
+            return f"network is missing required key: {key}"
+    if not isinstance(network["warehouses"], dict) or not network["warehouses"]:
+        return "network.warehouses must be a non-empty object"
+    if not isinstance(network["markets"], dict) or not network["markets"]:
+        return "network.markets must be a non-empty object"
+    if not isinstance(network["lanes"], list) or not network["lanes"]:
+        return "network.lanes must be a non-empty list"
+
+    for warehouse, values in network["warehouses"].items():
+        for field in ("capacity", "fixed_cost", "handling_cost"):
+            if field not in values or not isinstance(values[field], (int, float)):
+                return f"network.warehouses.{warehouse}.{field} must be numeric"
+
+    for market, values in network["markets"].items():
+        for field in ("demand", "max_delivery_days"):
+            if field not in values or not isinstance(values[field], (int, float)):
+                return f"network.markets.{market}.{field} must be numeric"
+
+    lane_pairs = set()
+    for lane in network["lanes"]:
+        for field in ("warehouse", "market", "last_mile_cost", "delivery_days"):
+            if field not in lane:
+                return f"network lane is missing field: {field}"
+        if lane["warehouse"] not in network["warehouses"]:
+            return f"network lane references unknown warehouse: {lane['warehouse']}"
+        if lane["market"] not in network["markets"]:
+            return f"network lane references unknown market: {lane['market']}"
+        if not isinstance(lane["last_mile_cost"], (int, float)):
+            return "network lane last_mile_cost must be numeric"
+        if not isinstance(lane["delivery_days"], (int, float)):
+            return "network lane delivery_days must be numeric"
+        lane_pairs.add((lane["warehouse"], lane["market"]))
+
+    expected_lane_pairs = {
+        (warehouse, market)
+        for warehouse in network["warehouses"]
+        for market in network["markets"]
+    }
+    missing_pairs = expected_lane_pairs - lane_pairs
+    if missing_pairs:
+        warehouse, market = sorted(missing_pairs)[0]
+        return f"network.lanes is missing warehouse-market pair: {warehouse} -> {market}"
+
+    replenishment = data["replenishment"]
+    for key in ("weeks", "lanes", "demand", "initial_inventory", "target_ending_inventory", "holding_cost", "stockout_penalty"):
+        if key not in replenishment:
+            return f"replenishment is missing required key: {key}"
+    if not isinstance(replenishment["weeks"], list) or not replenishment["weeks"]:
+        return "replenishment.weeks must be a non-empty list"
+    if not isinstance(replenishment["lanes"], dict) or not replenishment["lanes"]:
+        return "replenishment.lanes must be a non-empty object"
+    for week in replenishment["weeks"]:
+        if week not in replenishment["demand"]:
+            return f"replenishment.demand is missing week: {week}"
+
+    service_level = data["service_level"]
+    for key in ("markets", "services"):
+        if key not in service_level or not isinstance(service_level[key], dict) or not service_level[key]:
+            return f"service_level.{key} must be a non-empty object"
+
+    return None
+
+
 @app.get("/")
 def index():
     return render_template("platform_app.html", active_layer="upstream")
@@ -130,6 +212,11 @@ def results_page():
 @app.get("/api/health")
 def health():
     return jsonify({"status": "ok", "service": "cplex-optimization-platform-poc"})
+
+
+@app.get("/favicon.ico")
+def favicon():
+    return "", 204
 
 
 @app.get("/api/platform/overview")
@@ -190,6 +277,24 @@ def get_upstream_data():
             "status": "ok",
             "data_source": str(UPSTREAM_DATA_PATH.relative_to(Path(__file__).resolve().parent.parent)),
             "data": load_upstream_data(),
+        }
+    )
+
+
+@app.put("/api/platform/upstream-data")
+def update_upstream_data():
+    payload = request.get_json(silent=True) or {}
+    data = payload.get("data")
+    validation_error = validate_upstream_data(data)
+    if validation_error:
+        return jsonify({"status": "error", "message": validation_error}), 400
+
+    save_upstream_data(data)
+    return jsonify(
+        {
+            "status": "ok",
+            "message": "Upstream data saved",
+            "data_source": str(UPSTREAM_DATA_PATH.relative_to(Path(__file__).resolve().parent.parent)),
         }
     )
 
@@ -530,4 +635,4 @@ def decision_note(approval_level, total_shortage, operating_cost):
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5053, debug=True)
+    app.run(host="127.0.0.1", port=5053, debug=False, use_reloader=False)

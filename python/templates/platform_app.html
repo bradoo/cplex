@@ -439,6 +439,13 @@
       <section>
         <div class="section-head"><h2>上游数据 JSON</h2><span id="upstreamSource" class="pill">加载中</span></div>
         <div class="content">
+          <textarea id="upstreamEditor" spellcheck="false"></textarea>
+          <div class="button-row">
+            <button id="formatUpstream">格式化</button>
+            <button id="reloadUpstream">重载</button>
+            <button class="run" id="saveUpstream">保存</button>
+          </div>
+          <div id="upstreamStatus" class="status-line">这里编辑的是上游业务原始数据，会影响后续 CPLEX 模型入参。</div>
           <pre id="upstreamJson">加载上游业务原始数据。</pre>
         </div>
       </section>
@@ -577,6 +584,7 @@
     let latestModelInputs = null;
     let upstreamData = null;
     const activeLayer = document.body.dataset.activeLayer || "upstream";
+    const stateKey = "cplexPlatformPocState";
 
     const fmt = (value) => Number(value || 0).toLocaleString("zh-CN", { maximumFractionDigits: 2 });
     const field = (id) => document.getElementById(id);
@@ -594,6 +602,7 @@
       const response = await fetch("/api/platform/overview");
       const data = await response.json();
       playbookDefaults = Object.fromEntries(data.playbooks.map((item) => [item.id, item.defaults]));
+      loadSharedState();
       field("configSource").textContent = data.data_source;
       field("playbooks").innerHTML = data.playbooks.map((item) => (
         `<button data-id="${item.id}" class="playbook ${item.id === selected ? "active" : ""}">
@@ -603,7 +612,34 @@
       document.querySelectorAll("#playbooks button").forEach((button) => {
         button.addEventListener("click", () => selectPlaybook(button.dataset.id));
       });
-      applyDefaults();
+      applySavedOrDefaultValues();
+      bindConfigPersistence();
+    }
+
+    function loadSharedState() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(stateKey) || "{}");
+        if (saved.playbook && playbookDefaults[saved.playbook]) {
+          selected = saved.playbook;
+        }
+      } catch (_error) {
+        selected = "baseline";
+      }
+    }
+
+    function sharedState() {
+      try {
+        return JSON.parse(localStorage.getItem(stateKey) || "{}");
+      } catch (_error) {
+        return {};
+      }
+    }
+
+    function saveSharedState() {
+      localStorage.setItem(stateKey, JSON.stringify({
+        playbook: selected,
+        overrides: overrides()
+      }));
     }
 
     async function loadDataLayer() {
@@ -622,6 +658,8 @@
       field("upstreamSummary").innerHTML = upstreamRows(data).map(([name, value, meaning]) => (
         `<div class="row"><strong>${name}</strong><span class="small">${meaning}</span><span class="status">${value}</span></div>`
       )).join("");
+      field("upstreamEditor").value = JSON.stringify(data.data, null, 2);
+      field("upstreamStatus").textContent = `已加载：${data.data_source}`;
       field("upstreamJson").textContent = JSON.stringify(data.data, null, 2);
     }
 
@@ -643,6 +681,7 @@
       selected = id;
       document.querySelectorAll("#playbooks button").forEach((el) => el.classList.toggle("active", el.dataset.id === selected));
       applyDefaults();
+      saveSharedState();
     }
 
     function applyDefaults() {
@@ -651,6 +690,24 @@
       field("air").value = config.air_capacity ?? 900;
       field("penalty").value = config.unfulfilled_penalty ?? 50;
       field("sla").value = config.sla_extra_days ?? 0;
+    }
+
+    function applySavedOrDefaultValues() {
+      applyDefaults();
+      const saved = sharedState();
+      if (saved.overrides) {
+        field("demand").value = saved.overrides.demand_multiplier ?? field("demand").value;
+        field("air").value = saved.overrides.air_capacity ?? field("air").value;
+        field("penalty").value = saved.overrides.unfulfilled_penalty ?? field("penalty").value;
+        field("sla").value = saved.overrides.sla_extra_days ?? field("sla").value;
+      }
+    }
+
+    function bindConfigPersistence() {
+      ["demand", "air", "penalty", "sla"].forEach((id) => {
+        field(id).addEventListener("input", saveSharedState);
+        field(id).addEventListener("change", saveSharedState);
+      });
     }
 
     function overrides() {
@@ -663,6 +720,7 @@
     }
 
     async function run() {
+      saveSharedState();
       field("current").textContent = "求解中";
       field("inputPlaybook").textContent = "生成中";
       const response = await fetch("/api/platform/run", {
@@ -826,6 +884,16 @@
       }
     }
 
+    function formatUpstreamData() {
+      try {
+        const data = JSON.parse(field("upstreamEditor").value);
+        field("upstreamEditor").value = JSON.stringify(data, null, 2);
+        field("upstreamStatus").textContent = "JSON 格式正确。";
+      } catch (error) {
+        field("upstreamStatus").textContent = `JSON 格式错误：${error.message}`;
+      }
+    }
+
     async function saveDataLayer() {
       let data;
       try {
@@ -855,6 +923,30 @@
       await Promise.all([run(), compare(), loadDataLayer()]);
     }
 
+    async function saveUpstreamData() {
+      let data;
+      try {
+        data = JSON.parse(field("upstreamEditor").value);
+      } catch (error) {
+        field("upstreamStatus").textContent = `JSON 格式错误：${error.message}`;
+        return;
+      }
+
+      field("upstreamStatus").textContent = "保存中...";
+      const response = await fetch("/api/platform/upstream-data", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data })
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        field("upstreamStatus").textContent = `保存失败：${result.message}`;
+        return;
+      }
+      field("upstreamStatus").textContent = `已保存：${result.data_source}`;
+      await Promise.all([loadUpstreamData(), run(), compare()]);
+    }
+
     activateLayer();
     field("run").addEventListener("click", run);
     field("runFromConfig").addEventListener("click", run);
@@ -863,6 +955,9 @@
     field("formatData").addEventListener("click", formatDataLayer);
     field("reloadData").addEventListener("click", loadDataLayer);
     field("saveData").addEventListener("click", saveDataLayer);
+    field("formatUpstream").addEventListener("click", formatUpstreamData);
+    field("reloadUpstream").addEventListener("click", loadUpstreamData);
+    field("saveUpstream").addEventListener("click", saveUpstreamData);
     field("modelInputSelect").addEventListener("change", renderInputs);
     loadOverview().then(() => Promise.all([run(), compare(), loadDataLayer(), loadUpstreamData()]));
   </script>

@@ -1,59 +1,225 @@
 {
   "metadata": {
     "snapshot_date": "2026-08-28",
-    "source_systems": ["OMS", "WMS", "TMS", "HR"],
+    "source_systems": [
+      "OMS",
+      "WMS",
+      "TMS",
+      "HR"
+    ],
     "description": "模拟上游系统同步到优化平台的业务原始数据"
   },
   "network": {
     "warehouses": {
-      "Los Angeles 3PL": {"capacity": 9000, "fixed_cost": 18000, "handling_cost": 1.2},
-      "New Jersey 3PL": {"capacity": 8500, "fixed_cost": 17000, "handling_cost": 1.1},
-      "Rotterdam EU Hub": {"capacity": 7000, "fixed_cost": 16000, "handling_cost": 1.35},
-      "Shenzhen Direct Ship": {"capacity": 12000, "fixed_cost": 6000, "handling_cost": 0.8}
+      "Los Angeles 3PL": {
+        "capacity": 9000,
+        "fixed_cost": 18000,
+        "handling_cost": 1.2
+      },
+      "New Jersey 3PL": {
+        "capacity": 8500,
+        "fixed_cost": 17000,
+        "handling_cost": 1.1
+      },
+      "Rotterdam EU Hub": {
+        "capacity": 7000,
+        "fixed_cost": 16000,
+        "handling_cost": 1.35
+      },
+      "Shenzhen Direct Ship": {
+        "capacity": 12000,
+        "fixed_cost": 6000,
+        "handling_cost": 0.8
+      }
     },
     "markets": {
-      "US West": {"demand": 5200, "max_delivery_days": 3},
-      "US East": {"demand": 4800, "max_delivery_days": 3},
-      "Canada": {"demand": 1800, "max_delivery_days": 5},
-      "UK": {"demand": 2400, "max_delivery_days": 4},
-      "EU": {"demand": 3600, "max_delivery_days": 3}
+      "US West": {
+        "demand": 5200,
+        "max_delivery_days": 3
+      },
+      "US East": {
+        "demand": 4800,
+        "max_delivery_days": 3
+      },
+      "Canada": {
+        "demand": 1800,
+        "max_delivery_days": 5
+      },
+      "UK": {
+        "demand": 2400,
+        "max_delivery_days": 4
+      },
+      "EU": {
+        "demand": 3600,
+        "max_delivery_days": 3
+      }
     },
     "lanes": [
-      {"warehouse": "Los Angeles 3PL", "market": "US West", "last_mile_cost": 4.2, "delivery_days": 2},
-      {"warehouse": "Los Angeles 3PL", "market": "US East", "last_mile_cost": 6.8, "delivery_days": 5},
-      {"warehouse": "Los Angeles 3PL", "market": "Canada", "last_mile_cost": 7.4, "delivery_days": 5},
-      {"warehouse": "Los Angeles 3PL", "market": "UK", "last_mile_cost": 12.5, "delivery_days": 8},
-      {"warehouse": "Los Angeles 3PL", "market": "EU", "last_mile_cost": 13.0, "delivery_days": 8},
-      {"warehouse": "New Jersey 3PL", "market": "US West", "last_mile_cost": 6.5, "delivery_days": 5},
-      {"warehouse": "New Jersey 3PL", "market": "US East", "last_mile_cost": 4.1, "delivery_days": 2},
-      {"warehouse": "New Jersey 3PL", "market": "Canada", "last_mile_cost": 5.9, "delivery_days": 4},
-      {"warehouse": "New Jersey 3PL", "market": "UK", "last_mile_cost": 10.8, "delivery_days": 7},
-      {"warehouse": "New Jersey 3PL", "market": "EU", "last_mile_cost": 11.5, "delivery_days": 7},
-      {"warehouse": "Rotterdam EU Hub", "market": "US West", "last_mile_cost": 13.0, "delivery_days": 8},
-      {"warehouse": "Rotterdam EU Hub", "market": "US East", "last_mile_cost": 11.7, "delivery_days": 7},
-      {"warehouse": "Rotterdam EU Hub", "market": "Canada", "last_mile_cost": 12.4, "delivery_days": 8},
-      {"warehouse": "Rotterdam EU Hub", "market": "UK", "last_mile_cost": 4.8, "delivery_days": 3},
-      {"warehouse": "Rotterdam EU Hub", "market": "EU", "last_mile_cost": 3.6, "delivery_days": 2},
-      {"warehouse": "Shenzhen Direct Ship", "market": "US West", "last_mile_cost": 5.8, "delivery_days": 9},
-      {"warehouse": "Shenzhen Direct Ship", "market": "US East", "last_mile_cost": 6.4, "delivery_days": 10},
-      {"warehouse": "Shenzhen Direct Ship", "market": "Canada", "last_mile_cost": 6.6, "delivery_days": 10},
-      {"warehouse": "Shenzhen Direct Ship", "market": "UK", "last_mile_cost": 5.9, "delivery_days": 8},
-      {"warehouse": "Shenzhen Direct Ship", "market": "EU", "last_mile_cost": 6.1, "delivery_days": 9}
+      {
+        "warehouse": "Los Angeles 3PL",
+        "market": "US West",
+        "last_mile_cost": 4.2,
+        "delivery_days": 2
+      },
+      {
+        "warehouse": "Los Angeles 3PL",
+        "market": "US East",
+        "last_mile_cost": 6.8,
+        "delivery_days": 5
+      },
+      {
+        "warehouse": "Los Angeles 3PL",
+        "market": "Canada",
+        "last_mile_cost": 7.4,
+        "delivery_days": 5
+      },
+      {
+        "warehouse": "Los Angeles 3PL",
+        "market": "UK",
+        "last_mile_cost": 12.5,
+        "delivery_days": 8
+      },
+      {
+        "warehouse": "Los Angeles 3PL",
+        "market": "EU",
+        "last_mile_cost": 13.0,
+        "delivery_days": 8
+      },
+      {
+        "warehouse": "New Jersey 3PL",
+        "market": "US West",
+        "last_mile_cost": 6.5,
+        "delivery_days": 5
+      },
+      {
+        "warehouse": "New Jersey 3PL",
+        "market": "US East",
+        "last_mile_cost": 4.1,
+        "delivery_days": 2
+      },
+      {
+        "warehouse": "New Jersey 3PL",
+        "market": "Canada",
+        "last_mile_cost": 5.9,
+        "delivery_days": 4
+      },
+      {
+        "warehouse": "New Jersey 3PL",
+        "market": "UK",
+        "last_mile_cost": 10.8,
+        "delivery_days": 7
+      },
+      {
+        "warehouse": "New Jersey 3PL",
+        "market": "EU",
+        "last_mile_cost": 11.5,
+        "delivery_days": 7
+      },
+      {
+        "warehouse": "Rotterdam EU Hub",
+        "market": "US West",
+        "last_mile_cost": 13.0,
+        "delivery_days": 8
+      },
+      {
+        "warehouse": "Rotterdam EU Hub",
+        "market": "US East",
+        "last_mile_cost": 11.7,
+        "delivery_days": 7
+      },
+      {
+        "warehouse": "Rotterdam EU Hub",
+        "market": "Canada",
+        "last_mile_cost": 12.4,
+        "delivery_days": 8
+      },
+      {
+        "warehouse": "Rotterdam EU Hub",
+        "market": "UK",
+        "last_mile_cost": 4.8,
+        "delivery_days": 3
+      },
+      {
+        "warehouse": "Rotterdam EU Hub",
+        "market": "EU",
+        "last_mile_cost": 3.6,
+        "delivery_days": 2
+      },
+      {
+        "warehouse": "Shenzhen Direct Ship",
+        "market": "US West",
+        "last_mile_cost": 5.8,
+        "delivery_days": 9
+      },
+      {
+        "warehouse": "Shenzhen Direct Ship",
+        "market": "US East",
+        "last_mile_cost": 6.4,
+        "delivery_days": 10
+      },
+      {
+        "warehouse": "Shenzhen Direct Ship",
+        "market": "Canada",
+        "last_mile_cost": 6.6,
+        "delivery_days": 10
+      },
+      {
+        "warehouse": "Shenzhen Direct Ship",
+        "market": "UK",
+        "last_mile_cost": 5.9,
+        "delivery_days": 8
+      },
+      {
+        "warehouse": "Shenzhen Direct Ship",
+        "market": "EU",
+        "last_mile_cost": 6.1,
+        "delivery_days": 9
+      }
     ],
     "expansion_options": {
-      "Los Angeles 3PL": {"max_extra_capacity": 1500, "unit_cost": 3.5},
-      "New Jersey 3PL": {"max_extra_capacity": 1200, "unit_cost": 3.0},
-      "Rotterdam EU Hub": {"max_extra_capacity": 1000, "unit_cost": 4.0},
-      "Shenzhen Direct Ship": {"max_extra_capacity": 4000, "unit_cost": 1.8}
+      "Los Angeles 3PL": {
+        "max_extra_capacity": 1500,
+        "unit_cost": 3.5
+      },
+      "New Jersey 3PL": {
+        "max_extra_capacity": 1200,
+        "unit_cost": 3.0
+      },
+      "Rotterdam EU Hub": {
+        "max_extra_capacity": 1000,
+        "unit_cost": 4.0
+      },
+      "Shenzhen Direct Ship": {
+        "max_extra_capacity": 4000,
+        "unit_cost": 1.8
+      }
     }
   },
   "replenishment": {
-    "weeks": ["W1", "W2", "W3", "W4"],
+    "weeks": [
+      "W1",
+      "W2",
+      "W3",
+      "W4"
+    ],
     "lanes": {
-      "air": {"lead_time_weeks": 1, "unit_cost": 5.5, "weekly_capacity": 900},
-      "ocean": {"lead_time_weeks": 3, "unit_cost": 1.8, "weekly_capacity": 1600}
+      "air": {
+        "lead_time_weeks": 1,
+        "unit_cost": 5.5,
+        "weekly_capacity": 900
+      },
+      "ocean": {
+        "lead_time_weeks": 3,
+        "unit_cost": 1.8,
+        "weekly_capacity": 1600
+      }
     },
-    "demand": {"W1": 900, "W2": 1100, "W3": 1300, "W4": 1500},
+    "demand": {
+      "W1": 900,
+      "W2": 1100,
+      "W3": 1300,
+      "W4": 1500
+    },
     "initial_inventory": 1200,
     "target_ending_inventory": 800,
     "holding_cost": 0.35,
@@ -61,29 +227,71 @@
   },
   "service_level": {
     "markets": {
-      "US West": {"demand": 5200, "max_avg_delivery_days": 4.0},
-      "US East": {"demand": 4800, "max_avg_delivery_days": 4.0},
-      "UK": {"demand": 2400, "max_avg_delivery_days": 5.0},
-      "EU": {"demand": 3600, "max_avg_delivery_days": 5.0}
+      "US West": {
+        "demand": 5200,
+        "max_avg_delivery_days": 4.0
+      },
+      "US East": {
+        "demand": 4800,
+        "max_avg_delivery_days": 4.0
+      },
+      "UK": {
+        "demand": 2400,
+        "max_avg_delivery_days": 5.0
+      },
+      "EU": {
+        "demand": 3600,
+        "max_avg_delivery_days": 5.0
+      }
     },
     "services": {
       "local_standard": {
         "capacity": 9000,
         "fixed_cost": 28000,
-        "unit_cost_by_market": {"US West": 5.4, "US East": 5.2, "UK": 6.15, "EU": 4.95},
-        "delivery_days_by_market": {"US West": 2, "US East": 2, "UK": 3, "EU": 2}
+        "unit_cost_by_market": {
+          "US West": 5.4,
+          "US East": 5.2,
+          "UK": 6.15,
+          "EU": 4.95
+        },
+        "delivery_days_by_market": {
+          "US West": 2,
+          "US East": 2,
+          "UK": 3,
+          "EU": 2
+        }
       },
       "cross_border_economy": {
         "capacity": 10000,
         "fixed_cost": 5000,
-        "unit_cost_by_market": {"US West": 4.6, "US East": 5.0, "UK": 4.8, "EU": 4.9},
-        "delivery_days_by_market": {"US West": 9, "US East": 10, "UK": 8, "EU": 9}
+        "unit_cost_by_market": {
+          "US West": 4.6,
+          "US East": 5.0,
+          "UK": 4.8,
+          "EU": 4.9
+        },
+        "delivery_days_by_market": {
+          "US West": 9,
+          "US East": 10,
+          "UK": 8,
+          "EU": 9
+        }
       },
       "cross_border_express": {
         "capacity": 4500,
         "fixed_cost": 9000,
-        "unit_cost_by_market": {"US West": 7.9, "US East": 8.4, "UK": 7.6, "EU": 7.8},
-        "delivery_days_by_market": {"US West": 4, "US East": 5, "UK": 4, "EU": 5}
+        "unit_cost_by_market": {
+          "US West": 7.9,
+          "US East": 8.4,
+          "UK": 7.6,
+          "EU": 7.8
+        },
+        "delivery_days_by_market": {
+          "US West": 4,
+          "US East": 5,
+          "UK": 4,
+          "EU": 5
+        }
       }
     }
   }
