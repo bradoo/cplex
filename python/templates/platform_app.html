@@ -1309,6 +1309,14 @@
       }).join("");
     }
 
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    function setRunBusy(isBusy) {
+      ["run", "runFromConfig", "runFromInputs"].forEach((id) => {
+        field(id).disabled = isBusy;
+      });
+    }
+
     function renderParameterImpact() {
       if (!playbookDefaults.baseline || !field("parameterImpactRows")) {
         return;
@@ -1346,28 +1354,44 @@
       field("exportStatus").textContent = "报告会导出到 python/reports 目录。";
       field("current").textContent = "求解中";
       field("inputPlaybook").textContent = "生成中";
+      setRunBusy(true);
       renderRunSteps(0, 0);
-      setTimeout(() => {
-        if (sequence === runSequence) renderRunSteps(1, 1);
-      }, 80);
-      setTimeout(() => {
-        if (sequence === runSequence) renderRunSteps(2, 2);
-      }, 160);
-      const response = await fetch("/api/platform/run", {
+      const responsePromise = fetch("/api/platform/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ playbook: selected, overrides: overrides(), save_history: saveHistory })
       });
-      if (!response.ok) {
-        field("current").textContent = "运行失败";
-        renderRunSteps(2, 2, "失败");
-        return;
+
+      try {
+        await sleep(450);
+        if (sequence !== runSequence) return;
+        renderRunSteps(1, 1);
+        await sleep(650);
+        if (sequence !== runSequence) return;
+        renderRunSteps(2, 2);
+        const response = await responsePromise;
+        if (!response.ok) {
+          field("current").textContent = "运行失败";
+          renderRunSteps(2, 2, "失败");
+          return;
+        }
+        const data = await response.json();
+        await sleep(700);
+        if (sequence !== runSequence) return;
+        renderRunSteps(3, 3);
+        await sleep(500);
+        if (sequence !== runSequence) return;
+        renderCase(data);
+        renderRunSteps(4, 4);
+        await loadRunHistory();
+        await sleep(450);
+        if (sequence !== runSequence) return;
+        renderRunSteps(-1, 5, saveHistory ? "完成" : "回放");
+      } finally {
+        if (sequence === runSequence) {
+          setRunBusy(false);
+        }
       }
-      renderRunSteps(3, 3);
-      const data = await response.json();
-      renderCase(data);
-      await loadRunHistory();
-      renderRunSteps(-1, 5, saveHistory ? "完成" : "回放");
     }
 
     function renderCase(data) {
