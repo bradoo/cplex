@@ -455,6 +455,58 @@
       background: var(--blue);
     }
 
+    .diff-panel {
+      display: grid;
+      gap: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 13px;
+      background: #fbfcfe;
+    }
+
+    .diff-headline {
+      font-size: 14px;
+      font-weight: 850;
+      color: var(--ink);
+    }
+
+    .diff-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .diff-card {
+      min-height: 84px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      background: #fff;
+      display: grid;
+      gap: 4px;
+    }
+
+    .diff-card.good { border-color: #bcebd5; background: var(--soft-green); }
+    .diff-card.bad { border-color: #f5bbb7; background: var(--soft-red); }
+    .diff-card.info { border-color: #b9cef9; background: var(--soft-blue); }
+
+    .diff-card .label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 780;
+    }
+
+    .diff-card strong {
+      font-size: 20px;
+      line-height: 1.15;
+    }
+
+    .diff-card span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
     .actions {
       display: grid;
       gap: 8px;
@@ -500,13 +552,14 @@
     @media (max-width: 1040px) {
       .top, .page, .two-col { grid-template-columns: 1fr; }
       .flow, .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .diff-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .lineage-diagram { overflow-x: auto; padding-bottom: 6px; }
       .lineage-legend, .lineage-flow { min-width: 940px; }
       .health { grid-template-columns: 1fr; }
     }
 
     @media (max-width: 640px) {
-      .flow, .grid { grid-template-columns: 1fr; }
+      .flow, .grid, .diff-grid { grid-template-columns: 1fr; }
       .flow-step::after { display: none; }
       .row, .bar-row { grid-template-columns: 1fr; }
     }
@@ -698,6 +751,12 @@
             <div>
               <h3>模型链路</h3>
               <div class="rows" id="modelRows"></div>
+            </div>
+          </div>
+          <div>
+            <h3>方案差异解释</h3>
+            <div id="differencePanel" class="diff-panel">
+              <p class="small">运行后显示当前方案相对基准方案的变化原因。</p>
             </div>
           </div>
           <div>
@@ -1047,12 +1106,14 @@
       renderInputs();
       renderBars(summary);
       renderModelRows(data);
+      renderDifference(data.difference);
       field("raw").textContent = JSON.stringify({
         playbook: data.playbook_name,
         config: data.config,
         data_lineage: data.model_inputs.lineage,
         model_input_sections: Object.keys(data.model_inputs).filter((key) => key !== "lineage"),
         summary,
+        difference: data.difference,
         opened_warehouses: data.network.opened_warehouses,
         staffing_mode: data.staffing.mode
       }, null, 2);
@@ -1083,6 +1144,44 @@
           <span class="small">${fmt(value)}</span>
         </div>`
       )).join("");
+    }
+
+    function renderDifference(difference) {
+      if (!difference) {
+        field("differencePanel").innerHTML = `<p class="small">当前接口暂未返回方案差异解释。</p>`;
+        return;
+      }
+      field("differencePanel").innerHTML = `
+        <p class="diff-headline">${difference.headline}</p>
+        <div class="diff-grid">
+          ${difference.metrics.map((item) => `
+            <div class="diff-card ${item.direction}">
+              <span class="label">${item.label}</span>
+              <strong>${fmt(item.current)}</strong>
+              <span>基准 ${fmt(item.baseline)} / 变化 ${formatDelta(item.delta)}</span>
+            </div>
+          `).join("")}
+        </div>
+        <div>
+          <h3>变化原因</h3>
+          <ul class="actions">
+            ${difference.drivers.map((item) => `<li>${item}</li>`).join("")}
+          </ul>
+        </div>
+        <div class="row">
+          <strong>管理解读</strong>
+          <span class="small">${difference.management_readout}</span>
+          <span class="status">${difference.baseline}</span>
+        </div>
+      `;
+    }
+
+    function formatDelta(value) {
+      const number = Number(value || 0);
+      if (Math.abs(number) < 1e-9) {
+        return "0";
+      }
+      return `${number > 0 ? "+" : "-"}${fmt(Math.abs(number))}`;
     }
 
     function renderInputs() {

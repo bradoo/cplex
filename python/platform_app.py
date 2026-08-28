@@ -454,6 +454,15 @@ def run_case(playbook_id, overrides):
     staffing = solve_staffing_case(config)
 
     summary = build_management_summary(network, replenishment, service_mix, staffing, config)
+    difference = build_difference_explanation(
+        playbook_id,
+        config,
+        summary,
+        network,
+        replenishment,
+        service_mix,
+        staffing,
+    )
 
     return {
         "status": "ok",
@@ -462,6 +471,7 @@ def run_case(playbook_id, overrides):
         "config": public_config(config),
         "model_inputs": model_inputs,
         "summary": summary,
+        "difference": difference,
         "network": network,
         "replenishment": replenishment,
         "service_mix": service_mix,
@@ -967,6 +977,119 @@ def build_management_summary(network, replenishment, service_mix, staffing, conf
         "decision_note": decision_note(approval_level, total_shortage, network_cost + replenishment_cost),
         "message": "这不是单个模型 demo，而是把仓网、补货、服务和排班接到同一个决策入口。",
     }
+
+
+def build_difference_explanation(playbook_id, config, summary, network, replenishment, service_mix, staffing):
+    baseline_summary = None
+    baseline_network = None
+    baseline_replenishment = None
+    baseline_service_mix = None
+    baseline_staffing = None
+    if playbook_id != "baseline" or has_baseline_override(config):
+        baseline_config = dict(playbooks()["baseline"])
+        baseline_inputs = build_model_inputs(baseline_config)
+        baseline_network = solve_platform_network_case(baseline_inputs["network"], baseline_config)
+        baseline_replenishment = solve_platform_replenishment_case(baseline_inputs["replenishment"])
+        baseline_service_mix = solve_platform_service_level_case(baseline_inputs["service_level"])
+        baseline_staffing = solve_staffing_case(baseline_config)
+        baseline_summary = build_management_summary(
+            baseline_network,
+            baseline_replenishment,
+            baseline_service_mix,
+            baseline_staffing,
+            baseline_config,
+        )
+
+    if not baseline_summary:
+        return {
+            "baseline": "基准运营方案",
+            "headline": "当前是基准方案，用作其他方案的对比锚点。",
+            "metrics": [
+                {"label": "综合成本", "current": summary["total_cost"], "baseline": summary["total_cost"], "delta": 0, "direction": "flat"},
+                {"label": "总缺口", "current": summary["total_shortage"], "baseline": summary["total_shortage"], "delta": 0, "direction": "flat"},
+            ],
+            "drivers": ["基准方案使用当前需求、当前空运能力和严格仓网 SLA。"],
+            "management_readout": "建议先用这个方案确认数据口径，再切换旺季或稳健方案观察增量影响。",
+        }
+
+    cost_delta = round(summary["total_cost"] - baseline_summary["total_cost"], 2)
+    shortage_delta = round(summary["total_shortage"] - baseline_summary["total_shortage"], 2)
+    service_delta = round(summary["service_cost"] - baseline_summary["service_cost"], 2)
+    opened_delta = len(network.get("opened_warehouses") or []) - len(baseline_network.get("opened_warehouses") or [])
+    order_delta = len(replenishment.get("orders") or []) - len(baseline_replenishment.get("orders") or [])
+    staffing_shortage_delta = round(
+        float(staffing.get("total_shortage") or 0) - float(baseline_staffing.get("total_shortage") or 0),
+        2,
+    )
+
+    drivers = []
+    if config["demand_multiplier"] != playbooks()["baseline"]["demand_multiplier"]:
+        drivers.append(f"需求倍率从 1.0 调整到 {config['demand_multiplier']:g}，仓网、补货和服务模型的需求约束同步抬升。")
+    if config["air_capacity"] != playbooks()["baseline"]["air_capacity"]:
+        drivers.append(f"空运周容量从 {playbooks()['baseline']['air_capacity']} 调整到 {config['air_capacity']}，直接影响补货模型的运输容量约束。")
+    if config["network_mode"] != playbooks()["baseline"]["network_mode"]:
+        drivers.append(f"仓网模式从 strict 切换到 {config['network_mode']}，允许用缺口或扩容吸收不可满足需求。")
+    if config["sla_extra_days"] != playbooks()["baseline"]["sla_extra_days"]:
+        drivers.append(f"SLA 放宽 {config['sla_extra_days']} 天，仓网模型会重新判断可用线路。")
+    if config.get("staff_peak"):
+        drivers.append("旺季排班开关已打开，周五到周日的人力需求提高。")
+    if config.get("soft_staffing"):
+        drivers.append("排班启用软约束，缺口会进入结果解释而不是直接让模型不可行。")
+    if not drivers:
+        drivers.append("当前参数与基准接近，差异主要来自上游数据调整。")
+
+    headline = "相对基准方案"
+    if cost_delta > 0:
+        headline += f"成本增加 {cost_delta:g}"
+    elif cost_delta < 0:
+        headline += f"成本降低 {abs(cost_delta):g}"
+    else:
+        headline += "成本持平"
+    headline += "，"
+    if shortage_delta > 0:
+        headline += f"缺口增加 {shortage_delta:g}。"
+    elif shortage_delta < 0:
+        headline += f"缺口减少 {abs(shortage_delta):g}。"
+    else:
+        headline += "缺口持平。"
+
+    return {
+        "baseline": "基准运营方案",
+        "headline": headline,
+        "metrics": [
+            {"label": "综合成本", "current": summary["total_cost"], "baseline": baseline_summary["total_cost"], "delta": cost_delta, "direction": delta_direction(cost_delta, lower_is_better=True)},
+            {"label": "总缺口", "current": summary["total_shortage"], "baseline": baseline_summary["total_shortage"], "delta": shortage_delta, "direction": delta_direction(shortage_delta, lower_is_better=True)},
+            {"label": "服务组合成本", "current": summary["service_cost"], "baseline": baseline_summary["service_cost"], "delta": service_delta, "direction": delta_direction(service_delta, lower_is_better=True)},
+            {"label": "启用仓库数", "current": len(network.get("opened_warehouses") or []), "baseline": len(baseline_network.get("opened_warehouses") or []), "delta": opened_delta, "direction": delta_direction(opened_delta, lower_is_better=False)},
+            {"label": "补货订单数", "current": len(replenishment.get("orders") or []), "baseline": len(baseline_replenishment.get("orders") or []), "delta": order_delta, "direction": "info"},
+            {"label": "排班缺口", "current": float(staffing.get("total_shortage") or 0), "baseline": float(baseline_staffing.get("total_shortage") or 0), "delta": staffing_shortage_delta, "direction": delta_direction(staffing_shortage_delta, lower_is_better=True)},
+        ],
+        "drivers": drivers,
+        "management_readout": management_readout(cost_delta, shortage_delta, summary["approval_level"], baseline_summary["approval_level"]),
+    }
+
+
+def has_baseline_override(config):
+    baseline = playbooks()["baseline"]
+    return any(config.get(key) != baseline.get(key) for key in baseline)
+
+
+def delta_direction(delta, lower_is_better):
+    if abs(delta) < 1e-9:
+        return "flat"
+    if lower_is_better:
+        return "good" if delta < 0 else "bad"
+    return "info"
+
+
+def management_readout(cost_delta, shortage_delta, approval_level, baseline_approval_level):
+    if shortage_delta > 0:
+        return f"核心取舍是用更高风险承接需求变化，审批从 {baseline_approval_level} 变为 {approval_level}，需要确认是否接受缺口。"
+    if cost_delta > 0:
+        return f"核心取舍是用额外成本换服务稳定性，审批从 {baseline_approval_level} 变为 {approval_level}，适合讨论预算边界。"
+    if cost_delta < 0:
+        return f"该方案相对基准降低成本且没有增加缺口，可优先进入执行评审。"
+    return f"该方案与基准的核心 KPI 接近，审批分层为 {approval_level}，重点看执行动作是否更容易落地。"
 
 
 def decision_note(approval_level, total_shortage, operating_cost):
