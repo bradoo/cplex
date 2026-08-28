@@ -187,6 +187,13 @@
       gap: 9px;
     }
 
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
     .metric, .item {
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -378,6 +385,11 @@
 
     th { color: var(--muted); font-size: 12px; }
 
+    td input {
+      min-width: 92px;
+      min-height: 32px;
+    }
+
     pre {
       margin: 0;
       white-space: pre-wrap;
@@ -434,6 +446,44 @@
         <div class="content">
           <p class="small">这一层模拟从 OMS、WMS、TMS、HR 同步来的原始业务数据，还没有进入优化模型。</p>
           <div id="upstreamSummary" class="rows"></div>
+        </div>
+      </section>
+      <section>
+        <div class="section-head"><h2>上游业务表编辑</h2><span class="pill">Editable</span></div>
+        <div class="content">
+          <div>
+            <h3>市场需求表</h3>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>市场</th><th>需求</th><th>最大配送天数</th></tr>
+                </thead>
+                <tbody id="marketRows"></tbody>
+              </table>
+            </div>
+          </div>
+          <div>
+            <h3>仓库能力表</h3>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>仓库</th><th>容量</th><th>固定成本</th><th>处理成本</th></tr>
+                </thead>
+                <tbody id="warehouseRows"></tbody>
+              </table>
+            </div>
+          </div>
+          <div>
+            <h3>补货需求表</h3>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>周</th><th>需求</th></tr>
+                </thead>
+                <tbody id="replenishmentRows"></tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </section>
       <section>
@@ -661,6 +711,7 @@
       field("upstreamEditor").value = JSON.stringify(data.data, null, 2);
       field("upstreamStatus").textContent = `已加载：${data.data_source}`;
       field("upstreamJson").textContent = JSON.stringify(data.data, null, 2);
+      renderUpstreamTables();
     }
 
     function upstreamRows(response) {
@@ -675,6 +726,58 @@
         ["补货基础表", `${replenishment.weeks.length} 周 / ${Object.keys(replenishment.lanes).length} 渠道`, "周需求、库存、运输渠道和补货成本"],
         ["服务基础表", `${Object.keys(serviceLevel.markets).length} 市场 / ${Object.keys(serviceLevel.services).length} 服务`, "服务商容量、成本和平均时效约束"]
       ];
+    }
+
+    function renderUpstreamTables() {
+      if (!upstreamData) {
+        return;
+      }
+      field("marketRows").innerHTML = Object.entries(upstreamData.network.markets).map(([market, data]) => (
+        `<tr>
+          <td><strong>${market}</strong></td>
+          <td><input data-upstream="market" data-name="${market}" data-field="demand" type="number" step="1" value="${data.demand}"></td>
+          <td><input data-upstream="market" data-name="${market}" data-field="max_delivery_days" type="number" step="1" value="${data.max_delivery_days}"></td>
+        </tr>`
+      )).join("");
+      field("warehouseRows").innerHTML = Object.entries(upstreamData.network.warehouses).map(([warehouse, data]) => (
+        `<tr>
+          <td><strong>${warehouse}</strong></td>
+          <td><input data-upstream="warehouse" data-name="${warehouse}" data-field="capacity" type="number" step="1" value="${data.capacity}"></td>
+          <td><input data-upstream="warehouse" data-name="${warehouse}" data-field="fixed_cost" type="number" step="100" value="${data.fixed_cost}"></td>
+          <td><input data-upstream="warehouse" data-name="${warehouse}" data-field="handling_cost" type="number" step="0.05" value="${data.handling_cost}"></td>
+        </tr>`
+      )).join("");
+      field("replenishmentRows").innerHTML = upstreamData.replenishment.weeks.map((week) => (
+        `<tr>
+          <td><strong>${week}</strong></td>
+          <td><input data-upstream="replenishment_demand" data-name="${week}" type="number" step="1" value="${upstreamData.replenishment.demand[week]}"></td>
+        </tr>`
+      )).join("");
+      document.querySelectorAll("[data-upstream]").forEach((input) => {
+        input.addEventListener("input", updateUpstreamFromTable);
+        input.addEventListener("change", updateUpstreamFromTable);
+      });
+    }
+
+    function updateUpstreamFromTable(event) {
+      const input = event.target;
+      const scope = input.dataset.upstream;
+      const name = input.dataset.name;
+      const value = Number(input.value);
+      if (!Number.isFinite(value)) {
+        field("upstreamStatus").textContent = "表格里有无效数字。";
+        return;
+      }
+      if (scope === "market") {
+        upstreamData.network.markets[name][input.dataset.field] = value;
+      } else if (scope === "warehouse") {
+        upstreamData.network.warehouses[name][input.dataset.field] = value;
+      } else if (scope === "replenishment_demand") {
+        upstreamData.replenishment.demand[name] = value;
+      }
+      field("upstreamEditor").value = JSON.stringify(upstreamData, null, 2);
+      field("upstreamJson").textContent = JSON.stringify(upstreamData, null, 2);
+      field("upstreamStatus").textContent = "表格修改已同步到 JSON，点击保存后写入上游数据层。";
     }
 
     function selectPlaybook(id) {
@@ -887,7 +990,10 @@
     function formatUpstreamData() {
       try {
         const data = JSON.parse(field("upstreamEditor").value);
+        upstreamData = data;
         field("upstreamEditor").value = JSON.stringify(data, null, 2);
+        field("upstreamJson").textContent = JSON.stringify(data, null, 2);
+        renderUpstreamTables();
         field("upstreamStatus").textContent = "JSON 格式正确。";
       } catch (error) {
         field("upstreamStatus").textContent = `JSON 格式错误：${error.message}`;
