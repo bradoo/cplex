@@ -306,6 +306,98 @@
       font-weight: 760;
     }
 
+    .lineage-diagram {
+      display: grid;
+      gap: 12px;
+    }
+
+    .lineage-legend {
+      display: grid;
+      grid-template-columns: 160px repeat(6, minmax(120px, 1fr));
+      gap: 8px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 850;
+    }
+
+    .lineage-flow {
+      display: grid;
+      grid-template-columns: 160px repeat(6, minmax(120px, 1fr));
+      gap: 8px;
+      align-items: stretch;
+    }
+
+    .lineage-model {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 11px;
+      background: #fff;
+      display: grid;
+      align-content: center;
+      gap: 5px;
+    }
+
+    .lineage-node {
+      min-height: 96px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 11px;
+      background: #fff;
+      display: grid;
+      gap: 8px;
+      align-content: start;
+      position: relative;
+    }
+
+    .lineage-node.source { border-color: #bcebd5; background: var(--soft-green); }
+    .lineage-node.config { border-color: #b9cef9; background: var(--soft-blue); }
+    .lineage-node.transform { border-color: #ffd799; background: var(--soft-amber); }
+    .lineage-node.input { border-color: #d8c4ff; background: #f3edff; }
+    .lineage-node.solver { border-color: #bac6d0; background: #f4f7f9; }
+    .lineage-node.result { border-color: #f5bbb7; background: var(--soft-red); }
+
+    .lineage-node strong {
+      font-size: 14px;
+      color: var(--ink);
+    }
+
+    .lineage-node span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .lineage-node::after {
+      content: "";
+      position: absolute;
+      right: -9px;
+      top: 50%;
+      width: 9px;
+      height: 1px;
+      background: #9aa5b1;
+    }
+
+    .lineage-node.result::after {
+      display: none;
+    }
+
+    .lineage-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+
+    .lineage-tag {
+      border: 1px solid rgba(59, 73, 90, 0.14);
+      border-radius: 999px;
+      padding: 3px 7px;
+      background: rgba(255, 255, 255, 0.7);
+      color: #435161;
+      font-size: 11px;
+      font-weight: 760;
+    }
+
     .row {
       display: grid;
       grid-template-columns: 150px 1fr auto;
@@ -408,6 +500,8 @@
     @media (max-width: 1040px) {
       .top, .page, .two-col { grid-template-columns: 1fr; }
       .flow, .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .lineage-diagram { overflow-x: auto; padding-bottom: 6px; }
+      .lineage-legend, .lineage-flow { min-width: 940px; }
       .health { grid-template-columns: 1fr; }
     }
 
@@ -629,6 +723,12 @@
 
     <div class="page" data-layer="lineage">
       <section>
+        <div class="section-head"><h2>可视化数据血缘</h2><span class="pill">Flow</span></div>
+        <div class="content">
+          <div class="lineage-diagram" id="lineageDiagram"></div>
+        </div>
+      </section>
+      <section>
         <div class="section-head"><h2>数据血缘总览</h2><span class="pill">Lineage</span></div>
         <div class="content">
           <div id="lineageNodeRows" class="rows"></div>
@@ -749,6 +849,7 @@
     async function loadLineage() {
       const response = await fetch("/api/platform/lineage");
       const data = await response.json();
+      renderLineageDiagram(data);
       field("lineageNodeRows").innerHTML = data.nodes.map((node) => (
         `<div class="row">
           <strong>${node.name}</strong>
@@ -772,6 +873,38 @@
           <td>${row.used_by}</td>
         </tr>`
       )).join("");
+    }
+
+    function renderLineageDiagram(data) {
+      const headings = ["求解模块", "上游业务表", "场景参数", "转换函数", "CPLEX 入参", "求解器", "输出结果"];
+      field("lineageDiagram").innerHTML = `
+        <div class="lineage-legend">
+          ${headings.map((heading) => `<span>${heading}</span>`).join("")}
+        </div>
+        ${data.model_flows.map((flow) => `
+          <div class="lineage-flow">
+            <div class="lineage-model"><strong>${flow.model}</strong><span>实际运行链路</span></div>
+            ${nodeCard("上游数据", flow.upstream, "source")}
+            ${nodeCard("配置覆盖", flow.config, "config")}
+            ${nodeCard(flow.transform, ["生成 runtime payload"], "transform")}
+            ${nodeCard("model_inputs", flow.input, "input")}
+            ${nodeCard(flow.solver, ["DOcplex 建模求解"], "solver")}
+            ${nodeCard("结果对象", flow.result, "result")}
+          </div>
+        `).join("")}
+      `;
+    }
+
+    function nodeCard(title, details, type) {
+      const values = Array.isArray(details) ? details : [details];
+      return `
+        <div class="lineage-node ${type}">
+          <strong>${title}</strong>
+          <div class="lineage-tags">
+            ${values.map((value) => `<span class="lineage-tag">${value}</span>`).join("")}
+          </div>
+        </div>
+      `;
     }
 
     function upstreamRows(response) {
