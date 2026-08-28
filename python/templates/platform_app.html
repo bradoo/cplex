@@ -523,6 +523,35 @@
       font-weight: 700;
     }
 
+    .readiness-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .readiness-item {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      background: #fff;
+      display: grid;
+      gap: 3px;
+    }
+
+    .readiness-item.done {
+      border-color: #bcebd5;
+      background: var(--soft-green);
+    }
+
+    .readiness-item.warn {
+      border-color: #ffd799;
+      background: var(--soft-amber);
+    }
+
+    .readiness-item strong {
+      font-size: 13px;
+    }
+
     .explain-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -607,7 +636,7 @@
 
     @media (max-width: 1040px) {
       .top, .page, .two-col { grid-template-columns: 1fr; }
-      .flow, .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .flow, .grid, .readiness-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .explain-grid { grid-template-columns: 1fr; }
       .diff-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .lineage-diagram { overflow-x: auto; padding-bottom: 6px; }
@@ -616,7 +645,7 @@
     }
 
     @media (max-width: 640px) {
-      .flow, .grid, .diff-grid { grid-template-columns: 1fr; }
+      .flow, .grid, .diff-grid, .readiness-grid { grid-template-columns: 1fr; }
       .flow-step::after { display: none; }
       .row, .bar-row { grid-template-columns: 1fr; }
     }
@@ -804,6 +833,10 @@
             <div class="metric"><span class="label">补货成本</span><strong id="replenishmentCost" class="value">-</strong></div>
             <div id="shortageCard" class="metric"><span class="label">总缺口</span><strong id="shortage" class="value">-</strong></div>
           </div>
+          <div>
+            <h3>决策闭环状态</h3>
+            <div id="readinessRows" class="readiness-grid"></div>
+          </div>
           <div class="two-col">
             <div>
               <h3>成本结构</h3>
@@ -906,6 +939,8 @@
     let latestConfig = null;
     let upstreamData = null;
     let runHistoryRows = [];
+    let lastReportPath = "";
+    let latestCaseData = null;
     const activeLayer = document.body.dataset.activeLayer || "upstream";
     const stateKey = "cplexPlatformPocState";
 
@@ -1201,6 +1236,8 @@
 
     async function run(saveHistory = true) {
       saveSharedState();
+      lastReportPath = "";
+      field("exportStatus").textContent = "报告会导出到 python/reports 目录。";
       field("current").textContent = "求解中";
       field("inputPlaybook").textContent = "生成中";
       const response = await fetch("/api/platform/run", {
@@ -1215,6 +1252,7 @@
 
     function renderCase(data) {
       const summary = data.summary;
+      latestCaseData = data;
       field("current").textContent = data.playbook_name;
       field("inputPlaybook").textContent = data.playbook_name;
       field("totalCost").textContent = fmt(summary.total_cost);
@@ -1231,6 +1269,7 @@
       latestModelInputs = data.model_inputs;
       renderLineage(data.model_inputs.lineage);
       renderInputs();
+      renderReadiness(data);
       renderBars(summary);
       renderModelRows(data);
       renderDifference(data.difference);
@@ -1271,6 +1310,28 @@
           <span class="small">${fmt(value)}</span>
         </div>`
       )).join("");
+    }
+
+    function renderReadiness(data) {
+      const modelSections = Object.keys(data.model_inputs || {}).filter((key) => key !== "lineage");
+      const allSolved = [data.network, data.replenishment, data.service_mix, data.staffing].every((item) => item.status === "optimal");
+      const historySaved = Boolean(data.run_record);
+      const reportReady = Boolean(lastReportPath);
+      const rows = [
+        ["上游数据", "已接入", data.model_inputs.lineage.upstream_source, true],
+        ["模型入参", `${modelSections.length} 个模型`, modelSections.join(", "), modelSections.length >= 4],
+        ["CPLEX 求解", allSolved ? "已完成" : "需检查", allSolved ? "四个模型均 optimal" : "至少一个模型非 optimal", allSolved],
+        ["差异解释", data.difference ? "已生成" : "未生成", data.difference ? data.difference.headline : "-", Boolean(data.difference)],
+        ["运行记录", historySaved ? "已保存" : "未保存", historySaved ? data.run_record.run_id : "自动加载或回放不会写历史", historySaved],
+        ["演示报告", reportReady ? "已导出" : "未导出", reportReady ? lastReportPath : "点击导出演示报告生成 Markdown", reportReady]
+      ];
+      field("readinessRows").innerHTML = rows.map(([name, status, detail, done]) => `
+        <div class="readiness-item ${done ? "done" : "warn"}">
+          <strong>${name}</strong>
+          <span class="status">${status}</span>
+          <span class="small">${detail}</span>
+        </div>
+      `).join("");
     }
 
     function renderDifference(difference) {
@@ -1513,7 +1574,11 @@
         field("exportStatus").textContent = `导出失败：${data.message || "未知错误"}`;
         return;
       }
+      lastReportPath = data.report.path;
       field("exportStatus").innerHTML = `已导出：<strong>${data.report.path}</strong>`;
+      if (latestCaseData) {
+        renderReadiness(latestCaseData);
+      }
     }
 
     function formatDataLayer() {
