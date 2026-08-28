@@ -305,6 +305,33 @@ def save_upstream_data(data):
     save_json_file(UPSTREAM_DATA_PATH, data)
 
 
+def save_starrocks_upstream_data(data):
+    with starrocks_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("TRUNCATE TABLE upstream_network_markets")
+            cursor.executemany(
+                "INSERT INTO upstream_network_markets (market, demand, max_delivery_days) VALUES (%s, %s, %s)",
+                [
+                    (market, values["demand"], values["max_delivery_days"])
+                    for market, values in data["network"]["markets"].items()
+                ],
+            )
+            cursor.execute("TRUNCATE TABLE upstream_network_warehouses")
+            cursor.executemany(
+                "INSERT INTO upstream_network_warehouses (warehouse, capacity, fixed_cost, handling_cost) VALUES (%s, %s, %s, %s)",
+                [
+                    (warehouse, values["capacity"], values["fixed_cost"], values["handling_cost"])
+                    for warehouse, values in data["network"]["warehouses"].items()
+                ],
+            )
+            cursor.execute("TRUNCATE TABLE upstream_replenishment_demand")
+            cursor.executemany(
+                "INSERT INTO upstream_replenishment_demand (week_name, demand) VALUES (%s, %s)",
+                list(data["replenishment"]["demand"].items()),
+            )
+        connection.commit()
+
+
 def save_json_file(path, data):
     path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(
@@ -1245,14 +1272,23 @@ def update_upstream_data():
     payload = request.get_json(silent=True) or {}
     data = payload.get("data")
     if starrocks_upstream_enabled() and isinstance(data, dict):
-        data["orders"] = load_json_upstream_data().get("orders", [])
-        metadata = data.setdefault("metadata", {})
-        metadata.pop("upstream_storage", None)
-        metadata.pop("order_sample_limit", None)
+        validation_data = dict(data)
+        validation_data["orders"] = load_json_upstream_data().get("orders", [])
+        validation_error = validate_upstream_data(validation_data)
+        if validation_error:
+            return jsonify({"status": "error", "message": validation_error}), 400
+        save_starrocks_upstream_data(data)
+        return jsonify(
+            {
+                "status": "ok",
+                "message": "StarRocks upstream data saved",
+                "data_source": upstream_data_source_label(data),
+            }
+        )
+
     validation_error = validate_upstream_data(data)
     if validation_error:
         return jsonify({"status": "error", "message": validation_error}), 400
-
     save_upstream_data(data)
     return jsonify(
         {
