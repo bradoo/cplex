@@ -846,7 +846,24 @@
             <h3>参数影响分析</h3>
             <div id="parameterImpactRows" class="impact-grid"></div>
           </div>
-          <button class="run" id="runFromConfig">保存临时参数并运行</button>
+          <div class="button-row">
+            <button id="runFromConfig">保存临时参数并运行</button>
+            <button class="run" id="saveConfig">保存到场景配置表</button>
+          </div>
+          <div id="configStatus" class="status-line">临时参数会跟随页面跳转；保存后会写入场景配置层。</div>
+        </div>
+      </section>
+      <section>
+        <div class="section-head"><h2>配置保存记录</h2><span class="pill">Audit</span></div>
+        <div class="content">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>时间</th><th>方案</th><th>修改人</th><th>变更字段</th></tr>
+              </thead>
+              <tbody id="configAuditRows"></tbody>
+            </table>
+          </div>
         </div>
       </section>
     </div>
@@ -1089,6 +1106,25 @@
       const data = await response.json();
       platformData = data.data;
       field("configSource").textContent = data.data_source;
+      field("configStatus").textContent = `已加载：${data.data_source}`;
+    }
+
+    async function loadConfigAudit() {
+      const response = await fetch("/api/platform/config-audit?limit=8");
+      const data = await response.json();
+      const rows = data.rows || [];
+      if (!rows.length) {
+        field("configAuditRows").innerHTML = `<tr><td colspan="4" class="small">暂无配置保存记录。</td></tr>`;
+        return;
+      }
+      field("configAuditRows").innerHTML = rows.map((row) => `
+        <tr>
+          <td>${new Date(row.created_at).toLocaleString("zh-CN")}</td>
+          <td><strong>${row.playbook_id}</strong></td>
+          <td>${row.actor}</td>
+          <td>${row.changed_fields.map((item) => `${item.field}: ${item.before} -> ${item.after}`).join("<br>")}</td>
+        </tr>
+      `).join("");
     }
 
     async function loadUpstreamData() {
@@ -1404,10 +1440,12 @@
         field(id).addEventListener("input", () => {
           saveSharedState();
           renderParameterImpact();
+          field("configStatus").textContent = "参数已暂存，保存后写入场景配置层。";
         });
         field(id).addEventListener("change", () => {
           saveSharedState();
           renderParameterImpact();
+          field("configStatus").textContent = "参数已暂存，保存后写入场景配置层。";
         });
       });
     }
@@ -1901,6 +1939,10 @@
 
     async function saveUpstreamData() {
       const data = upstreamData;
+      if (!data) {
+        field("upstreamStatus").textContent = "上游数据还未加载完成。";
+        return;
+      }
       field("upstreamStatus").textContent = "保存中...";
       const response = await fetch("/api/platform/upstream-data", {
         method: "PUT",
@@ -1916,17 +1958,45 @@
       await Promise.all([loadUpstreamData(), loadSourceStatus(), loadDataQuality(), loadScaleSnapshot(), run(), compare()]);
     }
 
+    async function saveConfigData() {
+      if (!platformData || !platformData.playbooks || !platformData.playbooks[selected]) {
+        field("configStatus").textContent = "场景配置还未加载完成。";
+        return;
+      }
+      const config = platformData.playbooks[selected];
+      config.demand_multiplier = Number(field("demand").value);
+      config.air_capacity = Number(field("air").value);
+      config.unfulfilled_penalty = Number(field("penalty").value);
+      config.sla_extra_days = Number(field("sla").value);
+      field("configStatus").textContent = "保存中...";
+      const response = await fetch("/api/platform/data", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: platformData })
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        field("configStatus").textContent = `保存失败：${result.message}`;
+        return;
+      }
+      playbookDefaults[selected] = { ...playbookDefaults[selected], ...config };
+      saveSharedState();
+      field("configStatus").textContent = `已保存到：${result.data_source}`;
+      await Promise.all([loadOverview(), loadDataLayer(), loadConfigAudit(), run(), compare(), loadLineage()]);
+    }
+
     activateLayer();
     renderRunSteps();
     field("run").addEventListener("click", () => run(true));
     field("runFromConfig").addEventListener("click", () => run(true));
+    field("saveConfig").addEventListener("click", saveConfigData);
     field("runFromInputs").addEventListener("click", () => run(true));
     field("compare").addEventListener("click", compare);
     field("exportReport").addEventListener("click", exportReport);
     field("reloadUpstream").addEventListener("click", loadUpstreamData);
     field("saveUpstream").addEventListener("click", saveUpstreamData);
     field("modelInputSelect").addEventListener("change", renderInputs);
-    loadOverview().then(() => Promise.all([run(false), compare(), loadDataLayer(), loadUpstreamData(), loadSourceStatus(), loadDataQuality(), loadScaleSnapshot(), loadLineage(), loadRunHistory(), loadConstraintExplanations()]));
+    loadOverview().then(() => Promise.all([run(false), compare(), loadDataLayer(), loadConfigAudit(), loadUpstreamData(), loadSourceStatus(), loadDataQuality(), loadScaleSnapshot(), loadLineage(), loadRunHistory(), loadConstraintExplanations()]));
   </script>
 </body>
 </html>

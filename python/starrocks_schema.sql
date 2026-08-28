@@ -157,3 +157,15 @@ CREATE TABLE IF NOT EXISTS platform_capabilities (
 DUPLICATE KEY(capability)
 DISTRIBUTED BY HASH(capability) BUCKETS 4
 PROPERTIES ("replication_num" = "1");
+
+CREATE TABLE IF NOT EXISTS platform_config_audit (
+  audit_id VARCHAR(32) NOT NULL,
+  created_at DATETIME NOT NULL,
+  actor VARCHAR(64) NOT NULL,
+  playbook_id VARCHAR(64) NOT NULL,
+  changed_fields VARCHAR(2048) NOT NULL,
+  config_snapshot VARCHAR(4096) NOT NULL
+)
+DUPLICATE KEY(audit_id)
+DISTRIBUTED BY HASH(audit_id) BUCKETS 4
+PROPERTIES ("replication_num" = "1");

@@ -24,6 +24,7 @@ RUN_HISTORY_PATH = Path(__file__).resolve().parent / "reports" / "platform_runs.
 REPORTS_DIR = Path(__file__).resolve().parent / "reports"
 NETWORK_MODES = {"strict", "soft_capacity", "capacity_expansion"}
 STARROCKS_DEFAULT_LIMIT = 1000
+CONFIG_AUDIT_KEYS = ["demand_multiplier", "sla_extra_days", "air_capacity", "ocean_lead_time", "unfulfilled_penalty", "network_mode", "staff_peak", "soft_staffing"]
 
 
 def load_platform_data():
@@ -352,16 +353,17 @@ def playbooks():
     return load_platform_data()["playbooks"]
 
 
-def save_platform_data(data):
+def save_platform_data(data, previous_data=None):
     if starrocks_upstream_enabled():
-        save_starrocks_platform_data(data)
+        save_starrocks_platform_data(data, previous_data)
         return
     save_json_file(DATA_PATH, data)
 
 
-def save_starrocks_platform_data(data):
+def save_starrocks_platform_data(data, previous_data=None):
     with starrocks_connection() as connection:
         with connection.cursor() as cursor:
+            ensure_starrocks_config_audit_table(cursor)
             cursor.execute("TRUNCATE TABLE platform_playbooks")
             cursor.executemany(
                 """
@@ -402,7 +404,94 @@ def save_starrocks_platform_data(data):
                 "INSERT INTO platform_capabilities (capability, display_order) VALUES (%s, %s)",
                 [(capability, index) for index, capability in enumerate(data["capabilities"])],
             )
+            append_config_audit_rows(cursor, previous_data or {}, data)
         connection.commit()
+
+
+def ensure_starrocks_config_audit_table(cursor):
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS platform_config_audit (
+          audit_id VARCHAR(32) NOT NULL,
+          created_at DATETIME NOT NULL,
+          actor VARCHAR(64) NOT NULL,
+          playbook_id VARCHAR(64) NOT NULL,
+          changed_fields VARCHAR(2048) NOT NULL,
+          config_snapshot VARCHAR(4096) NOT NULL
+        )
+        DUPLICATE KEY(audit_id)
+        DISTRIBUTED BY HASH(audit_id) BUCKETS 4
+        PROPERTIES ("replication_num" = "1")
+        """
+    )
+
+
+def append_config_audit_rows(cursor, previous_data, next_data):
+    previous_playbooks = previous_data.get("playbooks", {}) if isinstance(previous_data, dict) else {}
+    rows = []
+    created_at = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M:%S")
+    for playbook_id, next_config in next_data.get("playbooks", {}).items():
+        previous_config = previous_playbooks.get(playbook_id, {})
+        changes = []
+        for key in CONFIG_AUDIT_KEYS:
+            if previous_config.get(key) != next_config.get(key):
+                changes.append(
+                    {
+                        "field": key,
+                        "before": previous_config.get(key),
+                        "after": next_config.get(key),
+                    }
+                )
+        if changes:
+            rows.append(
+                (
+                    uuid.uuid4().hex[:12],
+                    created_at,
+                    "platform_ui",
+                    playbook_id,
+                    json.dumps(changes, ensure_ascii=False),
+                    json.dumps(public_config(next_config), ensure_ascii=False),
+                )
+            )
+    if rows:
+        cursor.executemany(
+            """
+            INSERT INTO platform_config_audit
+            (audit_id, created_at, actor, playbook_id, changed_fields, config_snapshot)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """,
+            rows,
+        )
+
+
+def load_config_audit(limit=10):
+    if not starrocks_upstream_enabled():
+        return []
+    with starrocks_connection() as connection:
+        with connection.cursor() as cursor:
+            ensure_starrocks_config_audit_table(cursor)
+            cursor.execute(
+                """
+                SELECT audit_id, created_at, actor, playbook_id, changed_fields, config_snapshot
+                FROM platform_config_audit
+                ORDER BY created_at DESC, audit_id DESC
+                LIMIT %s
+                """,
+                (limit,),
+            )
+            rows = []
+            for row in cursor.fetchall():
+                rows.append(
+                    {
+                        "audit_id": row["audit_id"],
+                        "created_at": row["created_at"].isoformat(sep=" ") if hasattr(row["created_at"], "isoformat") else str(row["created_at"]),
+                        "actor": row["actor"],
+                        "playbook_id": row["playbook_id"],
+                        "changed_fields": json.loads(row["changed_fields"]),
+                        "config_snapshot": json.loads(row["config_snapshot"]),
+                    }
+                )
+            return rows
 
 
 def save_upstream_data(data):
@@ -1073,16 +1162,30 @@ def get_platform_data():
 def update_platform_data():
     payload = request.get_json(silent=True) or {}
     data = payload.get("data")
+    previous_data = load_platform_data() if starrocks_upstream_enabled() else None
     validation_error = validate_platform_data(data)
     if validation_error:
         return jsonify({"status": "error", "message": validation_error}), 400
 
-    save_platform_data(data)
+    save_platform_data(data, previous_data)
     return jsonify(
         {
             "status": "ok",
             "message": "Data layer saved",
             "data_source": platform_data_source_label(),
+        }
+    )
+
+
+@app.get("/api/platform/config-audit")
+def get_config_audit():
+    limit = request.args.get("limit", default=10, type=int)
+    limit = max(1, min(limit, 50))
+    return jsonify(
+        {
+            "status": "ok",
+            "data_source": platform_data_source_label(),
+            "rows": load_config_audit(limit),
         }
     )
 
