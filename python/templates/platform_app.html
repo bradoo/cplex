@@ -766,10 +766,10 @@
             <ul class="actions" id="actions"></ul>
           </div>
           <div>
-            <h3>三方案对比</h3>
+            <h3>三方案差异矩阵</h3>
             <table>
-              <thead>
-                <tr><th>方案</th><th>成本</th><th>缺口</th><th>审批</th></tr>
+              <thead id="compareHead">
+                <tr><th>指标</th><th>基准运营方案</th><th>旺季高峰方案</th><th>稳健服务方案</th></tr>
               </thead>
               <tbody id="compareRows"></tbody>
             </table>
@@ -1272,14 +1272,29 @@
     async function compare() {
       const response = await fetch("/api/platform/compare");
       const data = await response.json();
-      field("compareRows").innerHTML = data.rows.map((row) => (
+      const matrix = data.matrix;
+      field("compareHead").innerHTML = `
+        <tr>
+          <th>指标</th>
+          ${matrix.columns.map((column) => `<th>${column.name}</th>`).join("")}
+        </tr>
+      `;
+      field("compareRows").innerHTML = matrix.rows.map((row) => (
         `<tr>
-          <td><strong>${row.name}</strong></td>
-          <td>${fmt(row.summary.total_cost)}</td>
-          <td>${fmt(row.summary.total_shortage)}</td>
-          <td>${row.summary.approval_level}</td>
+          <td><strong>${row.metric}</strong></td>
+          ${row.values.map((value) => `<td>${formatMatrixValue(value)}</td>`).join("")}
         </tr>`
       )).join("");
+    }
+
+    function formatMatrixValue(value) {
+      if (typeof value === "number") {
+        return fmt(value);
+      }
+      if (typeof value === "boolean") {
+        return value ? "是" : "否";
+      }
+      return value ?? "-";
     }
 
     async function loadRunHistory() {

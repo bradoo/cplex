@@ -584,10 +584,38 @@ def compare_platform_cases():
             {
                 "playbook": playbook_id,
                 "name": result["playbook_name"],
+                "config": result["config"],
                 "summary": result["summary"],
+                "difference": result["difference"],
+                "recommendation": result["summary"]["actions"][0] if result["summary"]["actions"] else "-",
             }
         )
-    return jsonify({"status": "ok", "rows": rows})
+    return jsonify({"status": "ok", "rows": rows, "matrix": build_compare_matrix(rows)})
+
+
+def build_compare_matrix(rows):
+    metric_rows = [
+        ("定位", lambda row: row["config"].get("description", "-")),
+        ("需求倍率", lambda row: row["config"].get("demand_multiplier", "-")),
+        ("空运周容量", lambda row: row["config"].get("air_capacity", "-")),
+        ("SLA 放宽天数", lambda row: row["config"].get("sla_extra_days", "-")),
+        ("仓网模式", lambda row: row["config"].get("network_mode", "-")),
+        ("综合成本", lambda row: row["summary"].get("total_cost", 0)),
+        ("总缺口", lambda row: row["summary"].get("total_shortage", 0)),
+        ("审批分层", lambda row: row["summary"].get("approval_level", "-")),
+        ("相对基准", lambda row: row["difference"].get("headline", "-")),
+        ("推荐动作", lambda row: row.get("recommendation", "-")),
+    ]
+    return {
+        "columns": [{"playbook": row["playbook"], "name": row["name"]} for row in rows],
+        "rows": [
+            {
+                "metric": metric,
+                "values": [reader(row) for row in rows],
+            }
+            for metric, reader in metric_rows
+        ],
+    }
 
 
 @app.post("/api/platform/run")
