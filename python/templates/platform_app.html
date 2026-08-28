@@ -541,6 +541,26 @@
       font-size: 13px;
     }
 
+    .impact-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .impact-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 11px;
+      background: #fff;
+      display: grid;
+      gap: 5px;
+    }
+
+    .impact-card.changed {
+      border-color: #ffd799;
+      background: var(--soft-amber);
+    }
+
     .explain-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -610,7 +630,7 @@
 
     @media (max-width: 1040px) {
       .top, .page, .two-col { grid-template-columns: 1fr; }
-      .flow, .grid, .readiness-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .flow, .grid, .readiness-grid, .impact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .explain-grid { grid-template-columns: 1fr; }
       .diff-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .lineage-diagram { overflow-x: auto; padding-bottom: 6px; }
@@ -619,7 +639,7 @@
     }
 
     @media (max-width: 640px) {
-      .flow, .grid, .diff-grid, .readiness-grid { grid-template-columns: 1fr; }
+      .flow, .grid, .diff-grid, .readiness-grid, .impact-grid { grid-template-columns: 1fr; }
       .flow-step::after { display: none; }
       .row, .bar-row { grid-template-columns: 1fr; }
     }
@@ -731,6 +751,10 @@
               <label for="sla">SLA 放宽天数</label>
               <input id="sla" type="number" min="0" max="3" step="1">
             </div>
+          </div>
+          <div>
+            <h3>参数影响分析</h3>
+            <div id="parameterImpactRows" class="impact-grid"></div>
           </div>
           <button class="run" id="runFromConfig">保存临时参数并运行</button>
         </div>
@@ -1196,6 +1220,7 @@
       field("air").value = config.air_capacity ?? 900;
       field("penalty").value = config.unfulfilled_penalty ?? 50;
       field("sla").value = config.sla_extra_days ?? 0;
+      renderParameterImpact();
     }
 
     function applySavedOrDefaultValues() {
@@ -1207,12 +1232,19 @@
         field("penalty").value = saved.overrides.unfulfilled_penalty ?? field("penalty").value;
         field("sla").value = saved.overrides.sla_extra_days ?? field("sla").value;
       }
+      renderParameterImpact();
     }
 
     function bindConfigPersistence() {
       ["demand", "air", "penalty", "sla"].forEach((id) => {
-        field(id).addEventListener("input", saveSharedState);
-        field(id).addEventListener("change", saveSharedState);
+        field(id).addEventListener("input", () => {
+          saveSharedState();
+          renderParameterImpact();
+        });
+        field(id).addEventListener("change", () => {
+          saveSharedState();
+          renderParameterImpact();
+        });
       });
     }
 
@@ -1223,6 +1255,36 @@
         unfulfilled_penalty: field("penalty").value,
         sla_extra_days: field("sla").value
       };
+    }
+
+    function renderParameterImpact() {
+      if (!playbookDefaults.baseline || !field("parameterImpactRows")) {
+        return;
+      }
+      const baseline = playbookDefaults.baseline;
+      const current = {
+        demand_multiplier: Number(field("demand").value),
+        air_capacity: Number(field("air").value),
+        unfulfilled_penalty: Number(field("penalty").value),
+        sla_extra_days: Number(field("sla").value)
+      };
+      const impacts = [
+        ["需求倍率", "仓网 / 服务 / 补货", "需求覆盖、仓库容量、服务商容量", baseline.demand_multiplier, current.demand_multiplier],
+        ["空运周容量", "补货模型", "渠道容量、缺货罚分", baseline.air_capacity, current.air_capacity],
+        ["缺口罚分", "仓网 / 补货", "未履约变量、缺货变量", baseline.unfulfilled_penalty, current.unfulfilled_penalty],
+        ["SLA 放宽天数", "仓网模型", "可用线路、配送时效约束", baseline.sla_extra_days, current.sla_extra_days]
+      ];
+      field("parameterImpactRows").innerHTML = impacts.map(([name, model, constraint, baseValue, value]) => {
+        const changed = Number(baseValue) !== Number(value);
+        return `
+          <div class="impact-card ${changed ? "changed" : ""}">
+            <strong>${name}</strong>
+            <span class="small">影响模型：${model}</span>
+            <span class="small">影响约束：${constraint}</span>
+            <span class="status">${changed ? `${baseValue} -> ${value}` : "与基准一致"}</span>
+          </div>
+        `;
+      }).join("");
     }
 
     async function run(saveHistory = true) {
@@ -1548,6 +1610,7 @@
       }
       document.querySelectorAll("#playbooks button").forEach((el) => el.classList.toggle("active", el.dataset.id === selected));
       applyRecordConfig(record.config || {});
+      renderParameterImpact();
       saveSharedState();
       field("exportStatus").textContent = `正在回放运行记录 ${runId}...`;
       await run(false);
@@ -1559,6 +1622,7 @@
       field("air").value = config.air_capacity ?? field("air").value;
       field("penalty").value = config.unfulfilled_penalty ?? field("penalty").value;
       field("sla").value = config.sla_extra_days ?? field("sla").value;
+      renderParameterImpact();
     }
 
     function formatRunTime(value) {
