@@ -799,7 +799,14 @@ def compare_platform_cases():
                 "recommendation": result["summary"]["actions"][0] if result["summary"]["actions"] else "-",
             }
         )
-    return jsonify({"status": "ok", "rows": rows, "matrix": build_compare_matrix(rows)})
+    return jsonify(
+        {
+            "status": "ok",
+            "rows": rows,
+            "matrix": build_compare_matrix(rows),
+            "recommendation": build_scenario_recommendation(rows),
+        }
+    )
 
 
 def build_compare_matrix(rows):
@@ -824,6 +831,37 @@ def build_compare_matrix(rows):
             }
             for metric, reader in metric_rows
         ],
+    }
+
+
+def build_scenario_recommendation(rows):
+    ranked = sorted(
+        rows,
+        key=lambda row: (
+            row["summary"].get("total_shortage", 0),
+            row["summary"].get("approval_level") == "管理层审批",
+            row["summary"].get("total_cost", 0),
+        ),
+    )
+    winner = ranked[0]
+    alternatives = [row for row in ranked[1:]]
+    reason = (
+        f"{winner['name']} 在当前三方案中总缺口最低，为 {winner['summary']['total_shortage']:g}，"
+        f"综合成本为 {winner['summary']['total_cost']:g}，审批分层为 {winner['summary']['approval_level']}。"
+    )
+    if alternatives:
+        next_best = alternatives[0]
+        reason += (
+            f" 相比次优方案 {next_best['name']}，缺口差异为 "
+            f"{winner['summary']['total_shortage'] - next_best['summary']['total_shortage']:g}，"
+            f"成本差异为 {winner['summary']['total_cost'] - next_best['summary']['total_cost']:g}。"
+        )
+    return {
+        "playbook": winner["playbook"],
+        "name": winner["name"],
+        "reason": reason,
+        "recommended_action": winner["recommendation"],
+        "criteria": "优先最小化总缺口；缺口相同时避免管理层审批；再比较综合成本。",
     }
 
 

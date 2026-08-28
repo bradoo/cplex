@@ -828,6 +828,9 @@
           </div>
           <div>
             <h3>三方案差异矩阵</h3>
+            <div id="scenarioRecommendation" class="diff-panel">
+              <p class="small">刷新三方案对比后显示平台推荐方案。</p>
+            </div>
             <table>
               <thead id="compareHead">
                 <tr><th>指标</th><th>基准运营方案</th><th>旺季高峰方案</th><th>稳健服务方案</th></tr>
@@ -1467,6 +1470,7 @@
       const response = await fetch("/api/platform/compare");
       const data = await response.json();
       const matrix = data.matrix;
+      renderScenarioRecommendation(data.recommendation);
       field("compareHead").innerHTML = `
         <tr>
           <th>指标</th>
@@ -1479,6 +1483,23 @@
           ${row.values.map((value) => `<td>${formatMatrixValue(value)}</td>`).join("")}
         </tr>`
       )).join("");
+    }
+
+    function renderScenarioRecommendation(recommendation) {
+      field("scenarioRecommendation").innerHTML = `
+        <p class="diff-headline">推荐方案：${recommendation.name}</p>
+        <div class="row">
+          <strong>推荐逻辑</strong>
+          <span class="small">${recommendation.reason}</span>
+          <span class="status">${recommendation.playbook}</span>
+        </div>
+        <div class="row">
+          <strong>首要动作</strong>
+          <span class="small">${recommendation.recommended_action}</span>
+          <span class="status">Next</span>
+        </div>
+        <p class="small">${recommendation.criteria}</p>
+      `;
     }
 
     function formatMatrixValue(value) {
