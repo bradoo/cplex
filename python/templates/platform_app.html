@@ -726,6 +726,8 @@
         <div class="content">
           <button class="run" id="run">运行当前方案</button>
           <button id="compare">刷新三方案对比</button>
+          <button id="exportReport">导出演示报告</button>
+          <div id="exportStatus" class="status-line">报告会导出到 python/reports 目录。</div>
           <div id="approval" class="approval">审批分层：-</div>
           <p id="decisionNote" class="small">运行后显示决策解释。</p>
           <div>
@@ -1312,6 +1314,21 @@
       });
     }
 
+    async function exportReport() {
+      field("exportStatus").textContent = "导出中...";
+      const response = await fetch("/api/platform/export-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playbook: selected, overrides: overrides() })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        field("exportStatus").textContent = `导出失败：${data.message || "未知错误"}`;
+        return;
+      }
+      field("exportStatus").innerHTML = `已导出：<strong>${data.report.path}</strong>`;
+    }
+
     function formatDataLayer() {
       try {
         const data = JSON.parse(field("dataEditor").value);
@@ -1393,6 +1410,7 @@
     field("runFromConfig").addEventListener("click", () => run(true));
     field("runFromInputs").addEventListener("click", () => run(true));
     field("compare").addEventListener("click", compare);
+    field("exportReport").addEventListener("click", exportReport);
     field("formatData").addEventListener("click", formatDataLayer);
     field("reloadData").addEventListener("click", loadDataLayer);
     field("saveData").addEventListener("click", saveDataLayer);

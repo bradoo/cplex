@@ -19,6 +19,7 @@ app = Flask(__name__)
 DATA_PATH = Path(__file__).resolve().parent / "data" / "platform_poc_data.json"
 UPSTREAM_DATA_PATH = Path(__file__).resolve().parent / "data" / "platform_upstream_data.json"
 RUN_HISTORY_PATH = Path(__file__).resolve().parent / "reports" / "platform_runs.jsonl"
+REPORTS_DIR = Path(__file__).resolve().parent / "reports"
 NETWORK_MODES = {"strict", "soft_capacity", "capacity_expansion"}
 
 
@@ -97,6 +98,118 @@ def build_run_history_record(result):
             "management_readout": difference.get("management_readout", ""),
         },
     }
+
+
+def export_demo_report(result):
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(timezone.utc).astimezone()
+    filename = f"platform_report_{timestamp.strftime('%Y%m%d_%H%M%S')}_{result['playbook']}.md"
+    report_path = REPORTS_DIR / filename
+    report_path.write_text(build_demo_report_markdown(result, timestamp), encoding="utf-8")
+    return {
+        "file": filename,
+        "path": str(report_path.relative_to(Path(__file__).resolve().parent.parent)),
+        "created_at": timestamp.isoformat(timespec="seconds"),
+    }
+
+
+def build_demo_report_markdown(result, timestamp):
+    summary = result["summary"]
+    config = result["config"]
+    difference = result["difference"]
+    lines = [
+        "# CPLEX 优化平台 POC 演示报告",
+        "",
+        f"- 导出时间：{timestamp.isoformat(timespec='seconds')}",
+        f"- 运行方案：{result['playbook_name']} (`{result['playbook']}`)",
+        f"- 审批分层：{summary['approval_level']}",
+        "",
+        "## 1. 决策摘要",
+        "",
+        summary["decision_note"],
+        "",
+        difference["headline"],
+        "",
+        difference["management_readout"],
+        "",
+        "## 2. 核心 KPI",
+        "",
+        "| 指标 | 当前值 |",
+        "| --- | ---: |",
+        f"| 综合成本 | {format_number(summary['total_cost'])} |",
+        f"| 仓网成本 | {format_number(summary['network_cost'])} |",
+        f"| 补货成本 | {format_number(summary['replenishment_cost'])} |",
+        f"| 排班成本 | {format_number(summary['staffing_cost'])} |",
+        f"| 服务组合成本 | {format_number(summary['service_cost'])} |",
+        f"| 总缺口 | {format_number(summary['total_shortage'])} |",
+        "",
+        "## 3. 方案参数",
+        "",
+        "| 参数 | 值 |",
+        "| --- | --- |",
+    ]
+    for key, value in config.items():
+        lines.append(f"| `{key}` | {markdown_cell(value)} |")
+    lines.extend(
+        [
+            "",
+            "## 4. 相对基准差异",
+            "",
+            "| 指标 | 当前 | 基准 | 变化 |",
+            "| --- | ---: | ---: | ---: |",
+        ]
+    )
+    for metric in difference["metrics"]:
+        lines.append(
+            f"| {markdown_cell(metric['label'])} | {format_number(metric['current'])} | "
+            f"{format_number(metric['baseline'])} | {format_signed(metric['delta'])} |"
+        )
+    lines.extend(["", "### 变化原因", ""])
+    lines.extend(f"- {driver}" for driver in difference["drivers"])
+    lines.extend(["", "## 5. 建议动作", ""])
+    lines.extend(f"- {action}" for action in summary["actions"])
+    lines.extend(["", "## 6. 风险提示", ""])
+    lines.extend(f"- {risk}" for risk in summary["risks"])
+    lines.extend(
+        [
+            "",
+            "## 7. 模型结果摘要",
+            "",
+            "| 模型 | 状态 | 摘要 |",
+            "| --- | --- | --- |",
+            f"| 仓网选址与履约 | {markdown_cell(result['network']['status'])} | 开仓 {len(result['network'].get('opened_warehouses') or [])} 个，缺口 {format_number(result['network'].get('total_unfulfilled') or 0)} |",
+            f"| 跨境补货 | {markdown_cell(result['replenishment']['status'])} | 缺货 {format_number(result['replenishment'].get('total_stockout') or 0)}，订单 {len(result['replenishment'].get('orders') or [])} 笔 |",
+            f"| 服务水平组合 | {markdown_cell(result['service_mix']['status'])} | 成本 {format_number(result['service_mix'].get('total_cost') or 0)} |",
+            f"| 人员排班 | {markdown_cell(result['staffing']['status'])} | 模式 {markdown_cell(result['staffing'].get('mode') or '-')}，缺口 {format_number(result['staffing'].get('total_shortage') or 0)} |",
+            "",
+            "## 8. 数据链路",
+            "",
+            f"- 上游数据：{result['model_inputs']['lineage']['upstream_source']}",
+            f"- 场景配置：{result['model_inputs']['lineage']['scenario_config_source']}",
+            f"- 转换逻辑：{result['model_inputs']['lineage']['transform']}",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def format_number(value):
+    number = float(value or 0)
+    if number.is_integer():
+        return f"{int(number):,}"
+    return f"{number:,.2f}"
+
+
+def format_signed(value):
+    number = float(value or 0)
+    if abs(number) < 1e-9:
+        return "0"
+    prefix = "+" if number > 0 else "-"
+    return f"{prefix}{format_number(abs(number))}"
+
+
+def markdown_cell(value):
+    return str(value).replace("|", "\\|")
 
 
 def validate_platform_data(data):
@@ -499,6 +612,26 @@ def get_run_history():
             "status": "ok",
             "data_source": str(RUN_HISTORY_PATH.relative_to(Path(__file__).resolve().parent.parent)),
             "rows": load_run_history(limit),
+        }
+    )
+
+
+@app.post("/api/platform/export-report")
+def export_platform_report():
+    payload = request.get_json(silent=True) or {}
+    playbook_id = payload.get("playbook", "baseline")
+    if playbook_id not in playbooks():
+        return jsonify({"status": "error", "message": f"Unknown playbook: {playbook_id}"}), 400
+
+    result = run_case(playbook_id, payload.get("overrides") or {})
+    report = export_demo_report(result)
+    return jsonify(
+        {
+            "status": "ok",
+            "message": "Demo report exported",
+            "report": report,
+            "summary": result["summary"],
+            "difference": result["difference"],
         }
     )
 

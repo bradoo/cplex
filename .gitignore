@@ -3,3 +3,4 @@ __pycache__/
 *.py[cod]
 .DS_Store
 python/reports/platform_runs.jsonl
+python/reports/platform_report_*.md
