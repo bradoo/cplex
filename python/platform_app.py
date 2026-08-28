@@ -2,15 +2,10 @@ import json
 import tempfile
 from pathlib import Path
 
+from docplex.mp.model import Model
 from flask import Flask, jsonify, render_template, request
 
-from cross_border_ecommerce_capacity_expansion_demo import solve_capacity_expansion_network
-from cross_border_ecommerce_app import (
-    solve_network_case,
-    solve_replenishment_case,
-    solve_service_level_case,
-)
-from cross_border_ecommerce_soft_capacity_demo import solve_soft_capacity_network
+from cross_border_ecommerce_replenishment_demo import solve_replenishment_plan
 from scheduling_solver import (
     default_problem,
     solve_staff_scheduling,
@@ -327,16 +322,12 @@ def run_platform_case():
 def run_case(playbook_id, overrides):
     config = dict(playbooks()[playbook_id])
     config.update(clean_overrides(overrides))
-
-    network = solve_platform_network_case(config)
-    replenishment = solve_replenishment_case(
-        int(config["air_capacity"]),
-        int(config["ocean_lead_time"]),
-        float(config["unfulfilled_penalty"]),
-    )
-    service_mix = solve_service_level_case()
-    staffing = solve_staffing_case(config)
     model_inputs = build_model_inputs(config)
+
+    network = solve_platform_network_case(model_inputs["network"], config)
+    replenishment = solve_platform_replenishment_case(model_inputs["replenishment"])
+    service_mix = solve_platform_service_level_case(model_inputs["service_level"])
+    staffing = solve_staffing_case(config)
 
     summary = build_management_summary(network, replenishment, service_mix, staffing, config)
 
@@ -550,26 +541,254 @@ def solve_staffing_case(config):
     )
 
 
-def solve_platform_network_case(config):
-    demand_multiplier = float(config["demand_multiplier"])
-    unfulfilled_penalty = float(config["unfulfilled_penalty"])
+def solve_platform_network_case(input_data, config):
+    warehouses = input_data["warehouses"]
+    markets = input_data["markets"]
+    lane_costs = {
+        (lane["warehouse"], lane["market"]): lane
+        for lane in input_data["lane_costs_and_sla"]
+    }
     network_mode = config.get("network_mode", "strict")
+    allow_unfulfilled = network_mode in {"soft_capacity", "capacity_expansion"}
+    expansion_options = input_data.get("expansion_options", {})
+    unfulfilled_penalty = float(input_data["parameters"]["unfulfilled_penalty"])
 
-    if network_mode == "soft_capacity":
-        return solve_soft_capacity_network(
-            demand_multiplier=demand_multiplier,
-            unfulfilled_penalty=unfulfilled_penalty,
-            log_output=False,
-            print_output=False,
+    model = Model(name=input_data["model_name"])
+    open_warehouse = {
+        warehouse: model.binary_var(name=f"open_{warehouse}")
+        for warehouse in warehouses
+    }
+    ship = {
+        (warehouse, market): model.continuous_var(name=f"ship_{warehouse}_to_{market}", lb=0)
+        for warehouse in warehouses
+        for market in markets
+    }
+    unfulfilled = {
+        market: model.continuous_var(name=f"unfulfilled_{market}", lb=0)
+        for market in markets
+    } if allow_unfulfilled else {}
+    extra_capacity = {
+        warehouse: model.continuous_var(
+            name=f"extra_capacity_{warehouse}",
+            lb=0,
+            ub=expansion_options[warehouse]["max_extra_capacity"],
         )
-    if network_mode == "capacity_expansion":
-        return solve_capacity_expansion_network(
-            demand_multiplier=demand_multiplier,
-            unfulfilled_penalty=unfulfilled_penalty,
-            log_output=False,
-            print_output=False,
+        for warehouse in expansion_options
+    } if network_mode == "capacity_expansion" else {}
+
+    fixed_cost = model.sum(
+        warehouses[warehouse]["fixed_cost"] * open_warehouse[warehouse]
+        for warehouse in warehouses
+    )
+    variable_cost = model.sum(
+        (
+            warehouses[warehouse]["handling_cost"]
+            + lane_costs[warehouse, market]["last_mile_cost"]
         )
-    return solve_network_case(demand_multiplier, int(config["sla_extra_days"]))
+        * ship[warehouse, market]
+        for warehouse in warehouses
+        for market in markets
+    )
+    unfulfilled_cost = model.sum(
+        unfulfilled_penalty * unfulfilled[market]
+        for market in markets
+    ) if allow_unfulfilled else 0
+    expansion_cost = model.sum(
+        expansion_options[warehouse]["unit_cost"] * extra_capacity[warehouse]
+        for warehouse in extra_capacity
+    ) if extra_capacity else 0
+
+    model.minimize(fixed_cost + variable_cost + unfulfilled_cost + expansion_cost)
+
+    for market, data in markets.items():
+        demand_expr = model.sum(ship[warehouse, market] for warehouse in warehouses)
+        if allow_unfulfilled:
+            demand_expr += unfulfilled[market]
+        model.add_constraint(demand_expr == data["demand"], ctname=f"demand_{market}")
+
+    for warehouse, data in warehouses.items():
+        capacity_expr = data["capacity"] * open_warehouse[warehouse]
+        if warehouse in extra_capacity:
+            capacity_expr += extra_capacity[warehouse]
+            model.add_constraint(
+                extra_capacity[warehouse]
+                <= expansion_options[warehouse]["max_extra_capacity"] * open_warehouse[warehouse],
+                ctname=f"expand_only_if_open_{warehouse}",
+            )
+        model.add_constraint(
+            model.sum(ship[warehouse, market] for market in markets) <= capacity_expr,
+            ctname=f"capacity_{warehouse}",
+        )
+
+    for (warehouse, market), lane in lane_costs.items():
+        if not lane["allowed_by_sla"]:
+            model.add_constraint(ship[warehouse, market] == 0, ctname=f"sla_block_{warehouse}_to_{market}")
+
+    solution = model.solve(log_output=False)
+    if solution is None:
+        return {"status": "infeasible", "message": "No feasible network found from upstream data."}
+
+    opened_warehouses = []
+    capacity_plan = []
+    for warehouse in warehouses:
+        if open_warehouse[warehouse].solution_value > 0.5:
+            used_capacity = sum(ship[warehouse, market].solution_value for market in markets)
+            opened_warehouses.append(warehouse)
+            row = {
+                "warehouse": warehouse,
+                "used_capacity": used_capacity,
+                "base_capacity": warehouses[warehouse]["capacity"],
+            }
+            if warehouse in extra_capacity:
+                row["extra_capacity"] = extra_capacity[warehouse].solution_value
+            capacity_plan.append(row)
+
+    fulfillment_plan = {}
+    total_unfulfilled = 0
+    for market in markets:
+        if allow_unfulfilled:
+            total_unfulfilled += unfulfilled[market].solution_value
+        fulfillment_plan[market] = []
+        for warehouse in warehouses:
+            amount = ship[warehouse, market].solution_value
+            if amount > 1e-6:
+                fulfillment_plan[market].append(
+                    {
+                        "warehouse": warehouse,
+                        "orders": amount,
+                        "unit_cost": warehouses[warehouse]["handling_cost"] + lane_costs[warehouse, market]["last_mile_cost"],
+                        "delivery_days": lane_costs[warehouse, market]["delivery_days"],
+                    }
+                )
+
+    return {
+        "status": "optimal",
+        "opened_warehouses": opened_warehouses,
+        "capacity_plan": capacity_plan,
+        "fulfillment_plan": fulfillment_plan,
+        "fixed_cost": fixed_cost.solution_value,
+        "variable_cost": variable_cost.solution_value,
+        "expansion_cost": expansion_cost.solution_value if extra_capacity else 0,
+        "unfulfilled_cost": unfulfilled_cost.solution_value if allow_unfulfilled else 0,
+        "total_unfulfilled": total_unfulfilled,
+        "total_cost": solution.objective_value,
+    }
+
+
+def solve_platform_replenishment_case(input_data):
+    data = {
+        "weeks": input_data["sets"]["weeks"],
+        "lanes": input_data["lanes"],
+        "demand": input_data["demand"],
+        "initial_inventory": input_data["parameters"]["initial_inventory"],
+        "target_ending_inventory": input_data["parameters"]["target_ending_inventory"],
+        "holding_cost": input_data["parameters"]["holding_cost"],
+        "stockout_penalty": input_data["parameters"]["stockout_penalty"],
+    }
+    result = solve_replenishment_plan(data=data, log_output=False)
+    if result["status"] != "optimal":
+        return result
+
+    orders = []
+    for (lane, week), amount in result["orders"].items():
+        if amount > 1e-6:
+            orders.append({"week": week, "lane": lane, "units": round(amount, 2)})
+    return {
+        "status": "optimal",
+        "orders": orders,
+        "inventory_projection": result["inventory_projection"],
+        "total_stockout": round(result["total_stockout"], 2),
+        "transport_cost": round(result["transport_cost"], 2),
+        "holding_cost": round(result["holding_cost"], 2),
+        "stockout_penalty": round(result["stockout_penalty"], 2),
+        "total_cost": round(result["total_cost"], 2),
+    }
+
+
+def solve_platform_service_level_case(input_data):
+    markets = input_data["markets"]
+    services = input_data["services"]
+    model = Model(name=input_data["model_name"])
+
+    use_service = {
+        service: model.binary_var(name=f"use_{service}")
+        for service in services
+    }
+    orders = {
+        (service, market): model.continuous_var(name=f"orders_{service}_to_{market}", lb=0)
+        for service in services
+        for market in markets
+    }
+
+    fixed_cost = model.sum(
+        services[service]["fixed_cost"] * use_service[service]
+        for service in services
+    )
+    variable_cost = model.sum(
+        services[service]["unit_cost_by_market"][market] * orders[service, market]
+        for service in services
+        for market in markets
+    )
+    model.minimize(fixed_cost + variable_cost)
+
+    for market, data in markets.items():
+        model.add_constraint(
+            model.sum(orders[service, market] for service in services) == data["demand"],
+            ctname=f"demand_{market}",
+        )
+        model.add_constraint(
+            model.sum(
+                services[service]["delivery_days_by_market"][market] * orders[service, market]
+                for service in services
+            )
+            <= data["max_avg_delivery_days"] * data["demand"],
+            ctname=f"avg_delivery_sla_{market}",
+        )
+
+    for service, data in services.items():
+        model.add_constraint(
+            model.sum(orders[service, market] for market in markets)
+            <= data["capacity"] * use_service[service],
+            ctname=f"capacity_if_used_{service}",
+        )
+
+    solution = model.solve(log_output=False)
+    if solution is None:
+        return {"status": "infeasible", "message": "No feasible service-level mix found from upstream data."}
+
+    used_services = []
+    allocation = {}
+    for service in services:
+        used_orders = sum(orders[service, market].solution_value for market in markets)
+        if used_orders > 1e-6:
+            used_services.append({"service": service, "orders": used_orders})
+
+    for market, data in markets.items():
+        weighted_days = 0
+        allocation[market] = []
+        for service in services:
+            amount = orders[service, market].solution_value
+            if amount > 1e-6:
+                days = services[service]["delivery_days_by_market"][market]
+                weighted_days += days * amount
+                allocation[market].append(
+                    {
+                        "service": service,
+                        "orders": amount,
+                        "unit_cost": services[service]["unit_cost_by_market"][market],
+                        "delivery_days": days,
+                    }
+                )
+        allocation[f"{market}_average_days"] = weighted_days / data["demand"]
+
+    return {
+        "status": "optimal",
+        "used_services": used_services,
+        "allocation": allocation,
+        "fixed_cost": fixed_cost.solution_value,
+        "variable_cost": variable_cost.solution_value,
+        "total_cost": solution.objective_value,
+    }
 
 
 def build_management_summary(network, replenishment, service_mix, staffing, config):

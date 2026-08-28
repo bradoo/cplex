@@ -24,7 +24,7 @@
         "unit_cost": 4
       },
       "Shenzhen Direct Ship": {
-        "max_extra_capacity": 4000,
+        "max_extra_capacity": 4200,
         "unit_cost": 1.8
       }
     },
