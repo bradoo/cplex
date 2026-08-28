@@ -775,6 +775,23 @@
         </div>
       </section>
       <section>
+        <div class="section-head"><h2>订单明细抽样</h2><span id="orderSampleStatus" class="pill">加载中</span></div>
+        <div class="content">
+          <div class="button-row">
+            <button id="showFirstOrders">显示前 100 条</button>
+            <button id="showAllOrders">显示全部抽样</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>订单号</th><th>市场</th><th>渠道</th><th>件数</th><th>优先级</th><th>承诺天数</th><th>需求占比 bp</th></tr>
+              </thead>
+              <tbody id="orderSampleRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+      <section>
         <div class="section-head"><h2>上游业务表编辑</h2><span class="pill">Editable</span></div>
         <div class="content">
           <div>
@@ -1042,6 +1059,7 @@
     let lastReportPath = "";
     let latestCaseData = null;
     let runSequence = 0;
+    let orderSampleLimit = 100;
     const activeLayer = document.body.dataset.activeLayer || "upstream";
     const stateKey = "cplexPlatformPocState";
 
@@ -1135,8 +1153,32 @@
       field("upstreamSummary").innerHTML = upstreamRows(data).map(([name, value, meaning]) => (
         `<div class="row"><strong>${name}</strong><span class="small">${meaning}</span><span class="status">${value}</span></div>`
       )).join("");
-      field("upstreamStatus").textContent = `已加载：${data.data_source}`;
+      field("upstreamStatus").textContent = upstreamLoadStatus(data);
       renderUpstreamTables();
+      renderOrderSample();
+    }
+
+    function upstreamLoadStatus(response) {
+      const data = response.data || {};
+      const metadata = data.metadata || {};
+      const total = metadata.order_line_count ?? (data.orders ? data.orders.length : 0);
+      const sample = data.orders ? data.orders.length : 0;
+      const network = data.network || {};
+      const replenishment = data.replenishment || {};
+      const serviceLevel = data.service_level || {};
+      const tableCount = [
+        data.orders,
+        network.warehouses,
+        network.markets,
+        network.lanes,
+        network.expansion_options,
+        replenishment.weeks,
+        replenishment.demand,
+        replenishment.lanes,
+        serviceLevel.markets,
+        serviceLevel.services
+      ].filter(Boolean).length;
+      return `已加载：${response.data_source}，上游表 ${fmt(tableCount)} 组，订单 ${fmt(total)} 条，页面抽样 ${fmt(sample)} 条`;
     }
 
     async function loadDataQuality() {
@@ -1386,6 +1428,26 @@
         input.addEventListener("input", updateUpstreamFromTable);
         input.addEventListener("change", updateUpstreamFromTable);
       });
+    }
+
+    function renderOrderSample() {
+      const orders = upstreamData && upstreamData.orders ? upstreamData.orders : [];
+      const visible = orders.slice(0, orderSampleLimit);
+      const total = upstreamData && upstreamData.metadata && upstreamData.metadata.order_line_count
+        ? Number(upstreamData.metadata.order_line_count)
+        : orders.length;
+      field("orderSampleStatus").textContent = `抽样 ${fmt(orders.length)} / 总量 ${fmt(total)}`;
+      field("orderSampleRows").innerHTML = visible.map((order) => `
+        <tr>
+          <td><strong>${order.order_id}</strong></td>
+          <td>${order.market}</td>
+          <td>${order.channel}</td>
+          <td>${fmt(order.units)}</td>
+          <td>${order.priority}</td>
+          <td>${fmt(order.requested_delivery_days)}</td>
+          <td>${fmt(order.demand_share_bp)}</td>
+        </tr>
+      `).join("");
     }
 
     function updateUpstreamFromTable(event) {
@@ -1995,6 +2057,14 @@
     field("exportReport").addEventListener("click", exportReport);
     field("reloadUpstream").addEventListener("click", loadUpstreamData);
     field("saveUpstream").addEventListener("click", saveUpstreamData);
+    field("showFirstOrders").addEventListener("click", () => {
+      orderSampleLimit = 100;
+      renderOrderSample();
+    });
+    field("showAllOrders").addEventListener("click", () => {
+      orderSampleLimit = upstreamData && upstreamData.orders ? upstreamData.orders.length : 100;
+      renderOrderSample();
+    });
     field("modelInputSelect").addEventListener("change", renderInputs);
     loadOverview().then(() => Promise.all([run(false), compare(), loadDataLayer(), loadConfigAudit(), loadUpstreamData(), loadSourceStatus(), loadDataQuality(), loadScaleSnapshot(), loadLineage(), loadRunHistory(), loadConstraintExplanations()]));
   </script>

@@ -70,7 +70,7 @@ def upstream_data_source_label(data=None):
         if metadata.get("upstream_storage"):
             return metadata["upstream_storage"]
         config = starrocks_config()
-        return f"starrocks://{config['host']}:{config['port']}/{config['database']}.{config['table']}"
+        return f"starrocks://{config['host']}:{config['port']}/{config['database']}"
     return str(UPSTREAM_DATA_PATH.relative_to(Path(__file__).resolve().parent.parent))
 
 
@@ -124,7 +124,7 @@ def load_starrocks_orders_into_upstream_data(data):
     metadata["source_systems"] = sorted(set(metadata.get("source_systems", [])) | {"StarRocks"})
     metadata["order_line_count"] = order_line_count
     metadata["order_sample_limit"] = limit
-    metadata["upstream_storage"] = f"starrocks://{config['host']}:{config['port']}/{config['database']}.{table}"
+    metadata["upstream_storage"] = f"starrocks://{config['host']}:{config['port']}/{config['database']}"
     return data
 
 
