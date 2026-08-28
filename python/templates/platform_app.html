@@ -740,6 +740,20 @@
         </div>
       </section>
       <section>
+        <div class="section-head"><h2>数据源运行状态</h2><span id="sourceStatus" class="pill">加载中</span></div>
+        <div class="content">
+          <div id="sourceMetrics" class="scale-metrics"></div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>上游表</th><th>业务角色</th><th>行数</th></tr>
+              </thead>
+              <tbody id="sourceTableRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+      <section>
         <div class="section-head"><h2>数据质量校验</h2><span id="qualityStatus" class="pill">加载中</span></div>
         <div class="content">
           <div id="qualityMetrics" class="grid"></div>
@@ -1115,6 +1129,37 @@
           <span class="small">${check.detail}<br>${check.action}</span>
           <span class="status">${check.level === "pass" ? "通过" : "关注"}</span>
         </div>
+      `).join("");
+    }
+
+    async function loadSourceStatus() {
+      const response = await fetch("/api/platform/source-status");
+      const data = await response.json();
+      const ok = data.status === "ok";
+      field("sourceStatus").textContent = ok ? data.mode : "连接异常";
+      field("sourceStatus").style.background = ok ? "var(--soft-green)" : "var(--soft-red)";
+      field("sourceStatus").style.color = ok ? "var(--green)" : "var(--red)";
+      const summary = data.summary || {};
+      const timings = data.timings_ms || {};
+      const metrics = [
+        ["数据源", data.mode || "-", data.source || "-", ok ? "good" : "bad"],
+        ["真实订单量", summary.order_lines, data.message || "-", "primary"],
+        ["页面抽样", summary.sample_rows, "浏览器展示行数", "good"],
+        ["状态查询", timings.total, "数据库/文件状态查询，ms", "good"]
+      ];
+      field("sourceMetrics").innerHTML = metrics.map(([label, value, meaning, tone]) => `
+        <div class="metric ${tone}">
+          <span class="label">${label}</span>
+          <strong class="value">${typeof value === "number" ? fmt(value) : value}</strong>
+          <span class="small">${meaning}</span>
+        </div>
+      `).join("");
+      field("sourceTableRows").innerHTML = (data.tables || []).map((table) => `
+        <tr>
+          <td><strong>${table.name}</strong></td>
+          <td>${table.role}</td>
+          <td>${fmt(table.rows)}</td>
+        </tr>
       `).join("");
     }
 
@@ -1868,7 +1913,7 @@
         return;
       }
       field("upstreamStatus").textContent = `已保存：${result.data_source}`;
-      await Promise.all([loadUpstreamData(), loadDataQuality(), loadScaleSnapshot(), run(), compare()]);
+      await Promise.all([loadUpstreamData(), loadSourceStatus(), loadDataQuality(), loadScaleSnapshot(), run(), compare()]);
     }
 
     activateLayer();
@@ -1881,7 +1926,7 @@
     field("reloadUpstream").addEventListener("click", loadUpstreamData);
     field("saveUpstream").addEventListener("click", saveUpstreamData);
     field("modelInputSelect").addEventListener("change", renderInputs);
-    loadOverview().then(() => Promise.all([run(false), compare(), loadDataLayer(), loadUpstreamData(), loadDataQuality(), loadScaleSnapshot(), loadLineage(), loadRunHistory(), loadConstraintExplanations()]));
+    loadOverview().then(() => Promise.all([run(false), compare(), loadDataLayer(), loadUpstreamData(), loadSourceStatus(), loadDataQuality(), loadScaleSnapshot(), loadLineage(), loadRunHistory(), loadConstraintExplanations()]));
   </script>
 </body>
 </html>

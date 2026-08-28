@@ -60,6 +60,16 @@ def starrocks_config():
     }
 
 
+def upstream_data_source_label(data=None):
+    if starrocks_upstream_enabled():
+        metadata = data.get("metadata", {}) if isinstance(data, dict) else {}
+        if metadata.get("upstream_storage"):
+            return metadata["upstream_storage"]
+        config = starrocks_config()
+        return f"starrocks://{config['host']}:{config['port']}/{config['database']}.{config['table']}"
+    return str(UPSTREAM_DATA_PATH.relative_to(Path(__file__).resolve().parent.parent))
+
+
 def starrocks_connection():
     try:
         import pymysql
@@ -205,6 +215,81 @@ def load_starrocks_service_level(cursor):
     return {
         "markets": markets,
         "services": services,
+    }
+
+
+def build_upstream_source_status():
+    started_at = perf_counter()
+    if not starrocks_upstream_enabled():
+        data = load_json_upstream_data()
+        metrics = build_data_quality_metrics(data)
+        return {
+            "status": "ok",
+            "mode": "JSON",
+            "source": upstream_data_source_label(data),
+            "message": "当前使用本地 JSON 样例数据。",
+            "timings_ms": {"total": round((perf_counter() - started_at) * 1000, 2)},
+            "summary": {
+                "order_lines": metrics["order_lines"],
+                "sample_rows": len(data.get("orders", [])),
+                "source_tables": count_source_tables(data),
+            },
+            "tables": [
+                {"name": "orders", "rows": len(data.get("orders", [])), "role": "订单明细样例"},
+                {"name": "network.warehouses", "rows": len(data["network"]["warehouses"]), "role": "仓库能力"},
+                {"name": "network.markets", "rows": len(data["network"]["markets"]), "role": "市场需求"},
+                {"name": "network.lanes", "rows": len(data["network"]["lanes"]), "role": "仓网线路"},
+                {"name": "replenishment.demand", "rows": len(data["replenishment"]["demand"]), "role": "补货预测"},
+                {"name": "service_level.services", "rows": len(data["service_level"]["services"]), "role": "服务商能力"},
+            ],
+        }
+
+    config = starrocks_config()
+    table_specs = [
+        (config["table"], "订单事实表"),
+        ("upstream_network_warehouses", "仓库能力"),
+        ("upstream_network_markets", "市场需求"),
+        ("upstream_network_lanes", "仓网线路"),
+        ("upstream_network_expansion_options", "扩容选项"),
+        ("upstream_replenishment_weeks", "补货周序列"),
+        ("upstream_replenishment_demand", "补货预测"),
+        ("upstream_replenishment_lanes", "补货渠道能力"),
+        ("upstream_replenishment_parameters", "补货全局参数"),
+        ("upstream_service_markets", "服务市场需求"),
+        ("upstream_service_providers", "服务商能力"),
+        ("upstream_service_provider_market_terms", "服务商市场条款"),
+    ]
+    try:
+        with starrocks_connection() as connection:
+            with connection.cursor() as cursor:
+                tables = []
+                for table, role in table_specs:
+                    cursor.execute(f"SELECT COUNT(*) AS row_count FROM `{table}`")
+                    tables.append({"name": f"{config['database']}.{table}", "rows": int(cursor.fetchone()["row_count"]), "role": role})
+    except Exception as error:
+        return {
+            "status": "attention",
+            "mode": "StarRocks",
+            "source": upstream_data_source_label(),
+            "message": str(error),
+            "timings_ms": {"total": round((perf_counter() - started_at) * 1000, 2)},
+            "summary": {"order_lines": 0, "sample_rows": 0, "source_tables": 0},
+            "tables": [],
+        }
+
+    order_rows = next((row["rows"] for row in tables if row["name"].endswith(f".{config['table']}")), 0)
+    return {
+        "status": "ok",
+        "mode": "StarRocks",
+        "source": upstream_data_source_label(),
+        "message": "当前使用 StarRocks 上游库表，页面仅抽样展示订单明细。",
+        "timings_ms": {"total": round((perf_counter() - started_at) * 1000, 2)},
+        "summary": {
+            "order_lines": order_rows,
+            "sample_rows": config["sample_limit"],
+            "source_tables": len(tables),
+        },
+        "tables": tables,
     }
 
 
@@ -874,13 +959,10 @@ def update_platform_data():
 @app.get("/api/platform/upstream-data")
 def get_upstream_data():
     data = load_upstream_data()
-    data_source = str(UPSTREAM_DATA_PATH.relative_to(Path(__file__).resolve().parent.parent))
-    if starrocks_upstream_enabled():
-        data_source = data.get("metadata", {}).get("upstream_storage", data_source)
     return jsonify(
         {
             "status": "ok",
-            "data_source": data_source,
+            "data_source": upstream_data_source_label(data),
             "data": data,
         }
     )
@@ -901,6 +983,11 @@ def get_data_quality():
     )
 
 
+@app.get("/api/platform/source-status")
+def get_source_status():
+    return jsonify(build_upstream_source_status())
+
+
 @app.get("/api/platform/scale-snapshot")
 def get_scale_snapshot():
     return jsonify(build_platform_scale_snapshot())
@@ -908,6 +995,8 @@ def get_scale_snapshot():
 
 @app.get("/api/platform/lineage")
 def get_lineage():
+    upstream_source = upstream_data_source_label()
+    lineage_paths = starrocks_lineage_paths() if starrocks_upstream_enabled() else json_lineage_paths()
     return jsonify(
         {
             "status": "ok",
@@ -915,7 +1004,7 @@ def get_lineage():
                 {
                     "id": "upstream",
                     "name": "上游数据接入层",
-                    "source": str(UPSTREAM_DATA_PATH.relative_to(Path(__file__).resolve().parent.parent)),
+                    "source": upstream_source,
                     "owner": "OMS / WMS / TMS / HR",
                     "description": "保存业务原始数据，例如订单需求、仓库能力、线路成本、补货预测和服务商能力。",
                 },
@@ -976,7 +1065,7 @@ def get_lineage():
             "model_flows": [
                 {
                     "model": "仓网选址与履约模型",
-                    "upstream": ["network.warehouses", "network.markets", "network.lanes", "network.expansion_options"],
+                    "upstream": lineage_paths["network"],
                     "config": ["demand_multiplier", "sla_extra_days", "network_mode", "unfulfilled_penalty"],
                     "transform": "build_network_model_input",
                     "input": ["sets.warehouses", "sets.markets", "parameters", "lane_costs_and_sla"],
@@ -985,7 +1074,7 @@ def get_lineage():
                 },
                 {
                     "model": "跨境补货模型",
-                    "upstream": ["replenishment.weeks", "replenishment.demand", "replenishment.lanes", "replenishment.initial_inventory"],
+                    "upstream": lineage_paths["replenishment"],
                     "config": ["air_capacity", "ocean_lead_time", "unfulfilled_penalty"],
                     "transform": "build_replenishment_model_input",
                     "input": ["sets.weeks", "sets.lanes", "parameters", "demand"],
@@ -994,7 +1083,7 @@ def get_lineage():
                 },
                 {
                     "model": "服务水平组合模型",
-                    "upstream": ["service_level.markets", "service_level.services"],
+                    "upstream": lineage_paths["service_level"],
                     "config": ["直接使用上游服务能力"],
                     "transform": "build_service_level_model_input",
                     "input": ["sets.markets", "sets.services", "markets", "services"],
@@ -1012,17 +1101,64 @@ def get_lineage():
                 },
             ],
             "field_map": [
-                {"business_field": "市场需求", "upstream_path": "network.markets.*.demand", "model_input_path": "network.markets.*.demand", "used_by": "仓网需求约束"},
-                {"business_field": "仓库容量", "upstream_path": "network.warehouses.*.capacity", "model_input_path": "network.warehouses.*.capacity", "used_by": "仓库容量约束"},
-                {"business_field": "线路成本", "upstream_path": "network.lanes.*.last_mile_cost", "model_input_path": "network.lane_costs_and_sla.*.last_mile_cost", "used_by": "仓网目标函数"},
-                {"business_field": "配送天数", "upstream_path": "network.lanes.*.delivery_days", "model_input_path": "network.lane_costs_and_sla.*.allowed_by_sla", "used_by": "SLA 禁用线路约束"},
-                {"business_field": "补货预测", "upstream_path": "replenishment.demand.*", "model_input_path": "replenishment.demand.*", "used_by": "库存平衡约束"},
-                {"business_field": "运输渠道能力", "upstream_path": "replenishment.lanes.*", "model_input_path": "replenishment.lanes.*", "used_by": "补货容量约束和成本目标"},
-                {"business_field": "服务商能力", "upstream_path": "service_level.services.*.capacity", "model_input_path": "service_level.services.*.capacity", "used_by": "服务商容量约束"},
+                {"business_field": "订单明细", "upstream_path": lineage_paths["orders"], "model_input_path": "network.markets.*.demand", "used_by": "上游吞吐统计与需求聚合说明"},
+                {"business_field": "市场需求", "upstream_path": lineage_paths["network_markets"], "model_input_path": "network.markets.*.demand", "used_by": "仓网需求约束"},
+                {"business_field": "仓库容量", "upstream_path": lineage_paths["network_warehouses"], "model_input_path": "network.warehouses.*.capacity", "used_by": "仓库容量约束"},
+                {"business_field": "线路成本", "upstream_path": lineage_paths["network_lanes"], "model_input_path": "network.lane_costs_and_sla.*.last_mile_cost", "used_by": "仓网目标函数"},
+                {"business_field": "配送天数", "upstream_path": lineage_paths["network_lanes"], "model_input_path": "network.lane_costs_and_sla.*.allowed_by_sla", "used_by": "SLA 禁用线路约束"},
+                {"business_field": "补货预测", "upstream_path": lineage_paths["replenishment_demand"], "model_input_path": "replenishment.demand.*", "used_by": "库存平衡约束"},
+                {"business_field": "运输渠道能力", "upstream_path": lineage_paths["replenishment_lanes"], "model_input_path": "replenishment.lanes.*", "used_by": "补货容量约束和成本目标"},
+                {"business_field": "服务商能力", "upstream_path": lineage_paths["service_providers"], "model_input_path": "service_level.services.*.capacity", "used_by": "服务商容量约束"},
                 {"business_field": "排班需求", "upstream_path": "staffing scenario defaults", "model_input_path": "staffing.required_staff", "used_by": "每日人力覆盖约束"},
             ],
         }
     )
+
+
+def json_lineage_paths():
+    return {
+        "orders": "orders[*]",
+        "network": ["network.warehouses", "network.markets", "network.lanes", "network.expansion_options"],
+        "network_markets": "network.markets.*.demand",
+        "network_warehouses": "network.warehouses.*.capacity",
+        "network_lanes": "network.lanes.*",
+        "replenishment": ["replenishment.weeks", "replenishment.demand", "replenishment.lanes", "replenishment.initial_inventory"],
+        "replenishment_demand": "replenishment.demand.*",
+        "replenishment_lanes": "replenishment.lanes.*",
+        "service_level": ["service_level.markets", "service_level.services"],
+        "service_providers": "service_level.services.*.capacity",
+    }
+
+
+def starrocks_lineage_paths():
+    config = starrocks_config()
+    prefix = f"{config['database']}."
+    return {
+        "orders": prefix + config["table"],
+        "network": [
+            prefix + "upstream_network_warehouses",
+            prefix + "upstream_network_markets",
+            prefix + "upstream_network_lanes",
+            prefix + "upstream_network_expansion_options",
+        ],
+        "network_markets": prefix + "upstream_network_markets.demand",
+        "network_warehouses": prefix + "upstream_network_warehouses.capacity",
+        "network_lanes": prefix + "upstream_network_lanes",
+        "replenishment": [
+            prefix + "upstream_replenishment_weeks",
+            prefix + "upstream_replenishment_demand",
+            prefix + "upstream_replenishment_lanes",
+            prefix + "upstream_replenishment_parameters",
+        ],
+        "replenishment_demand": prefix + "upstream_replenishment_demand.demand",
+        "replenishment_lanes": prefix + "upstream_replenishment_lanes",
+        "service_level": [
+            prefix + "upstream_service_markets",
+            prefix + "upstream_service_providers",
+            prefix + "upstream_service_provider_market_terms",
+        ],
+        "service_providers": prefix + "upstream_service_providers.capacity",
+    }
 
 
 @app.get("/api/platform/model-explanations")
@@ -1328,7 +1464,7 @@ def build_model_inputs(config):
     staffing_input = build_staffing_model_input(config)
     return {
         "lineage": {
-            "upstream_source": str(UPSTREAM_DATA_PATH.relative_to(Path(__file__).resolve().parent.parent)),
+            "upstream_source": upstream_data_source_label(upstream_data),
             "scenario_config_source": str(DATA_PATH.relative_to(Path(__file__).resolve().parent.parent)),
             "transform": "上游原始数据 + 当前方案参数 -> CPLEX 模型运行入参",
         },
