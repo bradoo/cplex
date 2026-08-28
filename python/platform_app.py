@@ -355,6 +355,7 @@ def build_data_quality_metrics(data):
     network = data["network"]
     replenishment = data["replenishment"]
     service_level = data["service_level"]
+    order_lines = data.get("orders", [])
     total_market_demand = sum(market["demand"] for market in network["markets"].values())
     total_warehouse_capacity = sum(warehouse["capacity"] for warehouse in network["warehouses"].values())
     total_replenishment_demand = sum(replenishment["demand"].values())
@@ -362,6 +363,7 @@ def build_data_quality_metrics(data):
     total_service_capacity = sum(service["capacity"] for service in service_level["services"].values())
     return {
         "markets": len(network["markets"]),
+        "order_lines": len(order_lines),
         "warehouses": len(network["warehouses"]),
         "lanes": len(network["lanes"]),
         "total_market_demand": total_market_demand,
@@ -403,6 +405,15 @@ def build_data_quality_checks(data, validation_error):
             "action": "缓冲为负时，建议启用扩容模式或提高缺口罚分。",
         },
     ]
+    order_lines = data.get("orders", [])
+    checks.append(
+        {
+            "name": "订单明细规模",
+            "level": "pass" if len(order_lines) >= 1000 else "warn",
+            "detail": f"当前接入 {len(order_lines):g} 条上游订单明细，模型前会聚合到市场需求和服务需求。",
+            "action": "用于观察数据接入吞吐；求解层继续使用聚合入参，避免把交易明细直接推给 MIP。",
+        }
+    )
 
     blocked_markets = []
     for market, market_data in network["markets"].items():

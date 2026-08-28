@@ -1046,6 +1046,7 @@
       field("qualityStatus").style.background = data.overall === "pass" ? "var(--soft-green)" : "var(--soft-amber)";
       field("qualityStatus").style.color = data.overall === "pass" ? "var(--green)" : "var(--amber)";
       const metrics = [
+        ["订单明细", data.metrics.order_lines, "上游交易记录"],
         ["市场", data.metrics.markets, "需求节点"],
         ["仓库", data.metrics.warehouses, "候选履约节点"],
         ["线路", data.metrics.lanes, "仓库-市场组合"],
@@ -1179,6 +1180,7 @@
       return [
         ["快照日期", data.metadata.snapshot_date, "上游数据同步日期"],
         ["来源系统", data.metadata.source_systems.join(", "), "模拟 OMS/WMS/TMS/HR 同步"],
+        ["订单明细", `${data.orders ? data.orders.length : 0} 条`, "模拟上游交易明细，进入模型前聚合成需求参数"],
         ["仓网基础表", `${Object.keys(network.warehouses).length} 仓 / ${Object.keys(network.markets).length} 市场 / ${network.lanes.length} 线路`, "仓库容量、市场需求、线路成本和时效"],
         ["补货基础表", `${replenishment.weeks.length} 周 / ${Object.keys(replenishment.lanes).length} 渠道`, "周需求、库存、运输渠道和补货成本"],
         ["服务基础表", `${Object.keys(serviceLevel.markets).length} 市场 / ${Object.keys(serviceLevel.services).length} 服务`, "服务商容量、成本和平均时效约束"]
