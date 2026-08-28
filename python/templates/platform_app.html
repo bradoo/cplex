@@ -436,28 +436,52 @@
 
     .bars {
       display: grid;
-      gap: 10px;
+      gap: 12px;
     }
 
-    .bar-row {
+    .cost-total {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fff;
       display: grid;
-      grid-template-columns: 92px 1fr 84px;
       gap: 10px;
-      align-items: center;
-      font-size: 13px;
     }
 
-    .bar-track {
-      height: 10px;
-      border-radius: 8px;
-      background: #eef2f6;
+    .cost-total strong {
+      font-size: 24px;
+      line-height: 1.1;
+    }
+
+    .cost-stack {
+      height: 18px;
+      border-radius: 999px;
+      display: flex;
       overflow: hidden;
+      background: #eef2f6;
     }
 
-    .bar-fill {
-      height: 100%;
+    .cost-segment {
+      min-width: 3px;
+    }
+
+    .cost-cards {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .cost-card {
+      border: 1px solid var(--line);
       border-radius: 8px;
-      background: var(--blue);
+      padding: 10px;
+      background: #fff;
+      display: grid;
+      gap: 5px;
+    }
+
+    .cost-card strong {
+      font-size: 18px;
     }
 
     .diff-panel {
@@ -667,7 +691,7 @@
     @media (max-width: 640px) {
       .flow, .grid, .diff-grid, .readiness-grid, .impact-grid, .run-steps { grid-template-columns: 1fr; }
       .flow-step::after { display: none; }
-      .row, .bar-row { grid-template-columns: 1fr; }
+      .row, .cost-cards { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -1432,19 +1456,36 @@
 
     function renderBars(summary) {
       const rows = [
-        ["仓网", summary.network_cost],
-        ["补货", summary.replenishment_cost],
-        ["排班", summary.staffing_cost],
-        ["服务组合", summary.service_cost]
+        ["仓网", summary.network_cost, "#2463eb"],
+        ["补货", summary.replenishment_cost, "#10845f"],
+        ["排班", summary.staffing_cost, "#9a6400"],
+        ["服务组合", summary.service_cost, "#bd3930"]
       ];
-      const max = Math.max(...rows.map((row) => Number(row[1] || 0)), 1);
-      field("bars").innerHTML = rows.map(([name, value]) => (
-        `<div class="bar-row">
-          <strong>${name}</strong>
-          <span class="bar-track"><span class="bar-fill" style="width:${Math.max(2, value / max * 100)}%"></span></span>
-          <span class="small">${fmt(value)}</span>
-        </div>`
-      )).join("");
+      const total = Math.max(rows.reduce((sum, row) => sum + Number(row[1] || 0), 0), 1);
+      field("bars").innerHTML = `
+        <div class="cost-total">
+          <span class="label">成本拆解总览</span>
+          <strong>${fmt(total)}</strong>
+          <div class="cost-stack">
+            ${rows.map(([name, value, color]) => `
+              <span class="cost-segment" title="${name} ${formatPercent(value, total)}" style="width:${Math.max(1, value / total * 100)}%; background:${color};"></span>
+            `).join("")}
+          </div>
+        </div>
+        <div class="cost-cards">
+          ${rows.map(([name, value, color]) => `
+            <div class="cost-card" style="border-top: 4px solid ${color};">
+              <span class="label">${name}</span>
+              <strong>${fmt(value)}</strong>
+              <span class="small">占比 ${formatPercent(value, total)}</span>
+            </div>
+          `).join("")}
+        </div>
+      `;
+    }
+
+    function formatPercent(value, total) {
+      return `${(Number(value || 0) / Math.max(Number(total || 0), 1) * 100).toFixed(1)}%`;
     }
 
     function renderReadiness(data) {
