@@ -684,6 +684,13 @@
         </div>
       </section>
       <section>
+        <div class="section-head"><h2>数据质量校验</h2><span id="qualityStatus" class="pill">加载中</span></div>
+        <div class="content">
+          <div id="qualityMetrics" class="grid"></div>
+          <div id="qualityChecks" class="rows"></div>
+        </div>
+      </section>
+      <section>
         <div class="section-head"><h2>上游业务表编辑</h2><span class="pill">Editable</span></div>
         <div class="content">
           <div>
@@ -1020,6 +1027,34 @@
       field("upstreamStatus").textContent = `已加载：${data.data_source}`;
       field("upstreamJson").textContent = JSON.stringify(data.data, null, 2);
       renderUpstreamTables();
+    }
+
+    async function loadDataQuality() {
+      const response = await fetch("/api/platform/data-quality");
+      const data = await response.json();
+      field("qualityStatus").textContent = data.overall === "pass" ? "可运行" : "需关注";
+      field("qualityStatus").style.background = data.overall === "pass" ? "var(--soft-green)" : "var(--soft-amber)";
+      field("qualityStatus").style.color = data.overall === "pass" ? "var(--green)" : "var(--amber)";
+      const metrics = [
+        ["市场", data.metrics.markets, "需求节点"],
+        ["仓库", data.metrics.warehouses, "候选履约节点"],
+        ["线路", data.metrics.lanes, "仓库-市场组合"],
+        ["容量缓冲", data.metrics.capacity_buffer, "仓网容量 - 市场需求"]
+      ];
+      field("qualityMetrics").innerHTML = metrics.map(([label, value, meaning]) => `
+        <div class="metric ${Number(value) < 0 ? "warn" : "good"}">
+          <span class="label">${label}</span>
+          <strong class="value">${fmt(value)}</strong>
+          <span class="small">${meaning}</span>
+        </div>
+      `).join("");
+      field("qualityChecks").innerHTML = data.checks.map((check) => `
+        <div class="row">
+          <strong>${check.name}</strong>
+          <span class="small">${check.detail}<br>${check.action}</span>
+          <span class="status">${check.level === "pass" ? "通过" : "关注"}</span>
+        </div>
+      `).join("");
     }
 
     async function loadLineage() {
@@ -1654,7 +1689,7 @@
         return;
       }
       field("upstreamStatus").textContent = `已保存：${result.data_source}`;
-      await Promise.all([loadUpstreamData(), run(), compare()]);
+      await Promise.all([loadUpstreamData(), loadDataQuality(), run(), compare()]);
     }
 
     activateLayer();
@@ -1670,7 +1705,7 @@
     field("reloadUpstream").addEventListener("click", loadUpstreamData);
     field("saveUpstream").addEventListener("click", saveUpstreamData);
     field("modelInputSelect").addEventListener("change", renderInputs);
-    loadOverview().then(() => Promise.all([run(false), compare(), loadDataLayer(), loadUpstreamData(), loadLineage(), loadRunHistory(), loadConstraintExplanations()]));
+    loadOverview().then(() => Promise.all([run(false), compare(), loadDataLayer(), loadUpstreamData(), loadDataQuality(), loadLineage(), loadRunHistory(), loadConstraintExplanations()]));
   </script>
 </body>
 </html>

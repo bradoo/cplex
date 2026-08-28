@@ -336,6 +336,101 @@ def validate_upstream_data(data):
     return None
 
 
+def build_data_quality_metrics(data):
+    network = data["network"]
+    replenishment = data["replenishment"]
+    service_level = data["service_level"]
+    total_market_demand = sum(market["demand"] for market in network["markets"].values())
+    total_warehouse_capacity = sum(warehouse["capacity"] for warehouse in network["warehouses"].values())
+    total_replenishment_demand = sum(replenishment["demand"].values())
+    total_air_capacity = replenishment["lanes"]["air"]["weekly_capacity"] * len(replenishment["weeks"])
+    total_service_capacity = sum(service["capacity"] for service in service_level["services"].values())
+    return {
+        "markets": len(network["markets"]),
+        "warehouses": len(network["warehouses"]),
+        "lanes": len(network["lanes"]),
+        "total_market_demand": total_market_demand,
+        "total_warehouse_capacity": total_warehouse_capacity,
+        "capacity_buffer": total_warehouse_capacity - total_market_demand,
+        "replenishment_weeks": len(replenishment["weeks"]),
+        "total_replenishment_demand": total_replenishment_demand,
+        "total_air_capacity": total_air_capacity,
+        "service_capacity": total_service_capacity,
+    }
+
+
+def build_data_quality_checks(data, validation_error):
+    if validation_error:
+        return [
+            {
+                "name": "数据结构",
+                "level": "warn",
+                "detail": validation_error,
+                "action": "先修复 JSON 结构或必填字段，再运行模型。",
+            }
+        ]
+
+    metrics = build_data_quality_metrics(data)
+    network = data["network"]
+    replenishment = data["replenishment"]
+    service_level = data["service_level"]
+    checks = [
+        {
+            "name": "数据结构",
+            "level": "pass",
+            "detail": "上游 JSON 已通过必填字段、类型和线路覆盖校验。",
+            "action": "可以继续生成 CPLEX 模型入参。",
+        },
+        {
+            "name": "仓网容量",
+            "level": "pass" if metrics["capacity_buffer"] >= 0 else "warn",
+            "detail": f"仓库总容量 {metrics['total_warehouse_capacity']:g}，市场总需求 {metrics['total_market_demand']:g}，缓冲 {metrics['capacity_buffer']:g}。",
+            "action": "缓冲为负时，建议启用扩容模式或提高缺口罚分。",
+        },
+    ]
+
+    blocked_markets = []
+    for market, market_data in network["markets"].items():
+        allowed = [
+            lane for lane in network["lanes"]
+            if lane["market"] == market and lane["delivery_days"] <= market_data["max_delivery_days"]
+        ]
+        if not allowed:
+            blocked_markets.append(market)
+    checks.append(
+        {
+            "name": "SLA 可用线路",
+            "level": "pass" if not blocked_markets else "warn",
+            "detail": "所有市场至少有一条满足 SLA 的线路。" if not blocked_markets else f"{', '.join(blocked_markets)} 没有满足当前 SLA 的仓库线路。",
+            "action": "如有市场无可用线路，可放宽 SLA、调整仓库布局或进入软容量/扩容方案。",
+        }
+    )
+
+    replenishment_capacity = sum(
+        values.get("weekly_capacity", 0) * len(replenishment["weeks"])
+        for values in replenishment["lanes"].values()
+    )
+    checks.append(
+        {
+            "name": "补货供给能力",
+            "level": "pass" if replenishment_capacity >= metrics["total_replenishment_demand"] else "warn",
+            "detail": f"计划期运输能力 {replenishment_capacity:g}，预测需求 {metrics['total_replenishment_demand']:g}。",
+            "action": "能力不足时，可提升空运容量、缩短海运提前期或接受缺货罚分。",
+        }
+    )
+
+    service_demand = sum(market["demand"] for market in service_level["markets"].values())
+    checks.append(
+        {
+            "name": "服务商容量",
+            "level": "pass" if metrics["service_capacity"] >= service_demand else "warn",
+            "detail": f"服务商总能力 {metrics['service_capacity']:g}，服务订单需求 {service_demand:g}。",
+            "action": "能力不足时，需引入服务商或降低市场承诺量。",
+        }
+    )
+    return checks
+
+
 @app.get("/")
 def index():
     return render_template("platform_app.html", active_layer="upstream")
@@ -439,6 +534,21 @@ def get_upstream_data():
             "status": "ok",
             "data_source": str(UPSTREAM_DATA_PATH.relative_to(Path(__file__).resolve().parent.parent)),
             "data": load_upstream_data(),
+        }
+    )
+
+
+@app.get("/api/platform/data-quality")
+def get_data_quality():
+    upstream_data = load_upstream_data()
+    validation_error = validate_upstream_data(upstream_data)
+    checks = build_data_quality_checks(upstream_data, validation_error)
+    return jsonify(
+        {
+            "status": "ok",
+            "overall": "pass" if all(check["level"] == "pass" for check in checks) else "attention",
+            "checks": checks,
+            "metrics": build_data_quality_metrics(upstream_data),
         }
     )
 
