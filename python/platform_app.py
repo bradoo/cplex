@@ -1,4 +1,5 @@
 import json
+import tempfile
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
@@ -19,6 +20,7 @@ from scheduling_solver import (
 
 app = Flask(__name__)
 DATA_PATH = Path(__file__).resolve().parent / "data" / "platform_poc_data.json"
+NETWORK_MODES = {"strict", "soft_capacity", "capacity_expansion"}
 
 
 def load_platform_data():
@@ -28,6 +30,70 @@ def load_platform_data():
 
 def playbooks():
     return load_platform_data()["playbooks"]
+
+
+def save_platform_data(data):
+    DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        dir=DATA_PATH.parent,
+        delete=False,
+    ) as file:
+        json.dump(data, file, ensure_ascii=False, indent=2)
+        file.write("\n")
+        temp_path = Path(file.name)
+    temp_path.replace(DATA_PATH)
+
+
+def validate_platform_data(data):
+    if not isinstance(data, dict):
+        return "data must be a JSON object"
+
+    for key in ("playbooks", "assets", "capabilities"):
+        if key not in data:
+            return f"data is missing required key: {key}"
+
+    if not isinstance(data["playbooks"], dict) or not data["playbooks"]:
+        return "playbooks must be a non-empty object"
+    if not isinstance(data["assets"], list):
+        return "assets must be a list"
+    if not isinstance(data["capabilities"], list):
+        return "capabilities must be a list"
+
+    required_fields = {
+        "name": str,
+        "description": str,
+        "demand_multiplier": (int, float),
+        "sla_extra_days": int,
+        "air_capacity": int,
+        "ocean_lead_time": int,
+        "unfulfilled_penalty": (int, float),
+        "network_mode": str,
+        "staff_peak": bool,
+        "soft_staffing": bool,
+    }
+    for playbook_id, config in data["playbooks"].items():
+        if not isinstance(playbook_id, str) or not playbook_id:
+            return "playbook ids must be non-empty strings"
+        if not isinstance(config, dict):
+            return f"playbook {playbook_id} must be an object"
+        for field, expected_type in required_fields.items():
+            if field not in config:
+                return f"playbook {playbook_id} is missing field: {field}"
+            if not isinstance(config[field], expected_type):
+                return f"playbook {playbook_id}.{field} has invalid type"
+        if config["network_mode"] not in NETWORK_MODES:
+            return f"playbook {playbook_id}.network_mode must be one of: {', '.join(sorted(NETWORK_MODES))}"
+        if config["demand_multiplier"] <= 0:
+            return f"playbook {playbook_id}.demand_multiplier must be greater than 0"
+        if config["air_capacity"] < 0:
+            return f"playbook {playbook_id}.air_capacity must be non-negative"
+        if config["ocean_lead_time"] < 0:
+            return f"playbook {playbook_id}.ocean_lead_time must be non-negative"
+        if config["unfulfilled_penalty"] < 0:
+            return f"playbook {playbook_id}.unfulfilled_penalty must be non-negative"
+    return None
 
 
 @app.get("/")
@@ -57,6 +123,35 @@ def overview():
             ],
             "assets": data["assets"],
             "capabilities": data["capabilities"],
+            "data_source": str(DATA_PATH.relative_to(Path(__file__).resolve().parent.parent)),
+        }
+    )
+
+
+@app.get("/api/platform/data")
+def get_platform_data():
+    return jsonify(
+        {
+            "status": "ok",
+            "data_source": str(DATA_PATH.relative_to(Path(__file__).resolve().parent.parent)),
+            "data": load_platform_data(),
+        }
+    )
+
+
+@app.put("/api/platform/data")
+def update_platform_data():
+    payload = request.get_json(silent=True) or {}
+    data = payload.get("data")
+    validation_error = validate_platform_data(data)
+    if validation_error:
+        return jsonify({"status": "error", "message": validation_error}), 400
+
+    save_platform_data(data)
+    return jsonify(
+        {
+            "status": "ok",
+            "message": "Data layer saved",
             "data_source": str(DATA_PATH.relative_to(Path(__file__).resolve().parent.parent)),
         }
     )

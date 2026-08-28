@@ -38,10 +38,26 @@
     }
   },
   "assets": [
-    {"name": "员工排班 Web/API", "area": "建模到服务化", "url": "http://127.0.0.1:5050"},
-    {"name": "跨境电商模拟器", "area": "库存、仓网、物流", "url": "http://127.0.0.1:5052"},
-    {"name": "经理汇报脚本", "area": "演示话术", "path": "docs/manager_demo.md"},
-    {"name": "平台化复习笔记", "area": "上线方法论", "path": "docs/cplex_afternoon_review.md"}
+    {
+      "name": "员工排班 Web/API",
+      "area": "建模到服务化",
+      "url": "http://127.0.0.1:5050"
+    },
+    {
+      "name": "跨境电商模拟器",
+      "area": "库存、仓网、物流",
+      "url": "http://127.0.0.1:5052"
+    },
+    {
+      "name": "经理汇报脚本",
+      "area": "演示话术",
+      "path": "docs/manager_demo.md"
+    },
+    {
+      "name": "平台化复习笔记",
+      "area": "上线方法论",
+      "path": "docs/cplex_afternoon_review.md"
+    }
   ],
   "capabilities": [
     "把业务问题转成变量、目标和约束",

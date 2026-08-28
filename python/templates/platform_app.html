@@ -178,14 +178,39 @@
       font-weight: 760;
     }
 
-    input {
+    input,
+    textarea {
       width: 100%;
-      min-height: 36px;
       border: 1px solid var(--line);
       border-radius: 8px;
       padding: 7px 9px;
       color: var(--ink);
       font: inherit;
+      font-weight: 760;
+    }
+
+    input { min-height: 36px; }
+
+    textarea {
+      min-height: 260px;
+      resize: vertical;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      font-weight: 500;
+      background: #f8fafc;
+    }
+
+    .button-row {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .save-status {
+      min-height: 20px;
+      color: var(--muted);
+      font-size: 12px;
       font-weight: 760;
     }
 
@@ -437,6 +462,16 @@
           <h3>接口响应摘要</h3>
           <pre id="raw">点击运行后显示 API 返回的核心字段。</pre>
         </div>
+        <div>
+          <h3>数据层编辑器</h3>
+          <textarea id="dataEditor" spellcheck="false"></textarea>
+          <div class="button-row">
+            <button id="formatData">格式化</button>
+            <button id="reloadData">重载</button>
+            <button class="run" id="saveData">保存</button>
+          </div>
+          <div id="saveStatus" class="save-status">可编辑 `playbooks` 里的方案参数，保存后会刷新页面方案。</div>
+        </div>
       </div>
     </section>
   </main>
@@ -444,6 +479,7 @@
   <script>
     let selected = "baseline";
     let playbookDefaults = {};
+    let platformData = null;
 
     const fmt = (value) => Number(value || 0).toLocaleString("zh-CN", { maximumFractionDigits: 2 });
     const field = (id) => document.getElementById(id);
@@ -462,6 +498,14 @@
         button.addEventListener("click", () => selectPlaybook(button.dataset.id));
       });
       applyDefaults();
+    }
+
+    async function loadDataLayer() {
+      const response = await fetch("/api/platform/data");
+      const data = await response.json();
+      platformData = data.data;
+      field("dataEditor").value = JSON.stringify(platformData, null, 2);
+      field("saveStatus").textContent = `已加载：${data.data_source}`;
     }
 
     function selectPlaybook(id) {
@@ -578,9 +622,51 @@
       )).join("");
     }
 
+    function formatDataLayer() {
+      try {
+        const data = JSON.parse(field("dataEditor").value);
+        field("dataEditor").value = JSON.stringify(data, null, 2);
+        field("saveStatus").textContent = "JSON 格式正确。";
+      } catch (error) {
+        field("saveStatus").textContent = `JSON 格式错误：${error.message}`;
+      }
+    }
+
+    async function saveDataLayer() {
+      let data;
+      try {
+        data = JSON.parse(field("dataEditor").value);
+      } catch (error) {
+        field("saveStatus").textContent = `JSON 格式错误：${error.message}`;
+        return;
+      }
+
+      field("saveStatus").textContent = "保存中...";
+      const response = await fetch("/api/platform/data", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data })
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        field("saveStatus").textContent = `保存失败：${result.message}`;
+        return;
+      }
+      field("saveStatus").textContent = `已保存：${result.data_source}`;
+      await loadOverview();
+      if (!playbookDefaults[selected]) {
+        selected = Object.keys(playbookDefaults)[0];
+      }
+      selectPlaybook(selected);
+      await Promise.all([run(), compare(), loadDataLayer()]);
+    }
+
     field("run").addEventListener("click", run);
     field("compare").addEventListener("click", compare);
-    loadOverview().then(() => Promise.all([run(), compare()]));
+    field("formatData").addEventListener("click", formatDataLayer);
+    field("reloadData").addEventListener("click", loadDataLayer);
+    field("saveData").addEventListener("click", saveDataLayer);
+    loadOverview().then(() => Promise.all([run(), compare(), loadDataLayer()]));
   </script>
 </body>
 </html>

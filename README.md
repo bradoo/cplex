@@ -73,7 +73,7 @@ http://127.0.0.1:5053
 4. 解释 KPI、行动建议和审批分层
 ```
 
-POC 的方案参数来自 `python/data/platform_poc_data.json`，页面会展示当前模型入参，便于讲清“业务数据进入优化模型”的链路。
+POC 的方案参数来自 `python/data/platform_poc_data.json`，页面会展示当前模型入参，并提供数据层 JSON 编辑器；保存后可直接刷新方案并重新求解，便于讲清“业务数据进入优化模型”的链路。
 
 ---
 
