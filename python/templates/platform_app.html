@@ -773,6 +773,15 @@
             </table>
           </div>
           <div>
+            <h3>运行记录</h3>
+            <table>
+              <thead>
+                <tr><th>时间</th><th>方案</th><th>成本</th><th>缺口</th><th>审批</th><th>差异摘要</th></tr>
+              </thead>
+              <tbody id="historyRows"></tbody>
+            </table>
+          </div>
+          <div>
             <h3>接口响应摘要</h3>
             <pre id="raw">点击运行后显示 API 返回的核心字段。</pre>
           </div>
@@ -1074,17 +1083,18 @@
       };
     }
 
-    async function run() {
+    async function run(saveHistory = true) {
       saveSharedState();
       field("current").textContent = "求解中";
       field("inputPlaybook").textContent = "生成中";
       const response = await fetch("/api/platform/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ playbook: selected, overrides: overrides() })
+        body: JSON.stringify({ playbook: selected, overrides: overrides(), save_history: saveHistory })
       });
       const data = await response.json();
       renderCase(data);
+      await loadRunHistory();
     }
 
     function renderCase(data) {
@@ -1269,6 +1279,39 @@
       )).join("");
     }
 
+    async function loadRunHistory() {
+      const response = await fetch("/api/platform/run-history?limit=20");
+      const data = await response.json();
+      const rows = data.rows || [];
+      if (!rows.length) {
+        field("historyRows").innerHTML = `<tr><td colspan="6" class="small">暂无运行记录。</td></tr>`;
+        return;
+      }
+      field("historyRows").innerHTML = rows.map((row) => (
+        `<tr>
+          <td><strong>${formatRunTime(row.created_at)}</strong><div class="small">${row.run_id}</div></td>
+          <td>${row.playbook_name}</td>
+          <td>${fmt(row.summary.total_cost)}</td>
+          <td>${fmt(row.summary.total_shortage)}</td>
+          <td>${row.summary.approval_level}</td>
+          <td>${row.difference.headline || "-"}</td>
+        </tr>`
+      )).join("");
+    }
+
+    function formatRunTime(value) {
+      if (!value) {
+        return "-";
+      }
+      return new Date(value).toLocaleString("zh-CN", {
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit"
+      });
+    }
+
     function formatDataLayer() {
       try {
         const data = JSON.parse(field("dataEditor").value);
@@ -1346,9 +1389,9 @@
     }
 
     activateLayer();
-    field("run").addEventListener("click", run);
-    field("runFromConfig").addEventListener("click", run);
-    field("runFromInputs").addEventListener("click", run);
+    field("run").addEventListener("click", () => run(true));
+    field("runFromConfig").addEventListener("click", () => run(true));
+    field("runFromInputs").addEventListener("click", () => run(true));
     field("compare").addEventListener("click", compare);
     field("formatData").addEventListener("click", formatDataLayer);
     field("reloadData").addEventListener("click", loadDataLayer);
@@ -1357,7 +1400,7 @@
     field("reloadUpstream").addEventListener("click", loadUpstreamData);
     field("saveUpstream").addEventListener("click", saveUpstreamData);
     field("modelInputSelect").addEventListener("change", renderInputs);
-    loadOverview().then(() => Promise.all([run(), compare(), loadDataLayer(), loadUpstreamData(), loadLineage()]));
+    loadOverview().then(() => Promise.all([run(false), compare(), loadDataLayer(), loadUpstreamData(), loadLineage(), loadRunHistory()]));
   </script>
 </body>
 </html>

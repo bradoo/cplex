@@ -1,5 +1,7 @@
 import json
 import tempfile
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from docplex.mp.model import Model
@@ -16,6 +18,7 @@ from scheduling_solver import (
 app = Flask(__name__)
 DATA_PATH = Path(__file__).resolve().parent / "data" / "platform_poc_data.json"
 UPSTREAM_DATA_PATH = Path(__file__).resolve().parent / "data" / "platform_upstream_data.json"
+RUN_HISTORY_PATH = Path(__file__).resolve().parent / "reports" / "platform_runs.jsonl"
 NETWORK_MODES = {"strict", "soft_capacity", "capacity_expansion"}
 
 
@@ -53,6 +56,47 @@ def save_json_file(path, data):
         file.write("\n")
         temp_path = Path(file.name)
     temp_path.replace(path)
+
+
+def append_run_history(result):
+    record = build_run_history_record(result)
+    RUN_HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with RUN_HISTORY_PATH.open("a", encoding="utf-8") as file:
+        file.write(json.dumps(record, ensure_ascii=False) + "\n")
+    return record
+
+
+def load_run_history(limit=20):
+    if not RUN_HISTORY_PATH.exists():
+        return []
+    with RUN_HISTORY_PATH.open(encoding="utf-8") as file:
+        rows = [json.loads(line) for line in file if line.strip()]
+    return list(reversed(rows[-limit:]))
+
+
+def build_run_history_record(result):
+    summary = result["summary"]
+    difference = result.get("difference", {})
+    return {
+        "run_id": uuid.uuid4().hex[:8],
+        "created_at": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
+        "playbook": result["playbook"],
+        "playbook_name": result["playbook_name"],
+        "config": result["config"],
+        "summary": {
+            "total_cost": summary["total_cost"],
+            "network_cost": summary["network_cost"],
+            "replenishment_cost": summary["replenishment_cost"],
+            "staffing_cost": summary["staffing_cost"],
+            "service_cost": summary["service_cost"],
+            "total_shortage": summary["total_shortage"],
+            "approval_level": summary["approval_level"],
+        },
+        "difference": {
+            "headline": difference.get("headline", ""),
+            "management_readout": difference.get("management_readout", ""),
+        },
+    }
 
 
 def validate_platform_data(data):
@@ -440,7 +484,23 @@ def run_platform_case():
     if playbook_id not in playbooks():
         return jsonify({"status": "error", "message": f"Unknown playbook: {playbook_id}"}), 400
 
-    return jsonify(run_case(playbook_id, payload.get("overrides") or {}))
+    result = run_case(playbook_id, payload.get("overrides") or {})
+    if payload.get("save_history", True):
+        result["run_record"] = append_run_history(result)
+    return jsonify(result)
+
+
+@app.get("/api/platform/run-history")
+def get_run_history():
+    limit = request.args.get("limit", default=20, type=int)
+    limit = max(1, min(limit, 100))
+    return jsonify(
+        {
+            "status": "ok",
+            "data_source": str(RUN_HISTORY_PATH.relative_to(Path(__file__).resolve().parent.parent)),
+            "rows": load_run_history(limit),
+        }
+    )
 
 
 def run_case(playbook_id, overrides):
