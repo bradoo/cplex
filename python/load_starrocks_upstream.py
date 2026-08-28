@@ -9,6 +9,7 @@ from benchmark_upstream_volume import build_orders
 
 
 DATA_PATH = Path(__file__).resolve().parent / "data" / "platform_upstream_data.json"
+PLATFORM_DATA_PATH = Path(__file__).resolve().parent / "data" / "platform_poc_data.json"
 
 
 def connect(args, database=None):
@@ -183,6 +184,52 @@ def create_schema(args):
                 PROPERTIES ("replication_num" = "{args.replication_num}")
                 """
             )
+            cursor.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS platform_playbooks (
+                  playbook_id VARCHAR(64) NOT NULL,
+                  name VARCHAR(128) NOT NULL,
+                  description VARCHAR(512) NOT NULL,
+                  demand_multiplier DOUBLE NOT NULL,
+                  sla_extra_days INT NOT NULL,
+                  air_capacity INT NOT NULL,
+                  ocean_lead_time INT NOT NULL,
+                  unfulfilled_penalty DOUBLE NOT NULL,
+                  network_mode VARCHAR(64) NOT NULL,
+                  staff_peak BOOLEAN NOT NULL,
+                  soft_staffing BOOLEAN NOT NULL,
+                  display_order INT NOT NULL
+                )
+                PRIMARY KEY(playbook_id)
+                DISTRIBUTED BY HASH(playbook_id) BUCKETS 4
+                PROPERTIES ("replication_num" = "{args.replication_num}")
+                """
+            )
+            cursor.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS platform_assets (
+                  name VARCHAR(128) NOT NULL,
+                  area VARCHAR(128) NOT NULL,
+                  url VARCHAR(256) NULL,
+                  path VARCHAR(256) NULL,
+                  display_order INT NOT NULL
+                )
+                DUPLICATE KEY(name)
+                DISTRIBUTED BY HASH(name) BUCKETS 4
+                PROPERTIES ("replication_num" = "{args.replication_num}")
+                """
+            )
+            cursor.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS platform_capabilities (
+                  capability VARCHAR(256) NOT NULL,
+                  display_order INT NOT NULL
+                )
+                DUPLICATE KEY(capability)
+                DISTRIBUTED BY HASH(capability) BUCKETS 4
+                PROPERTIES ("replication_num" = "{args.replication_num}")
+                """
+            )
 
 
 def batched(rows, size):
@@ -304,17 +351,66 @@ def load_dimension_tables(cursor, source_data):
     }
 
 
+def load_platform_tables(cursor, platform_data):
+    for table in ("platform_playbooks", "platform_assets", "platform_capabilities"):
+        cursor.execute(f"TRUNCATE TABLE `{table}`")
+    cursor.executemany(
+        """
+        INSERT INTO platform_playbooks
+        (playbook_id, name, description, demand_multiplier, sla_extra_days,
+         air_capacity, ocean_lead_time, unfulfilled_penalty, network_mode,
+         staff_peak, soft_staffing, display_order)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """,
+        [
+            (
+                playbook_id,
+                values["name"],
+                values["description"],
+                values["demand_multiplier"],
+                values["sla_extra_days"],
+                values["air_capacity"],
+                values["ocean_lead_time"],
+                values["unfulfilled_penalty"],
+                values["network_mode"],
+                int(values["staff_peak"]),
+                int(values["soft_staffing"]),
+                index,
+            )
+            for index, (playbook_id, values) in enumerate(platform_data["playbooks"].items())
+        ],
+    )
+    cursor.executemany(
+        "INSERT INTO platform_assets (name, area, url, path, display_order) VALUES (%s, %s, %s, %s, %s)",
+        [
+            (asset["name"], asset["area"], asset.get("url", ""), asset.get("path", ""), index)
+            for index, asset in enumerate(platform_data["assets"])
+        ],
+    )
+    cursor.executemany(
+        "INSERT INTO platform_capabilities (capability, display_order) VALUES (%s, %s)",
+        [(capability, index) for index, capability in enumerate(platform_data["capabilities"])],
+    )
+    return {
+        "playbooks": len(platform_data["playbooks"]),
+        "assets": len(platform_data["assets"]),
+        "capabilities": len(platform_data["capabilities"]),
+    }
+
+
 def load_orders(args):
     source_data = json.loads(DATA_PATH.read_text(encoding="utf-8"))
-    rows = build_orders(source_data.get("orders", []), args.orders)
+    platform_data = json.loads(PLATFORM_DATA_PATH.read_text(encoding="utf-8"))
+    rows = [] if args.skip_orders else build_orders(source_data.get("orders", []), args.orders)
     create_schema(args)
 
     started_at = time.perf_counter()
     with connect(args, args.database) as connection:
         with connection.cursor() as cursor:
             dimension_counts = load_dimension_tables(cursor, source_data)
+            platform_counts = load_platform_tables(cursor, platform_data)
             dimensions_loaded_at = time.perf_counter()
-            if args.truncate:
+            if args.truncate and not args.skip_orders:
                 cursor.execute(f"TRUNCATE TABLE `{args.table}`")
             inserted = 0
             insert_sql = (
@@ -322,25 +418,26 @@ def load_orders(args):
                 "(order_id, market, channel, units, priority, requested_delivery_days, demand_share_bp) "
                 "VALUES (%s, %s, %s, %s, %s, %s, %s)"
             )
-            for batch in batched(rows, args.batch_size):
-                cursor.executemany(
-                    insert_sql,
-                    [
-                        (
-                            row["order_id"],
-                            row["market"],
-                            row["channel"],
-                            row["units"],
-                            row["priority"],
-                            row["requested_delivery_days"],
-                            row["demand_share_bp"],
-                        )
-                        for row in batch
-                    ],
-                )
-                inserted += len(batch)
-                if args.progress and inserted % args.progress == 0:
-                    print(f"inserted={inserted}")
+            if not args.skip_orders:
+                for batch in batched(rows, args.batch_size):
+                    cursor.executemany(
+                        insert_sql,
+                        [
+                            (
+                                row["order_id"],
+                                row["market"],
+                                row["channel"],
+                                row["units"],
+                                row["priority"],
+                                row["requested_delivery_days"],
+                                row["demand_share_bp"],
+                            )
+                            for row in batch
+                        ],
+                    )
+                    inserted += len(batch)
+                    if args.progress and inserted % args.progress == 0:
+                        print(f"inserted={inserted}")
     loaded_at = time.perf_counter()
 
     with connect(args, args.database) as connection:
@@ -366,6 +463,7 @@ def load_orders(args):
         "target_order_lines": args.orders,
         "loaded_order_lines": order_line_count,
         "dimension_rows": dimension_counts,
+        "platform_rows": platform_counts,
         "timings_seconds": {
             "load_dimensions": round(dimensions_loaded_at - started_at, 3),
             "insert_orders": round(loaded_at - dimensions_loaded_at, 3),
@@ -390,6 +488,7 @@ def main():
     parser.add_argument("--replication-num", default="1")
     parser.add_argument("--progress", type=int, default=100_000)
     parser.add_argument("--no-truncate", action="store_false", dest="truncate")
+    parser.add_argument("--skip-orders", action="store_true")
     parser.set_defaults(truncate=True)
     args = parser.parse_args()
     print(json.dumps(load_orders(args), ensure_ascii=False, indent=2, default=str))

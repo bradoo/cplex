@@ -120,3 +120,40 @@ CREATE TABLE IF NOT EXISTS upstream_service_provider_market_terms (
 DUPLICATE KEY(service, market)
 DISTRIBUTED BY HASH(service, market) BUCKETS 8
 PROPERTIES ("replication_num" = "1");
+
+CREATE TABLE IF NOT EXISTS platform_playbooks (
+  playbook_id VARCHAR(64) NOT NULL,
+  name VARCHAR(128) NOT NULL,
+  description VARCHAR(512) NOT NULL,
+  demand_multiplier DOUBLE NOT NULL,
+  sla_extra_days INT NOT NULL,
+  air_capacity INT NOT NULL,
+  ocean_lead_time INT NOT NULL,
+  unfulfilled_penalty DOUBLE NOT NULL,
+  network_mode VARCHAR(64) NOT NULL,
+  staff_peak BOOLEAN NOT NULL,
+  soft_staffing BOOLEAN NOT NULL,
+  display_order INT NOT NULL
+)
+PRIMARY KEY(playbook_id)
+DISTRIBUTED BY HASH(playbook_id) BUCKETS 4
+PROPERTIES ("replication_num" = "1");
+
+CREATE TABLE IF NOT EXISTS platform_assets (
+  name VARCHAR(128) NOT NULL,
+  area VARCHAR(128) NOT NULL,
+  url VARCHAR(256) NULL,
+  path VARCHAR(256) NULL,
+  display_order INT NOT NULL
+)
+DUPLICATE KEY(name)
+DISTRIBUTED BY HASH(name) BUCKETS 4
+PROPERTIES ("replication_num" = "1");
+
+CREATE TABLE IF NOT EXISTS platform_capabilities (
+  capability VARCHAR(256) NOT NULL,
+  display_order INT NOT NULL
+)
+DUPLICATE KEY(capability)
+DISTRIBUTED BY HASH(capability) BUCKETS 4
+PROPERTIES ("replication_num" = "1");

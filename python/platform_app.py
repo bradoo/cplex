@@ -28,7 +28,10 @@ STARROCKS_DEFAULT_LIMIT = 1000
 
 def load_platform_data():
     with DATA_PATH.open(encoding="utf-8") as file:
-        return json.load(file)
+        data = json.load(file)
+    if starrocks_upstream_enabled():
+        return load_starrocks_platform_data(data)
+    return data
 
 
 def load_upstream_data():
@@ -68,6 +71,13 @@ def upstream_data_source_label(data=None):
         config = starrocks_config()
         return f"starrocks://{config['host']}:{config['port']}/{config['database']}.{config['table']}"
     return str(UPSTREAM_DATA_PATH.relative_to(Path(__file__).resolve().parent.parent))
+
+
+def platform_data_source_label():
+    if starrocks_upstream_enabled():
+        config = starrocks_config()
+        return f"starrocks://{config['host']}:{config['port']}/{config['database']}.platform_playbooks"
+    return str(DATA_PATH.relative_to(Path(__file__).resolve().parent.parent))
 
 
 def starrocks_connection():
@@ -218,6 +228,48 @@ def load_starrocks_service_level(cursor):
     }
 
 
+def load_starrocks_platform_data(fallback_data):
+    with starrocks_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT playbook_id, name, description, demand_multiplier, sla_extra_days,
+                       air_capacity, ocean_lead_time, unfulfilled_penalty, network_mode,
+                       staff_peak, soft_staffing
+                FROM platform_playbooks
+                ORDER BY display_order, playbook_id
+                """
+            )
+            playbooks = {
+                row["playbook_id"]: {
+                    "name": row["name"],
+                    "description": row["description"],
+                    "demand_multiplier": float(row["demand_multiplier"]),
+                    "sla_extra_days": int(row["sla_extra_days"]),
+                    "air_capacity": int(row["air_capacity"]),
+                    "ocean_lead_time": int(row["ocean_lead_time"]),
+                    "unfulfilled_penalty": float(row["unfulfilled_penalty"]),
+                    "network_mode": row["network_mode"],
+                    "staff_peak": bool(row["staff_peak"]),
+                    "soft_staffing": bool(row["soft_staffing"]),
+                }
+                for row in cursor.fetchall()
+            }
+            cursor.execute("SELECT name, area, url, path FROM platform_assets ORDER BY display_order, name")
+            assets = [
+                {key: value for key, value in row.items() if value not in (None, "")}
+                for row in cursor.fetchall()
+            ]
+            cursor.execute("SELECT capability FROM platform_capabilities ORDER BY display_order, capability")
+            capabilities = [row["capability"] for row in cursor.fetchall()]
+
+    return {
+        "playbooks": playbooks or fallback_data["playbooks"],
+        "assets": assets or fallback_data["assets"],
+        "capabilities": capabilities or fallback_data["capabilities"],
+    }
+
+
 def build_upstream_source_status():
     started_at = perf_counter()
     if not starrocks_upstream_enabled():
@@ -247,6 +299,9 @@ def build_upstream_source_status():
     config = starrocks_config()
     table_specs = [
         (config["table"], "订单事实表"),
+        ("platform_playbooks", "场景方案配置"),
+        ("platform_assets", "平台资产导航"),
+        ("platform_capabilities", "平台能力说明"),
         ("upstream_network_warehouses", "仓库能力"),
         ("upstream_network_markets", "市场需求"),
         ("upstream_network_lanes", "仓网线路"),
@@ -298,7 +353,56 @@ def playbooks():
 
 
 def save_platform_data(data):
+    if starrocks_upstream_enabled():
+        save_starrocks_platform_data(data)
+        return
     save_json_file(DATA_PATH, data)
+
+
+def save_starrocks_platform_data(data):
+    with starrocks_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("TRUNCATE TABLE platform_playbooks")
+            cursor.executemany(
+                """
+                INSERT INTO platform_playbooks
+                (playbook_id, name, description, demand_multiplier, sla_extra_days,
+                 air_capacity, ocean_lead_time, unfulfilled_penalty, network_mode,
+                 staff_peak, soft_staffing, display_order)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                [
+                    (
+                        playbook_id,
+                        values["name"],
+                        values["description"],
+                        values["demand_multiplier"],
+                        values["sla_extra_days"],
+                        values["air_capacity"],
+                        values["ocean_lead_time"],
+                        values["unfulfilled_penalty"],
+                        values["network_mode"],
+                        int(values["staff_peak"]),
+                        int(values["soft_staffing"]),
+                        index,
+                    )
+                    for index, (playbook_id, values) in enumerate(data["playbooks"].items())
+                ],
+            )
+            cursor.execute("TRUNCATE TABLE platform_assets")
+            cursor.executemany(
+                "INSERT INTO platform_assets (name, area, url, path, display_order) VALUES (%s, %s, %s, %s, %s)",
+                [
+                    (asset["name"], asset["area"], asset.get("url", ""), asset.get("path", ""), index)
+                    for index, asset in enumerate(data["assets"])
+                ],
+            )
+            cursor.execute("TRUNCATE TABLE platform_capabilities")
+            cursor.executemany(
+                "INSERT INTO platform_capabilities (capability, display_order) VALUES (%s, %s)",
+                [(capability, index) for index, capability in enumerate(data["capabilities"])],
+            )
+        connection.commit()
 
 
 def save_upstream_data(data):
@@ -949,7 +1053,7 @@ def overview():
             ],
             "assets": data["assets"],
             "capabilities": data["capabilities"],
-            "data_source": str(DATA_PATH.relative_to(Path(__file__).resolve().parent.parent)),
+            "data_source": platform_data_source_label(),
         }
     )
 
@@ -959,7 +1063,7 @@ def get_platform_data():
     return jsonify(
         {
             "status": "ok",
-            "data_source": str(DATA_PATH.relative_to(Path(__file__).resolve().parent.parent)),
+            "data_source": platform_data_source_label(),
             "data": load_platform_data(),
         }
     )
@@ -978,7 +1082,7 @@ def update_platform_data():
         {
             "status": "ok",
             "message": "Data layer saved",
-            "data_source": str(DATA_PATH.relative_to(Path(__file__).resolve().parent.parent)),
+            "data_source": platform_data_source_label(),
         }
     )
 
@@ -1038,7 +1142,7 @@ def get_lineage():
                 {
                     "id": "config",
                     "name": "场景配置层",
-                    "source": str(DATA_PATH.relative_to(Path(__file__).resolve().parent.parent)),
+                    "source": platform_data_source_label(),
                     "owner": "运营 / 计划",
                     "description": "保存管理假设，例如需求倍率、空运能力、缺口罚分、SLA 放宽和模型模式。",
                 },
@@ -1501,7 +1605,7 @@ def build_model_inputs(config):
     return {
         "lineage": {
             "upstream_source": upstream_data_source_label(upstream_data),
-            "scenario_config_source": str(DATA_PATH.relative_to(Path(__file__).resolve().parent.parent)),
+            "scenario_config_source": platform_data_source_label(),
             "transform": "上游原始数据 + 当前方案参数 -> CPLEX 模型运行入参",
         },
         "network": network_input,
