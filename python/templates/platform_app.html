@@ -541,6 +541,32 @@
       font-size: 13px;
     }
 
+    .run-steps {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .run-step {
+      min-height: 64px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 9px;
+      background: #fff;
+      display: grid;
+      gap: 3px;
+    }
+
+    .run-step.active {
+      border-color: #adc4ff;
+      background: var(--soft-blue);
+    }
+
+    .run-step.done {
+      border-color: #bcebd5;
+      background: var(--soft-green);
+    }
+
     .impact-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -630,7 +656,7 @@
 
     @media (max-width: 1040px) {
       .top, .page, .two-col { grid-template-columns: 1fr; }
-      .flow, .grid, .readiness-grid, .impact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .flow, .grid, .readiness-grid, .impact-grid, .run-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .explain-grid { grid-template-columns: 1fr; }
       .diff-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .lineage-diagram { overflow-x: auto; padding-bottom: 6px; }
@@ -639,7 +665,7 @@
     }
 
     @media (max-width: 640px) {
-      .flow, .grid, .diff-grid, .readiness-grid, .impact-grid { grid-template-columns: 1fr; }
+      .flow, .grid, .diff-grid, .readiness-grid, .impact-grid, .run-steps { grid-template-columns: 1fr; }
       .flow-step::after { display: none; }
       .row, .bar-row { grid-template-columns: 1fr; }
     }
@@ -800,6 +826,7 @@
           <button id="compare">刷新三方案对比</button>
           <button id="exportReport">导出演示报告</button>
           <div id="exportStatus" class="status-line">报告会导出到 python/reports 目录。</div>
+          <div id="runSteps" class="run-steps"></div>
           <div id="approval" class="approval">审批分层：-</div>
           <p id="decisionNote" class="small">运行后显示决策解释。</p>
           <div>
@@ -933,6 +960,7 @@
     let runHistoryRows = [];
     let lastReportPath = "";
     let latestCaseData = null;
+    let runSequence = 0;
     const activeLayer = document.body.dataset.activeLayer || "upstream";
     const stateKey = "cplexPlatformPocState";
 
@@ -1257,6 +1285,28 @@
       };
     }
 
+    const runStepLabels = [
+      ["validate", "数据校验", "检查上游数据和场景参数"],
+      ["inputs", "入参生成", "构造 CPLEX runtime payload"],
+      ["solve", "CPLEX 求解", "运行仓网、补货、服务、排班模型"],
+      ["explain", "结果解释", "生成差异、风险和执行计划"],
+      ["record", "记录沉淀", "保存运行历史或回放状态"]
+    ];
+
+    function renderRunSteps(activeIndex = -1, doneCount = 0, note = "等待运行") {
+      field("runSteps").innerHTML = runStepLabels.map(([key, name, detail], index) => {
+        const state = index < doneCount ? "done" : index === activeIndex ? "active" : "";
+        const status = index < doneCount ? "完成" : index === activeIndex ? "进行中" : note;
+        return `
+          <div class="run-step ${state}" data-run-step="${key}">
+            <strong>${name}</strong>
+            <span class="small">${detail}</span>
+            <span class="status">${status}</span>
+          </div>
+        `;
+      }).join("");
+    }
+
     function renderParameterImpact() {
       if (!playbookDefaults.baseline || !field("parameterImpactRows")) {
         return;
@@ -1288,19 +1338,34 @@
     }
 
     async function run(saveHistory = true) {
+      const sequence = ++runSequence;
       saveSharedState();
       lastReportPath = "";
       field("exportStatus").textContent = "报告会导出到 python/reports 目录。";
       field("current").textContent = "求解中";
       field("inputPlaybook").textContent = "生成中";
+      renderRunSteps(0, 0);
+      setTimeout(() => {
+        if (sequence === runSequence) renderRunSteps(1, 1);
+      }, 80);
+      setTimeout(() => {
+        if (sequence === runSequence) renderRunSteps(2, 2);
+      }, 160);
       const response = await fetch("/api/platform/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ playbook: selected, overrides: overrides(), save_history: saveHistory })
       });
+      if (!response.ok) {
+        field("current").textContent = "运行失败";
+        renderRunSteps(2, 2, "失败");
+        return;
+      }
+      renderRunSteps(3, 3);
       const data = await response.json();
       renderCase(data);
       await loadRunHistory();
+      renderRunSteps(-1, 5, saveHistory ? "完成" : "回放");
     }
 
     function renderCase(data) {
@@ -1675,6 +1740,7 @@
     }
 
     activateLayer();
+    renderRunSteps();
     field("run").addEventListener("click", () => run(true));
     field("runFromConfig").addEventListener("click", () => run(true));
     field("runFromInputs").addEventListener("click", () => run(true));
