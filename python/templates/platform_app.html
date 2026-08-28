@@ -9,11 +9,12 @@
       --bg: #f4f6f8;
       --panel: #ffffff;
       --ink: #20252b;
-      --muted: #687582;
+      --muted: #697684;
       --line: #dce3ea;
       --blue: #2463eb;
       --green: #10845f;
-      --amber: #a05f00;
+      --amber: #9a6400;
+      --red: #bd3930;
       --soft-blue: #eaf1ff;
       --soft-green: #e7f6ef;
       --soft-amber: #fff3d8;
@@ -37,12 +38,12 @@
     }
 
     .wrap {
-      width: min(1320px, calc(100% - 32px));
+      width: min(1240px, calc(100% - 32px));
       margin: 0 auto;
     }
 
     .top {
-      min-height: 132px;
+      min-height: 118px;
       display: grid;
       grid-template-columns: 1fr auto;
       gap: 18px;
@@ -81,13 +82,66 @@
       white-space: nowrap;
     }
 
-    main {
-      padding: 18px 0 36px;
+    .flow {
+      padding: 14px 0 16px;
+      border-top: 1px solid var(--line);
       display: grid;
-      grid-template-columns: 310px 1fr 360px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .flow-step {
+      min-height: 74px;
+      position: relative;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 11px 12px;
+      background: #fff;
+      color: var(--ink);
+      text-decoration: none;
+      display: grid;
+      gap: 4px;
+    }
+
+    .flow-step:not(:last-child)::after {
+      content: ">";
+      position: absolute;
+      right: -9px;
+      top: 25px;
+      color: #9aa6b2;
+      font-weight: 900;
+      z-index: 2;
+    }
+
+    .flow-step.active {
+      border-color: #adc4ff;
+      background: var(--soft-blue);
+      box-shadow: inset 0 4px 0 var(--blue);
+    }
+
+    .flow-step strong {
+      color: var(--blue);
+      font-size: 14px;
+    }
+
+    .flow-step span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    main {
+      padding: 18px 0 38px;
+    }
+
+    .page {
+      display: none;
+      grid-template-columns: 320px 1fr;
       gap: 16px;
       align-items: start;
     }
+
+    .page.active { display: grid; }
 
     section {
       background: var(--panel);
@@ -116,108 +170,21 @@
       gap: 15px;
     }
 
-    .playbooks, .rows, .fields {
-      display: grid;
-      gap: 9px;
-    }
-
-    .data-source {
-      border: 1px solid #b9cef9;
-      border-radius: 8px;
-      padding: 10px;
-      background: var(--soft-blue);
-      color: var(--blue);
-      font-size: 12px;
-      font-weight: 800;
-      overflow-wrap: anywhere;
-    }
-
-    button {
-      min-height: 38px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #fff;
-      color: var(--ink);
-      font: inherit;
-      font-weight: 800;
-      cursor: pointer;
-    }
-
-    button:hover { border-color: #b8c5d2; background: #f8fafc; }
-    button.active { border-color: #adc4ff; background: var(--soft-blue); color: var(--blue); }
-
-    .playbook {
-      padding: 10px;
-      text-align: left;
-      display: grid;
-      gap: 4px;
-    }
-
-    .playbook span {
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 650;
-      line-height: 1.35;
-    }
-
-    .run {
-      width: 100%;
-      background: var(--blue);
-      border-color: var(--blue);
-      color: #fff;
-    }
-
-    .field {
-      display: grid;
-      gap: 6px;
-    }
-
-    label {
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 760;
-    }
-
-    input,
-    textarea {
-      width: 100%;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 7px 9px;
-      color: var(--ink);
-      font: inherit;
-      font-weight: 760;
-    }
-
-    input { min-height: 36px; }
-
-    textarea {
-      min-height: 260px;
-      resize: vertical;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-      font-size: 12px;
-      line-height: 1.5;
-      font-weight: 500;
-      background: #f8fafc;
-    }
-
-    .button-row {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 8px;
-    }
-
-    .save-status {
-      min-height: 20px;
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 760;
-    }
-
     .grid {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 12px;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .rows, .fields, .playbooks {
+      display: grid;
+      gap: 9px;
     }
 
     .metric, .item {
@@ -249,9 +216,92 @@
 
     .small { color: var(--muted); font-size: 13px; }
 
+    button {
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--ink);
+      font: inherit;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    button:hover { border-color: #b8c5d2; background: #f8fafc; }
+    button.active { border-color: #adc4ff; background: var(--soft-blue); color: var(--blue); }
+
+    .run {
+      width: 100%;
+      background: var(--blue);
+      border-color: var(--blue);
+      color: #fff;
+    }
+
+    .playbook {
+      padding: 10px;
+      text-align: left;
+      display: grid;
+      gap: 4px;
+    }
+
+    .playbook span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+      line-height: 1.35;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+
+    label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 760;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 7px 9px;
+      color: var(--ink);
+      font: inherit;
+      font-weight: 760;
+    }
+
+    input, select { min-height: 36px; }
+
+    textarea {
+      min-height: 420px;
+      resize: vertical;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      font-weight: 500;
+      background: #f8fafc;
+    }
+
+    .button-row {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .status-line {
+      min-height: 20px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 760;
+    }
+
     .row {
       display: grid;
-      grid-template-columns: 136px 1fr auto;
+      grid-template-columns: 150px 1fr auto;
       gap: 10px;
       align-items: center;
       border: 1px solid var(--line);
@@ -339,156 +389,212 @@
       color: #334155;
       font-size: 12px;
       line-height: 1.5;
-      max-height: 220px;
+      max-height: 520px;
       overflow: auto;
     }
 
-    @media (max-width: 1120px) {
-      main { grid-template-columns: 1fr; }
-      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    @media (max-width: 1040px) {
+      .top, .page, .two-col { grid-template-columns: 1fr; }
+      .flow, .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .health { grid-template-columns: 1fr; }
     }
 
     @media (max-width: 640px) {
-      .top { grid-template-columns: 1fr; align-items: start; padding: 20px 0; }
-      .health { grid-template-columns: 1fr; }
-      .grid { grid-template-columns: 1fr; }
+      .flow, .grid { grid-template-columns: 1fr; }
+      .flow-step::after { display: none; }
       .row, .bar-row { grid-template-columns: 1fr; }
     }
   </style>
 </head>
-<body>
+<body data-active-layer="{{ active_layer }}">
   <header>
     <div class="wrap top">
       <div>
         <h1>CPLEX 优化平台 POC</h1>
-        <p class="subtitle">把排班、仓网、补货和服务水平模型封装成一个可调参、可对比、可审批的决策入口。</p>
+        <p class="subtitle">从上游业务数据到 CPLEX 模型入参，再到求解结果和管理动作。</p>
       </div>
       <div class="health">
+        <span class="pill">数据层：OMS / WMS / TMS / HR</span>
         <span class="pill">模型层：DOcplex / CPLEX</span>
-        <span class="pill">服务层：Flask API</span>
-        <span class="pill">汇报层：KPI / 行动建议</span>
+        <span class="pill">决策层：KPI / 审批 / 行动</span>
       </div>
     </div>
+    <nav class="wrap flow" aria-label="平台流程导航">
+      <a class="flow-step" data-layer-link="upstream" href="/upstream"><strong>1. 上游数据</strong><span>业务原始数据接入</span></a>
+      <a class="flow-step" data-layer-link="config" href="/config"><strong>2. 场景配置</strong><span>方案参数与假设</span></a>
+      <a class="flow-step" data-layer-link="inputs" href="/inputs"><strong>3. 模型入参</strong><span>转换后的 CPLEX 数据</span></a>
+      <a class="flow-step" data-layer-link="results" href="/results"><strong>4. 求解结果</strong><span>KPI、风险与建议动作</span></a>
+    </nav>
   </header>
 
   <main class="wrap">
-    <section>
-      <div class="section-head"><h2>方案与参数</h2></div>
-      <div class="content">
-        <div id="playbooks" class="playbooks"></div>
-        <div class="fields">
-          <div class="field">
-            <label for="demand">需求倍率</label>
-            <input id="demand" type="number" min="0.8" max="1.6" step="0.05">
+    <div class="page" data-layer="upstream">
+      <section>
+        <div class="section-head"><h2>上游数据接入层</h2><span class="pill">Source</span></div>
+        <div class="content">
+          <p class="small">这一层模拟从 OMS、WMS、TMS、HR 同步来的原始业务数据，还没有进入优化模型。</p>
+          <div id="upstreamSummary" class="rows"></div>
+        </div>
+      </section>
+      <section>
+        <div class="section-head"><h2>上游数据 JSON</h2><span id="upstreamSource" class="pill">加载中</span></div>
+        <div class="content">
+          <pre id="upstreamJson">加载上游业务原始数据。</pre>
+        </div>
+      </section>
+    </div>
+
+    <div class="page" data-layer="config">
+      <section>
+        <div class="section-head"><h2>方案配置</h2><span id="configSource" class="pill">加载中</span></div>
+        <div class="content">
+          <div id="playbooks" class="playbooks"></div>
+          <div class="fields">
+            <div class="field">
+              <label for="demand">需求倍率</label>
+              <input id="demand" type="number" min="0.8" max="1.6" step="0.05">
+            </div>
+            <div class="field">
+              <label for="air">空运周容量</label>
+              <input id="air" type="number" min="400" max="1400" step="20">
+            </div>
+            <div class="field">
+              <label for="penalty">缺口罚分</label>
+              <input id="penalty" type="number" min="20" max="180" step="5">
+            </div>
+            <div class="field">
+              <label for="sla">SLA 放宽天数</label>
+              <input id="sla" type="number" min="0" max="3" step="1">
+            </div>
           </div>
-          <div class="field">
-            <label for="air">空运周容量</label>
-            <input id="air" type="number" min="400" max="1400" step="20">
-          </div>
-          <div class="field">
-            <label for="penalty">缺口罚分</label>
-            <input id="penalty" type="number" min="20" max="180" step="5">
-          </div>
-          <div class="field">
-            <label for="sla">SLA 放宽天数</label>
-            <input id="sla" type="number" min="0" max="3" step="1">
-          </div>
+          <button class="run" id="runFromConfig">保存临时参数并运行</button>
         </div>
-        <button class="run" id="run">运行当前方案</button>
-        <button id="compare">刷新三方案对比</button>
-        <div id="dataSource" class="data-source">数据源：-</div>
-      </div>
-    </section>
-
-    <section>
-      <div class="section-head">
-        <h2>管理驾驶舱</h2>
-        <span id="current" class="pill">等待运行</span>
-      </div>
-      <div class="content">
-        <div class="grid">
-          <div id="totalCard" class="metric"><span class="label">综合成本</span><strong id="totalCost" class="value">-</strong></div>
-          <div class="metric"><span class="label">仓网成本</span><strong id="networkCost" class="value">-</strong></div>
-          <div class="metric"><span class="label">补货成本</span><strong id="replenishmentCost" class="value">-</strong></div>
-          <div id="shortageCard" class="metric"><span class="label">总缺口</span><strong id="shortage" class="value">-</strong></div>
-        </div>
-
-        <div>
-          <h3>成本结构</h3>
-          <div id="bars" class="bars"></div>
-        </div>
-
-        <div>
-          <h3>模型入参数据</h3>
-          <table>
-            <thead>
-              <tr><th>字段</th><th>当前值</th><th>业务含义</th></tr>
-            </thead>
-            <tbody id="inputRows"></tbody>
-          </table>
-        </div>
-
-        <div>
-          <h3>模型链路</h3>
-          <div class="rows" id="modelRows"></div>
-        </div>
-
-        <div>
-          <h3>建议动作</h3>
-          <ul class="actions" id="actions"></ul>
-        </div>
-      </div>
-    </section>
-
-    <section>
-      <div class="section-head"><h2>审批与对比</h2></div>
-      <div class="content">
-        <div id="approval" class="approval">审批分层：-</div>
-        <p id="decisionNote" class="small">运行后显示决策解释。</p>
-        <div>
-          <h3>风险提示</h3>
-          <div id="risks" class="rows"></div>
-        </div>
-        <div>
-          <h3>三方案对比</h3>
-          <table>
-            <thead>
-              <tr><th>方案</th><th>成本</th><th>缺口</th><th>审批</th></tr>
-            </thead>
-            <tbody id="compareRows"></tbody>
-          </table>
-        </div>
-        <div>
-          <h3>接口响应摘要</h3>
-          <pre id="raw">点击运行后显示 API 返回的核心字段。</pre>
-        </div>
-        <div>
-          <h3>数据层编辑器</h3>
+      </section>
+      <section>
+        <div class="section-head"><h2>平台配置数据层</h2></div>
+        <div class="content">
           <textarea id="dataEditor" spellcheck="false"></textarea>
           <div class="button-row">
             <button id="formatData">格式化</button>
             <button id="reloadData">重载</button>
             <button class="run" id="saveData">保存</button>
           </div>
-          <div id="saveStatus" class="save-status">可编辑 `playbooks` 里的方案参数，保存后会刷新页面方案。</div>
+          <div id="saveStatus" class="status-line">这里编辑的是场景配置，不是上游原始业务表。</div>
         </div>
-      </div>
-    </section>
+      </section>
+    </div>
+
+    <div class="page" data-layer="inputs">
+      <section>
+        <div class="section-head"><h2>入参选择</h2><span id="inputPlaybook" class="pill">等待运行</span></div>
+        <div class="content">
+          <div class="field">
+            <label for="modelInputSelect">选择模型</label>
+            <select id="modelInputSelect">
+              <option value="network">仓网选址与履约</option>
+              <option value="replenishment">补货计划</option>
+              <option value="service_level">服务水平组合</option>
+              <option value="staffing">人员排班</option>
+            </select>
+          </div>
+          <div id="lineageRows" class="rows"></div>
+          <button class="run" id="runFromInputs">重新生成模型入参</button>
+        </div>
+      </section>
+      <section>
+        <div class="section-head"><h2>CPLEX 模型运行入参</h2></div>
+        <div class="content">
+          <table>
+            <thead>
+              <tr><th>字段</th><th>当前值</th><th>业务含义</th></tr>
+            </thead>
+            <tbody id="inputRows"></tbody>
+          </table>
+          <pre id="modelInputJson">运行后显示当前模型实际入参。</pre>
+        </div>
+      </section>
+    </div>
+
+    <div class="page" data-layer="results">
+      <section>
+        <div class="section-head"><h2>运行控制</h2><span id="current" class="pill">等待运行</span></div>
+        <div class="content">
+          <button class="run" id="run">运行当前方案</button>
+          <button id="compare">刷新三方案对比</button>
+          <div id="approval" class="approval">审批分层：-</div>
+          <p id="decisionNote" class="small">运行后显示决策解释。</p>
+          <div>
+            <h3>风险提示</h3>
+            <div id="risks" class="rows"></div>
+          </div>
+        </div>
+      </section>
+      <section>
+        <div class="section-head"><h2>求解结果驾驶舱</h2></div>
+        <div class="content">
+          <div class="grid">
+            <div id="totalCard" class="metric"><span class="label">综合成本</span><strong id="totalCost" class="value">-</strong></div>
+            <div class="metric"><span class="label">仓网成本</span><strong id="networkCost" class="value">-</strong></div>
+            <div class="metric"><span class="label">补货成本</span><strong id="replenishmentCost" class="value">-</strong></div>
+            <div id="shortageCard" class="metric"><span class="label">总缺口</span><strong id="shortage" class="value">-</strong></div>
+          </div>
+          <div class="two-col">
+            <div>
+              <h3>成本结构</h3>
+              <div id="bars" class="bars"></div>
+            </div>
+            <div>
+              <h3>模型链路</h3>
+              <div class="rows" id="modelRows"></div>
+            </div>
+          </div>
+          <div>
+            <h3>建议动作</h3>
+            <ul class="actions" id="actions"></ul>
+          </div>
+          <div>
+            <h3>三方案对比</h3>
+            <table>
+              <thead>
+                <tr><th>方案</th><th>成本</th><th>缺口</th><th>审批</th></tr>
+              </thead>
+              <tbody id="compareRows"></tbody>
+            </table>
+          </div>
+          <div>
+            <h3>接口响应摘要</h3>
+            <pre id="raw">点击运行后显示 API 返回的核心字段。</pre>
+          </div>
+        </div>
+      </section>
+    </div>
   </main>
 
   <script>
     let selected = "baseline";
     let playbookDefaults = {};
     let platformData = null;
+    let latestModelInputs = null;
+    let upstreamData = null;
+    const activeLayer = document.body.dataset.activeLayer || "upstream";
 
     const fmt = (value) => Number(value || 0).toLocaleString("zh-CN", { maximumFractionDigits: 2 });
     const field = (id) => document.getElementById(id);
+
+    function activateLayer() {
+      document.querySelectorAll("[data-layer]").forEach((page) => {
+        page.classList.toggle("active", page.dataset.layer === activeLayer);
+      });
+      document.querySelectorAll("[data-layer-link]").forEach((link) => {
+        link.classList.toggle("active", link.dataset.layerLink === activeLayer);
+      });
+    }
 
     async function loadOverview() {
       const response = await fetch("/api/platform/overview");
       const data = await response.json();
       playbookDefaults = Object.fromEntries(data.playbooks.map((item) => [item.id, item.defaults]));
-      field("dataSource").textContent = `数据源：${data.data_source}`;
+      field("configSource").textContent = data.data_source;
       field("playbooks").innerHTML = data.playbooks.map((item) => (
         `<button data-id="${item.id}" class="playbook ${item.id === selected ? "active" : ""}">
           <strong>${item.name}</strong><span>${item.description}</span>
@@ -506,6 +612,31 @@
       platformData = data.data;
       field("dataEditor").value = JSON.stringify(platformData, null, 2);
       field("saveStatus").textContent = `已加载：${data.data_source}`;
+    }
+
+    async function loadUpstreamData() {
+      const response = await fetch("/api/platform/upstream-data");
+      const data = await response.json();
+      upstreamData = data.data;
+      field("upstreamSource").textContent = data.data_source;
+      field("upstreamSummary").innerHTML = upstreamRows(data).map(([name, value, meaning]) => (
+        `<div class="row"><strong>${name}</strong><span class="small">${meaning}</span><span class="status">${value}</span></div>`
+      )).join("");
+      field("upstreamJson").textContent = JSON.stringify(data.data, null, 2);
+    }
+
+    function upstreamRows(response) {
+      const data = response.data;
+      const network = data.network;
+      const replenishment = data.replenishment;
+      const serviceLevel = data.service_level;
+      return [
+        ["快照日期", data.metadata.snapshot_date, "上游数据同步日期"],
+        ["来源系统", data.metadata.source_systems.join(", "), "模拟 OMS/WMS/TMS/HR 同步"],
+        ["仓网基础表", `${Object.keys(network.warehouses).length} 仓 / ${Object.keys(network.markets).length} 市场 / ${network.lanes.length} 线路`, "仓库容量、市场需求、线路成本和时效"],
+        ["补货基础表", `${replenishment.weeks.length} 周 / ${Object.keys(replenishment.lanes).length} 渠道`, "周需求、库存、运输渠道和补货成本"],
+        ["服务基础表", `${Object.keys(serviceLevel.markets).length} 市场 / ${Object.keys(serviceLevel.services).length} 服务`, "服务商容量、成本和平均时效约束"]
+      ];
     }
 
     function selectPlaybook(id) {
@@ -533,6 +664,7 @@
 
     async function run() {
       field("current").textContent = "求解中";
+      field("inputPlaybook").textContent = "生成中";
       const response = await fetch("/api/platform/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -545,6 +677,7 @@
     function renderCase(data) {
       const summary = data.summary;
       field("current").textContent = data.playbook_name;
+      field("inputPlaybook").textContent = data.playbook_name;
       field("totalCost").textContent = fmt(summary.total_cost);
       field("networkCost").textContent = fmt(summary.network_cost);
       field("replenishmentCost").textContent = fmt(summary.replenishment_cost);
@@ -555,16 +688,30 @@
       field("totalCard").className = `metric ${summary.approval_level === "管理层审批" ? "warn" : ""}`;
       field("actions").innerHTML = summary.actions.map((item) => `<li>${item}</li>`).join("");
       field("risks").innerHTML = summary.risks.map((item) => `<div class="item"><strong>${item}</strong></div>`).join("");
+      latestModelInputs = data.model_inputs;
+      renderLineage(data.model_inputs.lineage);
+      renderInputs();
       renderBars(summary);
-      renderInputs(data.config);
       renderModelRows(data);
       field("raw").textContent = JSON.stringify({
         playbook: data.playbook_name,
         config: data.config,
+        data_lineage: data.model_inputs.lineage,
+        model_input_sections: Object.keys(data.model_inputs).filter((key) => key !== "lineage"),
         summary,
         opened_warehouses: data.network.opened_warehouses,
         staffing_mode: data.staffing.mode
       }, null, 2);
+    }
+
+    function renderLineage(lineage) {
+      field("lineageRows").innerHTML = [
+        ["上游数据", lineage.upstream_source, "业务原始表"],
+        ["场景配置", lineage.scenario_config_source, "方案参数和假设"],
+        ["转换逻辑", lineage.transform, "模型运行前的数据加工"]
+      ].map(([name, value, meaning]) => (
+        `<div class="row"><strong>${name}</strong><span class="small">${meaning}</span><span class="status">${value}</span></div>`
+      )).join("");
     }
 
     function renderBars(summary) {
@@ -584,18 +731,65 @@
       )).join("");
     }
 
-    function renderInputs(config) {
-      const rows = [
-        ["demand_multiplier", config.demand_multiplier, "业务需求相对日常的放大倍数"],
-        ["network_mode", config.network_mode, "仓网模型模式：严格 SLA、软容量或临时扩容"],
-        ["air_capacity", config.air_capacity, "每周可用空运补货上限"],
-        ["ocean_lead_time", config.ocean_lead_time, "海运补货提前期"],
-        ["unfulfilled_penalty", config.unfulfilled_penalty, "缺货或未履约在目标函数里的惩罚权重"],
-        ["sla_extra_days", config.sla_extra_days, "允许 SLA 承诺放宽的天数"]
-      ];
+    function renderInputs() {
+      if (!latestModelInputs) {
+        return;
+      }
+      const key = field("modelInputSelect").value;
+      const input = latestModelInputs[key];
+      const rows = modelInputRows(key, input);
       field("inputRows").innerHTML = rows.map(([name, value, meaning]) => (
         `<tr><td><strong>${name}</strong></td><td>${value}</td><td>${meaning}</td></tr>`
       )).join("");
+      field("modelInputJson").textContent = JSON.stringify(input, null, 2);
+    }
+
+    function modelInputRows(key, input) {
+      if (key === "network") {
+        const allowedLanes = input.lane_costs_and_sla.filter((lane) => lane.allowed_by_sla).length;
+        const blockedLanes = input.lane_costs_and_sla.length - allowedLanes;
+        return [
+          ["model_name", input.model_name, "实际调用的仓网优化模型"],
+          ["warehouses", input.sets.warehouses.length, "候选仓库数量"],
+          ["markets", input.sets.markets.length, "目标市场数量"],
+          ["total_demand", sumObject(input.markets, "demand"), "进入模型的总订单需求"],
+          ["total_capacity", sumObject(input.warehouses, "capacity"), "候选仓库基础总容量"],
+          ["allowed_lanes", allowedLanes, "满足 SLA、允许分配的仓库-市场线路"],
+          ["blocked_lanes", blockedLanes, "因配送时效超过 SLA 被禁止的线路"]
+        ];
+      }
+      if (key === "replenishment") {
+        return [
+          ["model_name", input.model_name, "实际调用的补货优化模型"],
+          ["weeks", input.sets.weeks.join(", "), "计划周期"],
+          ["lanes", input.sets.lanes.join(", "), "可选补货运输方式"],
+          ["total_demand", Object.values(input.demand).reduce((a, b) => a + b, 0), "四周预测需求"],
+          ["initial_inventory", input.parameters.initial_inventory, "期初可用库存"],
+          ["target_ending_inventory", input.parameters.target_ending_inventory, "期末目标库存"],
+          ["stockout_penalty", input.parameters.stockout_penalty, "缺货惩罚权重"]
+        ];
+      }
+      if (key === "service_level") {
+        return [
+          ["model_name", input.model_name, "实际调用的服务水平组合模型"],
+          ["markets", input.sets.markets.length, "需要满足平均时效的市场数量"],
+          ["services", input.sets.services.join(", "), "可选配送服务"],
+          ["total_demand", sumObject(input.markets, "demand"), "服务组合模型订单需求"],
+          ["total_service_capacity", sumObject(input.services, "capacity"), "服务商总处理能力"]
+        ];
+      }
+      return [
+        ["model_name", input.model_name, "实际调用的排班模型"],
+        ["employees", input.sets.employees.join(", "), "可排班员工集合"],
+        ["days", input.sets.days.join(", "), "排班周期"],
+        ["total_required_staff", Object.values(input.required_staff).reduce((a, b) => a + b, 0), "总人班需求"],
+        ["max_shifts_per_employee", input.parameters.max_shifts_per_employee, "每人最多班次数"],
+        ["soft_constraints", input.parameters.soft_constraints, "是否允许缺口并用罚分兜底"]
+      ];
+    }
+
+    function sumObject(object, key) {
+      return Object.values(object).reduce((total, item) => total + Number(item[key] || 0), 0);
     }
 
     function renderModelRows(data) {
@@ -661,12 +855,16 @@
       await Promise.all([run(), compare(), loadDataLayer()]);
     }
 
+    activateLayer();
     field("run").addEventListener("click", run);
+    field("runFromConfig").addEventListener("click", run);
+    field("runFromInputs").addEventListener("click", run);
     field("compare").addEventListener("click", compare);
     field("formatData").addEventListener("click", formatDataLayer);
     field("reloadData").addEventListener("click", loadDataLayer);
     field("saveData").addEventListener("click", saveDataLayer);
-    loadOverview().then(() => Promise.all([run(), compare(), loadDataLayer()]));
+    field("modelInputSelect").addEventListener("change", renderInputs);
+    loadOverview().then(() => Promise.all([run(), compare(), loadDataLayer(), loadUpstreamData()]));
   </script>
 </body>
 </html>

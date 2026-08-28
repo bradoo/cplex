@@ -20,11 +20,17 @@ from scheduling_solver import (
 
 app = Flask(__name__)
 DATA_PATH = Path(__file__).resolve().parent / "data" / "platform_poc_data.json"
+UPSTREAM_DATA_PATH = Path(__file__).resolve().parent / "data" / "platform_upstream_data.json"
 NETWORK_MODES = {"strict", "soft_capacity", "capacity_expansion"}
 
 
 def load_platform_data():
     with DATA_PATH.open(encoding="utf-8") as file:
+        return json.load(file)
+
+
+def load_upstream_data():
+    with UPSTREAM_DATA_PATH.open(encoding="utf-8") as file:
         return json.load(file)
 
 
@@ -98,7 +104,27 @@ def validate_platform_data(data):
 
 @app.get("/")
 def index():
-    return render_template("platform_app.html")
+    return render_template("platform_app.html", active_layer="upstream")
+
+
+@app.get("/upstream")
+def upstream_page():
+    return render_template("platform_app.html", active_layer="upstream")
+
+
+@app.get("/config")
+def config_page():
+    return render_template("platform_app.html", active_layer="config")
+
+
+@app.get("/inputs")
+def inputs_page():
+    return render_template("platform_app.html", active_layer="inputs")
+
+
+@app.get("/results")
+def results_page():
+    return render_template("platform_app.html", active_layer="results")
 
 
 @app.get("/api/health")
@@ -157,6 +183,17 @@ def update_platform_data():
     )
 
 
+@app.get("/api/platform/upstream-data")
+def get_upstream_data():
+    return jsonify(
+        {
+            "status": "ok",
+            "data_source": str(UPSTREAM_DATA_PATH.relative_to(Path(__file__).resolve().parent.parent)),
+            "data": load_upstream_data(),
+        }
+    )
+
+
 @app.get("/api/platform/compare")
 def compare_platform_cases():
     rows = []
@@ -194,6 +231,7 @@ def run_case(playbook_id, overrides):
     )
     service_mix = solve_service_level_case()
     staffing = solve_staffing_case(config)
+    model_inputs = build_model_inputs(config)
 
     summary = build_management_summary(network, replenishment, service_mix, staffing, config)
 
@@ -202,6 +240,7 @@ def run_case(playbook_id, overrides):
         "playbook": playbook_id,
         "playbook_name": config["name"],
         "config": public_config(config),
+        "model_inputs": model_inputs,
         "summary": summary,
         "network": network,
         "replenishment": replenishment,
@@ -236,6 +275,149 @@ def public_config(config):
         "network_mode",
     ]
     return {key: config[key] for key in keys if key in config}
+
+
+def build_model_inputs(config):
+    upstream_data = load_upstream_data()
+    network_input = build_network_model_input(config, upstream_data["network"])
+    replenishment_input = build_replenishment_model_input(config, upstream_data["replenishment"])
+    service_input = build_service_level_model_input(upstream_data["service_level"])
+    staffing_input = build_staffing_model_input(config)
+    return {
+        "lineage": {
+            "upstream_source": str(UPSTREAM_DATA_PATH.relative_to(Path(__file__).resolve().parent.parent)),
+            "scenario_config_source": str(DATA_PATH.relative_to(Path(__file__).resolve().parent.parent)),
+            "transform": "上游原始数据 + 当前方案参数 -> CPLEX 模型运行入参",
+        },
+        "network": network_input,
+        "replenishment": replenishment_input,
+        "service_level": service_input,
+        "staffing": staffing_input,
+    }
+
+
+def build_network_model_input(config, upstream_network):
+    warehouses = upstream_network["warehouses"]
+    markets = {
+        market: dict(values)
+        for market, values in upstream_network["markets"].items()
+    }
+    lane_lookup = {
+        (lane["warehouse"], lane["market"]): lane
+        for lane in upstream_network["lanes"]
+    }
+    effective_sla_extra_days = int(config["sla_extra_days"]) if config.get("network_mode") == "strict" else 0
+    for market in markets:
+        markets[market]["base_demand"] = markets[market]["demand"]
+        markets[market]["demand"] = round(markets[market]["demand"] * float(config["demand_multiplier"]))
+        markets[market]["max_delivery_days"] += effective_sla_extra_days
+
+    input_data = {
+        "model_name": network_model_name(config),
+        "sets": {
+            "warehouses": list(warehouses),
+            "markets": list(markets),
+        },
+        "parameters": {
+            "demand_multiplier": float(config["demand_multiplier"]),
+            "sla_extra_days": effective_sla_extra_days,
+            "unfulfilled_penalty": float(config["unfulfilled_penalty"]),
+        },
+        "warehouses": warehouses,
+        "markets": markets,
+        "lane_costs_and_sla": [
+            {
+                "warehouse": warehouse,
+                "market": market,
+                "last_mile_cost": lane_lookup[warehouse, market]["last_mile_cost"],
+                "delivery_days": lane_lookup[warehouse, market]["delivery_days"],
+                "allowed_by_sla": lane_lookup[warehouse, market]["delivery_days"] <= markets[market]["max_delivery_days"],
+            }
+            for warehouse in warehouses
+            for market in markets
+        ],
+    }
+    if config.get("network_mode") == "capacity_expansion":
+        input_data["expansion_options"] = upstream_network["expansion_options"]
+    return input_data
+
+
+def network_model_name(config):
+    mode = config.get("network_mode")
+    if mode == "soft_capacity":
+        return "cross_border_ecommerce_soft_capacity"
+    if mode == "capacity_expansion":
+        return "cross_border_ecommerce_capacity_expansion"
+    return "cross_border_ecommerce_network"
+
+
+def build_replenishment_model_input(config, upstream_replenishment):
+    data = {
+        key: dict(value) if isinstance(value, dict) else list(value) if isinstance(value, list) else value
+        for key, value in upstream_replenishment.items()
+    }
+    data["lanes"] = {
+        lane: dict(values)
+        for lane, values in upstream_replenishment["lanes"].items()
+    }
+    data["lanes"]["air"]["weekly_capacity"] = int(config["air_capacity"])
+    data["lanes"]["ocean"]["lead_time_weeks"] = int(config["ocean_lead_time"])
+    data["stockout_penalty"] = float(config["unfulfilled_penalty"])
+    return {
+        "model_name": "cross_border_ecommerce_replenishment",
+        "sets": {
+            "weeks": data["weeks"],
+            "lanes": list(data["lanes"]),
+        },
+        "parameters": {
+            "initial_inventory": data["initial_inventory"],
+            "target_ending_inventory": data["target_ending_inventory"],
+            "holding_cost": data["holding_cost"],
+            "stockout_penalty": data["stockout_penalty"],
+        },
+        "demand": data["demand"],
+        "lanes": data["lanes"],
+    }
+
+
+def build_service_level_model_input(upstream_service_level):
+    return {
+        "model_name": "cross_border_ecommerce_service_level",
+        "sets": {
+            "markets": list(upstream_service_level["markets"]),
+            "services": list(upstream_service_level["services"]),
+        },
+        "markets": upstream_service_level["markets"],
+        "services": upstream_service_level["services"],
+    }
+
+
+def build_staffing_model_input(config):
+    problem = default_problem()
+    if config.get("staff_peak"):
+        problem["required_staff"]["Fri"] = 4
+        problem["required_staff"]["Sat"] = 4
+        problem["required_staff"]["Sun"] = 3
+        problem["max_shifts_per_employee"] = 3
+    return {
+        "model_name": "staff_scheduling_soft" if config.get("soft_staffing") else "staff_scheduling",
+        "sets": {
+            "employees": problem["employees"],
+            "days": problem["days"],
+        },
+        "parameters": {
+            "max_shifts_per_employee": problem["max_shifts_per_employee"],
+            "cost_weight": 0.002,
+            "preference_weight": 0.04,
+            "soft_constraints": bool(config.get("soft_staffing")),
+        },
+        "required_staff": problem["required_staff"],
+        "availability": problem["availability"],
+        "skills": problem["skills"],
+        "skill_requirements": problem["skill_requirements"],
+        "shift_costs": problem["shift_costs"],
+        "preferences": problem["preferences"],
+    }
 
 
 def solve_staffing_case(config):

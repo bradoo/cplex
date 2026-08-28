@@ -64,16 +64,25 @@ python platform_app.py
 http://127.0.0.1:5053
 ```
 
+平台 POC 拆成四个流程页：
+
+```text
+http://127.0.0.1:5053/upstream  上游数据接入层
+http://127.0.0.1:5053/config    场景配置层
+http://127.0.0.1:5053/inputs    CPLEX 模型入参层
+http://127.0.0.1:5053/results   求解结果层
+```
+
 推荐演示路径：
 
 ```text
-1. 基准运营方案
-2. 旺季高峰方案
-3. 稳健服务方案
-4. 解释 KPI、行动建议和审批分层
+1. 上游数据：解释 OMS/WMS/TMS/HR 数据如何接入
+2. 场景配置：选择基准、旺季或稳健方案
+3. 模型入参：展示进入 CPLEX 的仓网、补货、服务和排班数据
+4. 求解结果：解释 KPI、行动建议和审批分层
 ```
 
-POC 的方案参数来自 `python/data/platform_poc_data.json`，页面会展示当前模型入参，并提供数据层 JSON 编辑器；保存后可直接刷新方案并重新求解，便于讲清“业务数据进入优化模型”的链路。
+POC 的方案配置来自 `python/data/platform_poc_data.json`，上游业务数据来自 `python/data/platform_upstream_data.json`。页面会同时展示上游原始数据、场景参数和 CPLEX 模型运行入参，便于讲清“业务数据进入优化模型”的链路。
 
 ---
 
@@ -190,6 +199,7 @@ cplex/
     ├── scheduling_*_demo.py
     ├── data/
     │   ├── platform_poc_data.json
+    │   ├── platform_upstream_data.json
     ├── reports/
     ├── templates/
     └── tests/
