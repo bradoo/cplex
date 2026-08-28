@@ -3,6 +3,7 @@ import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from time import perf_counter
 
 from docplex.mp.model import Model
 from flask import Flask, jsonify, render_template, request
@@ -457,6 +458,142 @@ def build_data_quality_checks(data, validation_error):
     return checks
 
 
+def build_platform_scale_snapshot():
+    started_at = perf_counter()
+    upstream_data = load_upstream_data()
+    loaded_at = perf_counter()
+    validation_error = validate_upstream_data(upstream_data)
+    validated_at = perf_counter()
+    if validation_error:
+        return {
+            "status": "attention",
+            "message": validation_error,
+            "timings_ms": {
+                "load_upstream": round((loaded_at - started_at) * 1000, 2),
+                "validate_upstream": round((validated_at - loaded_at) * 1000, 2),
+                "build_model_inputs": 0,
+                "total_prepare": round((validated_at - started_at) * 1000, 2),
+            },
+            "throughput": {
+                "order_lines": len(upstream_data.get("orders", [])) if isinstance(upstream_data, dict) else 0,
+                "source_tables": count_source_tables(upstream_data) if isinstance(upstream_data, dict) else 0,
+                "model_input_blocks": 0,
+                "estimated_variables": 0,
+                "estimated_constraints": 0,
+            },
+            "models": [],
+        }
+    baseline_config = dict(playbooks()["baseline"])
+    model_inputs = build_model_inputs(baseline_config)
+    input_ready_at = perf_counter()
+    models = build_model_scale_rows(model_inputs, baseline_config)
+    total_variables = sum(model["variables_estimate"] for model in models)
+    total_constraints = sum(model["constraints_estimate"] for model in models)
+    return {
+        "status": "attention" if validation_error else "ok",
+        "message": validation_error or "上游数据已完成读取、结构校验和 CPLEX 入参生成。",
+        "timings_ms": {
+            "load_upstream": round((loaded_at - started_at) * 1000, 2),
+            "validate_upstream": round((validated_at - loaded_at) * 1000, 2),
+            "build_model_inputs": round((input_ready_at - validated_at) * 1000, 2),
+            "total_prepare": round((input_ready_at - started_at) * 1000, 2),
+        },
+        "throughput": {
+            "order_lines": len(upstream_data.get("orders", [])),
+            "source_tables": count_source_tables(upstream_data),
+            "model_input_blocks": len([key for key in model_inputs if key != "lineage"]),
+            "estimated_variables": total_variables,
+            "estimated_constraints": total_constraints,
+        },
+        "models": models,
+    }
+
+
+def count_source_tables(upstream_data):
+    network = upstream_data.get("network", {})
+    replenishment = upstream_data.get("replenishment", {})
+    service_level = upstream_data.get("service_level", {})
+    return sum(
+        bool(value)
+        for value in (
+            upstream_data.get("orders"),
+            network.get("warehouses"),
+            network.get("markets"),
+            network.get("lanes"),
+            replenishment.get("demand"),
+            replenishment.get("lanes"),
+            service_level.get("markets"),
+            service_level.get("services"),
+        )
+    )
+
+
+def build_model_scale_rows(model_inputs, config):
+    network = model_inputs["network"]
+    replenishment = model_inputs["replenishment"]
+    service_level = model_inputs["service_level"]
+    staffing = model_inputs["staffing"]
+
+    warehouse_count = len(network["sets"]["warehouses"])
+    market_count = len(network["sets"]["markets"])
+    lane_count = len(network["lane_costs_and_sla"])
+    network_extra_variables = 0
+    if config.get("network_mode") in {"soft_capacity", "capacity_expansion"}:
+        network_extra_variables += market_count
+    if config.get("network_mode") == "capacity_expansion":
+        network_extra_variables += len(network.get("expansion_options", {}))
+    network_constraints = market_count + warehouse_count + sum(
+        1 for lane in network["lane_costs_and_sla"] if not lane["allowed_by_sla"]
+    )
+
+    week_count = len(replenishment["sets"]["weeks"])
+    replenishment_lane_count = len(replenishment["sets"]["lanes"])
+    service_count = len(service_level["sets"]["services"])
+    service_market_count = len(service_level["sets"]["markets"])
+    employee_count = len(staffing["sets"]["employees"])
+    day_count = len(staffing["sets"]["days"])
+    staffing_soft = bool(staffing["parameters"].get("soft_constraints"))
+
+    return [
+        {
+            "id": "network",
+            "name": "仓网选址与履约",
+            "source_rows": lane_count,
+            "input_sets": f"{warehouse_count} 仓 / {market_count} 市场 / {lane_count} 线路",
+            "variables_estimate": warehouse_count + lane_count + network_extra_variables,
+            "constraints_estimate": network_constraints,
+            "prepare_note": "订单明细先聚合为市场需求，再进入仓网 MIP。",
+        },
+        {
+            "id": "replenishment",
+            "name": "跨境补货",
+            "source_rows": week_count * replenishment_lane_count,
+            "input_sets": f"{week_count} 周 / {replenishment_lane_count} 渠道",
+            "variables_estimate": week_count * replenishment_lane_count + week_count * 2,
+            "constraints_estimate": week_count * 2 + replenishment_lane_count,
+            "prepare_note": "按周生成运输、库存和缺货变量。",
+        },
+        {
+            "id": "service_level",
+            "name": "服务水平组合",
+            "source_rows": service_count * service_market_count,
+            "input_sets": f"{service_count} 服务商 / {service_market_count} 市场",
+            "variables_estimate": service_count + service_count * service_market_count,
+            "constraints_estimate": service_market_count * 2 + service_count,
+            "prepare_note": "服务商能力和市场 SLA 生成分配矩阵。",
+        },
+        {
+            "id": "staffing",
+            "name": "人员排班",
+            "source_rows": employee_count * day_count,
+            "input_sets": f"{employee_count} 员工 / {day_count} 天",
+            "variables_estimate": employee_count * day_count + (day_count if staffing_soft else 0),
+            "constraints_estimate": day_count * 2 + employee_count,
+            "prepare_note": "员工可用性、技能和每日需求生成排班约束。",
+        },
+    ]
+
+
 @app.get("/")
 def index():
     return render_template("platform_app.html", active_layer="upstream")
@@ -577,6 +714,11 @@ def get_data_quality():
             "metrics": build_data_quality_metrics(upstream_data),
         }
     )
+
+
+@app.get("/api/platform/scale-snapshot")
+def get_scale_snapshot():
+    return jsonify(build_platform_scale_snapshot())
 
 
 @app.get("/api/platform/lineage")

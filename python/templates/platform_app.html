@@ -176,6 +176,12 @@
       gap: 12px;
     }
 
+    .scale-metrics {
+      display: grid;
+      grid-template-columns: 1.25fr repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
     .two-col {
       display: grid;
       grid-template-columns: 1fr;
@@ -207,6 +213,12 @@
     .metric.good { background: var(--soft-green); border-color: #bcebd5; }
     .metric.warn { background: var(--soft-amber); border-color: #ffd799; }
     .metric.bad { background: var(--soft-red); border-color: #f5bbb7; }
+
+    .metric.primary {
+      background: #eef4ff;
+      border-color: #b9cef9;
+      box-shadow: inset 0 4px 0 var(--blue);
+    }
 
     .label {
       color: var(--muted);
@@ -680,7 +692,7 @@
 
     @media (max-width: 1040px) {
       .top, .page, .two-col { grid-template-columns: 1fr; }
-      .flow, .grid, .readiness-grid, .impact-grid, .run-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .flow, .grid, .scale-metrics, .readiness-grid, .impact-grid, .run-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .explain-grid { grid-template-columns: 1fr; }
       .diff-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .lineage-diagram { overflow-x: auto; padding-bottom: 6px; }
@@ -689,7 +701,7 @@
     }
 
     @media (max-width: 640px) {
-      .flow, .grid, .diff-grid, .readiness-grid, .impact-grid, .run-steps { grid-template-columns: 1fr; }
+      .flow, .grid, .scale-metrics, .diff-grid, .readiness-grid, .impact-grid, .run-steps { grid-template-columns: 1fr; }
       .flow-step::after { display: none; }
       .row, .cost-cards { grid-template-columns: 1fr; }
     }
@@ -732,6 +744,20 @@
         <div class="content">
           <div id="qualityMetrics" class="grid"></div>
           <div id="qualityChecks" class="rows"></div>
+        </div>
+      </section>
+      <section>
+        <div class="section-head"><h2>吞吐量与模型规模</h2><span id="scaleStatus" class="pill">加载中</span></div>
+        <div class="content">
+          <div id="scaleMetrics" class="scale-metrics"></div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>子模型</th><th>入参集合</th><th>源数据行</th><th>变量估算</th><th>约束估算</th><th>说明</th></tr>
+              </thead>
+              <tbody id="scaleModelRows"></tbody>
+            </table>
+          </div>
         </div>
       </section>
       <section>
@@ -1089,6 +1115,40 @@
           <span class="small">${check.detail}<br>${check.action}</span>
           <span class="status">${check.level === "pass" ? "通过" : "关注"}</span>
         </div>
+      `).join("");
+    }
+
+    async function loadScaleSnapshot() {
+      const response = await fetch("/api/platform/scale-snapshot");
+      const data = await response.json();
+      const ok = data.status === "ok";
+      field("scaleStatus").textContent = ok ? "可承载" : "需关注";
+      field("scaleStatus").style.background = ok ? "var(--soft-blue)" : "var(--soft-amber)";
+      field("scaleStatus").style.color = ok ? "var(--blue)" : "var(--amber)";
+      const throughput = data.throughput || {};
+      const timings = data.timings_ms || {};
+      const metrics = [
+        ["订单接入量", throughput.order_lines, "上游订单明细行，模型前聚合", "primary"],
+        ["准备耗时", timings.total_prepare, "读取 + 校验 + 入参生成，ms", "good"],
+        ["估算变量", throughput.estimated_variables, "四个 CPLEX 子模型合计", "good"],
+        ["估算约束", throughput.estimated_constraints, "四个 CPLEX 子模型合计", "good"]
+      ];
+      field("scaleMetrics").innerHTML = metrics.map(([label, value, meaning, tone]) => `
+        <div class="metric ${tone}">
+          <span class="label">${label}</span>
+          <strong class="value">${fmt(value)}</strong>
+          <span class="small">${meaning}</span>
+        </div>
+      `).join("");
+      field("scaleModelRows").innerHTML = data.models.map((model) => `
+        <tr>
+          <td><strong>${model.name}</strong></td>
+          <td>${model.input_sets}</td>
+          <td>${fmt(model.source_rows)}</td>
+          <td>${fmt(model.variables_estimate)}</td>
+          <td>${fmt(model.constraints_estimate)}</td>
+          <td>${model.prepare_note}</td>
+        </tr>
       `).join("");
     }
 
@@ -1803,7 +1863,7 @@
         return;
       }
       field("upstreamStatus").textContent = `已保存：${result.data_source}`;
-      await Promise.all([loadUpstreamData(), loadDataQuality(), run(), compare()]);
+      await Promise.all([loadUpstreamData(), loadDataQuality(), loadScaleSnapshot(), run(), compare()]);
     }
 
     activateLayer();
@@ -1816,7 +1876,7 @@
     field("reloadUpstream").addEventListener("click", loadUpstreamData);
     field("saveUpstream").addEventListener("click", saveUpstreamData);
     field("modelInputSelect").addEventListener("change", renderInputs);
-    loadOverview().then(() => Promise.all([run(false), compare(), loadDataLayer(), loadUpstreamData(), loadDataQuality(), loadLineage(), loadRunHistory(), loadConstraintExplanations()]));
+    loadOverview().then(() => Promise.all([run(false), compare(), loadDataLayer(), loadUpstreamData(), loadDataQuality(), loadScaleSnapshot(), loadLineage(), loadRunHistory(), loadConstraintExplanations()]));
   </script>
 </body>
 </html>
