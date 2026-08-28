@@ -15,7 +15,7 @@ from platform_app import (
 )
 
 
-MARKETS = ["Canada", "US East", "US West", "UK", "Germany"]
+MARKETS = ["Canada", "US East", "US West", "UK", "EU"]
 CHANNELS = ["marketplace", "direct_site", "social_shop", "retail_partner"]
 PRIORITIES = ["standard", "expedited", "standard", "standard", "priority"]
 

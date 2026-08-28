@@ -89,6 +89,27 @@ http://127.0.0.1:5053/constraints 模型约束解释
 POC 的方案配置来自 `python/data/platform_poc_data.json`，上游业务数据来自 `python/data/platform_upstream_data.json`。页面会用业务表格和参数表单展示上游原始数据、场景参数和 CPLEX 模型运行入参，避免把 JSON 文件编辑器暴露在主流程里。
 六个页面共享同一份浏览器运行上下文，在场景配置页调整的临时参数会带到模型入参页和求解结果页。
 
+如果要把订单明细压到本地 StarRocks 做 100 万行级别测试，先启动本地 StarRocks，然后导入模拟订单：
+
+```bash
+cd python
+python load_starrocks_upstream.py --orders 1000000
+```
+
+让平台从 StarRocks 读取订单明细：
+
+```bash
+cd python
+PLATFORM_UPSTREAM_SOURCE=starrocks \
+STARROCKS_HOST=127.0.0.1 \
+STARROCKS_PORT=9030 \
+STARROCKS_USER=root \
+STARROCKS_DATABASE=cplex_poc \
+python platform_app.py
+```
+
+页面仍然只抽样展示订单明细，吞吐量面板会用 StarRocks 的 `COUNT(*)` 显示真实订单量，避免把 100 万行直接传给浏览器。
+
 ---
 
 ## 可运行应用

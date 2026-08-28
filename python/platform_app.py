@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 import uuid
 from datetime import datetime, timezone
@@ -22,6 +23,7 @@ UPSTREAM_DATA_PATH = Path(__file__).resolve().parent / "data" / "platform_upstre
 RUN_HISTORY_PATH = Path(__file__).resolve().parent / "reports" / "platform_runs.jsonl"
 REPORTS_DIR = Path(__file__).resolve().parent / "reports"
 NETWORK_MODES = {"strict", "soft_capacity", "capacity_expansion"}
+STARROCKS_DEFAULT_LIMIT = 1000
 
 
 def load_platform_data():
@@ -31,7 +33,75 @@ def load_platform_data():
 
 def load_upstream_data():
     with UPSTREAM_DATA_PATH.open(encoding="utf-8") as file:
+        data = json.load(file)
+    if starrocks_upstream_enabled():
+        return load_starrocks_orders_into_upstream_data(data)
+    return data
+
+
+def load_json_upstream_data():
+    with UPSTREAM_DATA_PATH.open(encoding="utf-8") as file:
         return json.load(file)
+
+
+def starrocks_upstream_enabled():
+    return os.getenv("PLATFORM_UPSTREAM_SOURCE", "json").lower() == "starrocks"
+
+
+def starrocks_config():
+    return {
+        "host": os.getenv("STARROCKS_HOST", "127.0.0.1"),
+        "port": int(os.getenv("STARROCKS_PORT", "9030")),
+        "user": os.getenv("STARROCKS_USER", "root"),
+        "password": os.getenv("STARROCKS_PASSWORD", ""),
+        "database": os.getenv("STARROCKS_DATABASE", "cplex_poc"),
+        "table": os.getenv("STARROCKS_ORDERS_TABLE", "upstream_orders"),
+        "sample_limit": int(os.getenv("STARROCKS_SAMPLE_LIMIT", str(STARROCKS_DEFAULT_LIMIT))),
+    }
+
+
+def starrocks_connection():
+    try:
+        import pymysql
+    except ImportError as error:
+        raise RuntimeError("StarRocks mode requires pymysql. Run: pip install -r python/requirements.txt") from error
+
+    config = starrocks_config()
+    return pymysql.connect(
+        host=config["host"],
+        port=config["port"],
+        user=config["user"],
+        password=config["password"],
+        database=config["database"],
+        charset="utf8mb4",
+        cursorclass=pymysql.cursors.DictCursor,
+    )
+
+
+def load_starrocks_orders_into_upstream_data(data):
+    config = starrocks_config()
+    table = config["table"]
+    limit = config["sample_limit"]
+    with starrocks_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(f"SELECT COUNT(*) AS order_line_count FROM `{table}`")
+            order_line_count = int(cursor.fetchone()["order_line_count"])
+            cursor.execute(
+                f"""
+                SELECT order_id, market, channel, units, priority, requested_delivery_days, demand_share_bp
+                FROM `{table}`
+                ORDER BY order_id
+                LIMIT %s
+                """,
+                (limit,),
+            )
+            data["orders"] = list(cursor.fetchall())
+    metadata = data.setdefault("metadata", {})
+    metadata["source_systems"] = sorted(set(metadata.get("source_systems", [])) | {"StarRocks"})
+    metadata["order_line_count"] = order_line_count
+    metadata["order_sample_limit"] = limit
+    metadata["upstream_storage"] = f"starrocks://{config['host']}:{config['port']}/{config['database']}.{table}"
+    return data
 
 
 def playbooks():
@@ -224,6 +294,13 @@ def format_signed(value):
     return f"{prefix}{format_number(abs(number))}"
 
 
+def upstream_order_line_count(data):
+    metadata = data.get("metadata", {}) if isinstance(data, dict) else {}
+    if isinstance(metadata, dict) and "order_line_count" in metadata:
+        return int(metadata["order_line_count"])
+    return len(data.get("orders", [])) if isinstance(data, dict) else 0
+
+
 def markdown_cell(value):
     return str(value).replace("|", "\\|")
 
@@ -356,7 +433,7 @@ def build_data_quality_metrics(data):
     network = data["network"]
     replenishment = data["replenishment"]
     service_level = data["service_level"]
-    order_lines = data.get("orders", [])
+    order_line_count = upstream_order_line_count(data)
     total_market_demand = sum(market["demand"] for market in network["markets"].values())
     total_warehouse_capacity = sum(warehouse["capacity"] for warehouse in network["warehouses"].values())
     total_replenishment_demand = sum(replenishment["demand"].values())
@@ -364,7 +441,7 @@ def build_data_quality_metrics(data):
     total_service_capacity = sum(service["capacity"] for service in service_level["services"].values())
     return {
         "markets": len(network["markets"]),
-        "order_lines": len(order_lines),
+        "order_lines": order_line_count,
         "warehouses": len(network["warehouses"]),
         "lanes": len(network["lanes"]),
         "total_market_demand": total_market_demand,
@@ -406,12 +483,12 @@ def build_data_quality_checks(data, validation_error):
             "action": "缓冲为负时，建议启用扩容模式或提高缺口罚分。",
         },
     ]
-    order_lines = data.get("orders", [])
+    order_line_count = upstream_order_line_count(data)
     checks.append(
         {
             "name": "订单明细规模",
-            "level": "pass" if len(order_lines) >= 1000 else "warn",
-            "detail": f"当前接入 {len(order_lines):g} 条上游订单明细，模型前会聚合到市场需求和服务需求。",
+            "level": "pass" if order_line_count >= 1000 else "warn",
+            "detail": f"当前接入 {order_line_count:g} 条上游订单明细，模型前会聚合到市场需求和服务需求。",
             "action": "用于观察数据接入吞吐；求解层继续使用聚合入参，避免把交易明细直接推给 MIP。",
         }
     )
@@ -475,7 +552,7 @@ def build_platform_scale_snapshot():
                 "total_prepare": round((validated_at - started_at) * 1000, 2),
             },
             "throughput": {
-                "order_lines": len(upstream_data.get("orders", [])) if isinstance(upstream_data, dict) else 0,
+                "order_lines": upstream_order_line_count(upstream_data),
                 "source_tables": count_source_tables(upstream_data) if isinstance(upstream_data, dict) else 0,
                 "model_input_blocks": 0,
                 "estimated_variables": 0,
@@ -499,7 +576,7 @@ def build_platform_scale_snapshot():
             "total_prepare": round((input_ready_at - started_at) * 1000, 2),
         },
         "throughput": {
-            "order_lines": len(upstream_data.get("orders", [])),
+            "order_lines": upstream_order_line_count(upstream_data),
             "source_tables": count_source_tables(upstream_data),
             "model_input_blocks": len([key for key in model_inputs if key != "lineage"]),
             "estimated_variables": total_variables,
@@ -692,11 +769,15 @@ def update_platform_data():
 
 @app.get("/api/platform/upstream-data")
 def get_upstream_data():
+    data = load_upstream_data()
+    data_source = str(UPSTREAM_DATA_PATH.relative_to(Path(__file__).resolve().parent.parent))
+    if starrocks_upstream_enabled():
+        data_source = data.get("metadata", {}).get("upstream_storage", data_source)
     return jsonify(
         {
             "status": "ok",
-            "data_source": str(UPSTREAM_DATA_PATH.relative_to(Path(__file__).resolve().parent.parent)),
-            "data": load_upstream_data(),
+            "data_source": data_source,
+            "data": data,
         }
     )
 
@@ -923,6 +1004,11 @@ def get_model_explanations():
 def update_upstream_data():
     payload = request.get_json(silent=True) or {}
     data = payload.get("data")
+    if starrocks_upstream_enabled() and isinstance(data, dict):
+        data["orders"] = load_json_upstream_data().get("orders", [])
+        metadata = data.setdefault("metadata", {})
+        metadata.pop("upstream_storage", None)
+        metadata.pop("order_sample_limit", None)
     validation_error = validate_upstream_data(data)
     if validation_error:
         return jsonify({"status": "error", "message": validation_error}), 400
