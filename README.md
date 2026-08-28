@@ -51,6 +51,30 @@ http://127.0.0.1:5052
 6. 经营看板汇总
 ```
 
+如果下午要给经理做一页式平台 POC，启动：
+
+```bash
+cd python
+python platform_app.py
+```
+
+打开：
+
+```text
+http://127.0.0.1:5053
+```
+
+推荐演示路径：
+
+```text
+1. 基准运营方案
+2. 旺季高峰方案
+3. 稳健服务方案
+4. 解释 KPI、行动建议和审批分层
+```
+
+POC 的方案参数来自 `python/data/platform_poc_data.json`，页面会展示当前模型入参，便于讲清“业务数据进入优化模型”的链路。
+
 ---
 
 ## 可运行应用
@@ -60,6 +84,7 @@ http://127.0.0.1:5052
 | 排班优化系统 | `python scheduling_app.py` | `http://127.0.0.1:5050` | 员工排班优化、软约束兜底、JSON API |
 | BMI 优化示例 | `python bmi_app.py` | `http://127.0.0.1:5051` | BMI、热量摄入和运动量优化 |
 | 跨境电商模拟器 | `python cross_border_ecommerce_app.py` | `http://127.0.0.1:5052` | 35 个库存、物流和经营优化场景 |
+| 优化平台 POC | `python platform_app.py` | `http://127.0.0.1:5053` | 汇总排班、仓网、补货和管理指标的一页式演示台 |
 
 Python 示例默认从 `python/` 目录运行：
 
@@ -159,10 +184,12 @@ cplex/
     ├── run_tests.py
     ├── scheduling_solver.py
     ├── scheduling_app.py
+    ├── platform_app.py
     ├── cross_border_ecommerce_app.py
     ├── cross_border_ecommerce_*_demo.py
     ├── scheduling_*_demo.py
     ├── data/
+    │   ├── platform_poc_data.json
     ├── reports/
     ├── templates/
     └── tests/
