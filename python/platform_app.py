@@ -204,6 +204,11 @@ def results_page():
     return render_template("platform_app.html", active_layer="results")
 
 
+@app.get("/lineage")
+def lineage_page():
+    return render_template("platform_app.html", active_layer="lineage")
+
+
 @app.get("/api/health")
 def health():
     return jsonify({"status": "ok", "service": "cplex-optimization-platform-poc"})
@@ -272,6 +277,87 @@ def get_upstream_data():
             "status": "ok",
             "data_source": str(UPSTREAM_DATA_PATH.relative_to(Path(__file__).resolve().parent.parent)),
             "data": load_upstream_data(),
+        }
+    )
+
+
+@app.get("/api/platform/lineage")
+def get_lineage():
+    return jsonify(
+        {
+            "status": "ok",
+            "nodes": [
+                {
+                    "id": "upstream",
+                    "name": "上游数据接入层",
+                    "source": str(UPSTREAM_DATA_PATH.relative_to(Path(__file__).resolve().parent.parent)),
+                    "owner": "OMS / WMS / TMS / HR",
+                    "description": "保存业务原始数据，例如订单需求、仓库能力、线路成本、补货预测和服务商能力。",
+                },
+                {
+                    "id": "config",
+                    "name": "场景配置层",
+                    "source": str(DATA_PATH.relative_to(Path(__file__).resolve().parent.parent)),
+                    "owner": "运营 / 计划",
+                    "description": "保存管理假设，例如需求倍率、空运能力、缺口罚分、SLA 放宽和模型模式。",
+                },
+                {
+                    "id": "inputs",
+                    "name": "模型入参层",
+                    "source": "runtime payload",
+                    "owner": "优化服务",
+                    "description": "把上游数据和场景参数转换为 CPLEX 可以求解的 sets、parameters 和约束数据。",
+                },
+                {
+                    "id": "results",
+                    "name": "求解结果层",
+                    "source": "CPLEX solve result",
+                    "owner": "优化服务 / 管理驾驶舱",
+                    "description": "输出成本、缺口、启用仓库、补货计划、排班结果、风险提示和审批建议。",
+                },
+            ],
+            "transforms": [
+                {
+                    "from": "upstream.network.markets",
+                    "config": "demand_multiplier, sla_extra_days",
+                    "to": "model_inputs.network.markets",
+                    "rule": "市场需求按倍率放大；严格 SLA 模型会放宽最大配送天数。",
+                },
+                {
+                    "from": "upstream.network.lanes",
+                    "config": "network_mode",
+                    "to": "model_inputs.network.lane_costs_and_sla",
+                    "rule": "把线路成本和配送天数展开成仓库-市场矩阵，并标记是否满足 SLA。",
+                },
+                {
+                    "from": "upstream.replenishment",
+                    "config": "air_capacity, ocean_lead_time, unfulfilled_penalty",
+                    "to": "model_inputs.replenishment",
+                    "rule": "用场景参数覆盖空运容量、海运提前期和缺货惩罚。",
+                },
+                {
+                    "from": "upstream.service_level",
+                    "config": "none",
+                    "to": "model_inputs.service_level",
+                    "rule": "服务商成本、容量和时效直接进入服务水平组合模型。",
+                },
+                {
+                    "from": "default staffing data",
+                    "config": "staff_peak, soft_staffing",
+                    "to": "model_inputs.staffing",
+                    "rule": "旺季场景提高周末人力需求；软约束场景允许缺口并计入罚分。",
+                },
+            ],
+            "field_map": [
+                {"business_field": "市场需求", "upstream_path": "network.markets.*.demand", "model_input_path": "network.markets.*.demand", "used_by": "仓网需求约束"},
+                {"business_field": "仓库容量", "upstream_path": "network.warehouses.*.capacity", "model_input_path": "network.warehouses.*.capacity", "used_by": "仓库容量约束"},
+                {"business_field": "线路成本", "upstream_path": "network.lanes.*.last_mile_cost", "model_input_path": "network.lane_costs_and_sla.*.last_mile_cost", "used_by": "仓网目标函数"},
+                {"business_field": "配送天数", "upstream_path": "network.lanes.*.delivery_days", "model_input_path": "network.lane_costs_and_sla.*.allowed_by_sla", "used_by": "SLA 禁用线路约束"},
+                {"business_field": "补货预测", "upstream_path": "replenishment.demand.*", "model_input_path": "replenishment.demand.*", "used_by": "库存平衡约束"},
+                {"business_field": "运输渠道能力", "upstream_path": "replenishment.lanes.*", "model_input_path": "replenishment.lanes.*", "used_by": "补货容量约束和成本目标"},
+                {"business_field": "服务商能力", "upstream_path": "service_level.services.*.capacity", "model_input_path": "service_level.services.*.capacity", "used_by": "服务商容量约束"},
+                {"business_field": "排班需求", "upstream_path": "staffing scenario defaults", "model_input_path": "staffing.required_staff", "used_by": "每日人力覆盖约束"},
+            ],
         }
     )
 

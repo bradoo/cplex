@@ -86,7 +86,7 @@
       padding: 14px 0 16px;
       border-top: 1px solid var(--line);
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 10px;
     }
 
@@ -436,6 +436,7 @@
       <a class="flow-step" data-layer-link="config" href="/config"><strong>2. 场景配置</strong><span>方案参数与假设</span></a>
       <a class="flow-step" data-layer-link="inputs" href="/inputs"><strong>3. 模型入参</strong><span>转换后的 CPLEX 数据</span></a>
       <a class="flow-step" data-layer-link="results" href="/results"><strong>4. 求解结果</strong><span>KPI、风险与建议动作</span></a>
+      <a class="flow-step" data-layer-link="lineage" href="/lineage"><strong>5. 数据血缘</strong><span>字段映射与转换规则</span></a>
     </nav>
   </header>
 
@@ -625,6 +626,37 @@
         </div>
       </section>
     </div>
+
+    <div class="page" data-layer="lineage">
+      <section>
+        <div class="section-head"><h2>数据血缘总览</h2><span class="pill">Lineage</span></div>
+        <div class="content">
+          <div id="lineageNodeRows" class="rows"></div>
+        </div>
+      </section>
+      <section>
+        <div class="section-head"><h2>转换规则</h2></div>
+        <div class="content">
+          <table>
+            <thead>
+              <tr><th>来源</th><th>场景参数</th><th>目标</th><th>规则</th></tr>
+            </thead>
+            <tbody id="lineageTransformRows"></tbody>
+          </table>
+        </div>
+      </section>
+      <section>
+        <div class="section-head"><h2>字段映射</h2></div>
+        <div class="content">
+          <table>
+            <thead>
+              <tr><th>业务字段</th><th>上游路径</th><th>模型入参路径</th><th>模型用途</th></tr>
+            </thead>
+            <tbody id="lineageFieldRows"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
   </main>
 
   <script>
@@ -712,6 +744,34 @@
       field("upstreamStatus").textContent = `已加载：${data.data_source}`;
       field("upstreamJson").textContent = JSON.stringify(data.data, null, 2);
       renderUpstreamTables();
+    }
+
+    async function loadLineage() {
+      const response = await fetch("/api/platform/lineage");
+      const data = await response.json();
+      field("lineageNodeRows").innerHTML = data.nodes.map((node) => (
+        `<div class="row">
+          <strong>${node.name}</strong>
+          <span class="small">${node.description}</span>
+          <span class="status">${node.source}</span>
+        </div>`
+      )).join("");
+      field("lineageTransformRows").innerHTML = data.transforms.map((row) => (
+        `<tr>
+          <td><strong>${row.from}</strong></td>
+          <td>${row.config}</td>
+          <td>${row.to}</td>
+          <td>${row.rule}</td>
+        </tr>`
+      )).join("");
+      field("lineageFieldRows").innerHTML = data.field_map.map((row) => (
+        `<tr>
+          <td><strong>${row.business_field}</strong></td>
+          <td>${row.upstream_path}</td>
+          <td>${row.model_input_path}</td>
+          <td>${row.used_by}</td>
+        </tr>`
+      )).join("");
     }
 
     function upstreamRows(response) {
@@ -1065,7 +1125,7 @@
     field("reloadUpstream").addEventListener("click", loadUpstreamData);
     field("saveUpstream").addEventListener("click", saveUpstreamData);
     field("modelInputSelect").addEventListener("change", renderInputs);
-    loadOverview().then(() => Promise.all([run(), compare(), loadDataLayer(), loadUpstreamData()]));
+    loadOverview().then(() => Promise.all([run(), compare(), loadDataLayer(), loadUpstreamData(), loadLineage()]));
   </script>
 </body>
 </html>
