@@ -778,7 +778,7 @@
             <h3>运行记录</h3>
             <table>
               <thead>
-                <tr><th>时间</th><th>方案</th><th>成本</th><th>缺口</th><th>审批</th><th>差异摘要</th></tr>
+                <tr><th>时间</th><th>方案</th><th>成本</th><th>缺口</th><th>审批</th><th>差异摘要</th><th>操作</th></tr>
               </thead>
               <tbody id="historyRows"></tbody>
             </table>
@@ -835,6 +835,7 @@
     let platformData = null;
     let latestModelInputs = null;
     let upstreamData = null;
+    let runHistoryRows = [];
     const activeLayer = document.body.dataset.activeLayer || "upstream";
     const stateKey = "cplexPlatformPocState";
 
@@ -1285,8 +1286,9 @@
       const response = await fetch("/api/platform/run-history?limit=20");
       const data = await response.json();
       const rows = data.rows || [];
+      runHistoryRows = rows;
       if (!rows.length) {
-        field("historyRows").innerHTML = `<tr><td colspan="6" class="small">暂无运行记录。</td></tr>`;
+        field("historyRows").innerHTML = `<tr><td colspan="7" class="small">暂无运行记录。</td></tr>`;
         return;
       }
       field("historyRows").innerHTML = rows.map((row) => (
@@ -1297,8 +1299,36 @@
           <td>${fmt(row.summary.total_shortage)}</td>
           <td>${row.summary.approval_level}</td>
           <td>${row.difference.headline || "-"}</td>
+          <td><button type="button" data-replay-run="${row.run_id}">回放</button></td>
         </tr>`
       )).join("");
+      document.querySelectorAll("[data-replay-run]").forEach((button) => {
+        button.addEventListener("click", () => replayRun(button.dataset.replayRun));
+      });
+    }
+
+    async function replayRun(runId) {
+      const record = runHistoryRows.find((row) => row.run_id === runId);
+      if (!record) {
+        field("exportStatus").textContent = `未找到运行记录：${runId}`;
+        return;
+      }
+      if (record.playbook && playbookDefaults[record.playbook]) {
+        selected = record.playbook;
+      }
+      document.querySelectorAll("#playbooks button").forEach((el) => el.classList.toggle("active", el.dataset.id === selected));
+      applyRecordConfig(record.config || {});
+      saveSharedState();
+      field("exportStatus").textContent = `正在回放运行记录 ${runId}...`;
+      await run(false);
+      field("exportStatus").textContent = `已回放运行记录 ${runId}，未新增运行记录。`;
+    }
+
+    function applyRecordConfig(config) {
+      field("demand").value = config.demand_multiplier ?? field("demand").value;
+      field("air").value = config.air_capacity ?? field("air").value;
+      field("penalty").value = config.unfulfilled_penalty ?? field("penalty").value;
+      field("sla").value = config.sla_extra_days ?? field("sla").value;
     }
 
     function formatRunTime(value) {
