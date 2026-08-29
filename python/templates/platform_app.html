@@ -1281,6 +1281,10 @@
             <div id="handoffPanel" class="diff-panel">
               <p class="small">运行后显示下游系统交接、上线闸门和回滚条件。</p>
             </div>
+            <div class="button-row">
+              <button class="run" id="publishExecution" type="button">发布执行包</button>
+            </div>
+            <div id="publishStatus" class="status-line">审批通过或自动通过后，可生成执行批次并写入下游策略表。</div>
           </div>
           <div>
             <h3>上线监控与重跑触发</h3>
@@ -1461,7 +1465,7 @@
       data_admin: ["view", "edit_upstream"],
       planner: ["view", "edit_config", "run_model", "submit_approval", "export_report"],
       approver: ["view", "decide_approval"],
-      admin: ["view", "edit_upstream", "edit_config", "run_model", "submit_approval", "decide_approval", "export_report"]
+      admin: ["view", "edit_upstream", "edit_config", "run_model", "submit_approval", "decide_approval", "export_report", "publish_execution"]
     };
 
     const fmt = (value) => Number(value || 0).toLocaleString("zh-CN", { maximumFractionDigits: 2 });
@@ -1499,7 +1503,8 @@
         ["run", "run_model"],
         ["runFromConfig", "run_model"],
         ["runFromInputs", "run_model"],
-        ["exportReport", "export_report"]
+        ["exportReport", "export_report"],
+        ["publishExecution", "publish_execution"]
       ];
       controls.forEach(([id, permission]) => {
         if (field(id)) {
@@ -1593,6 +1598,7 @@
       setResultPanel("readinessRows", "governance");
       setResultPanel("approvalWorkflow", "governance");
       setResultPanel("handoffPanel", "execution");
+      setResultPanel("publishStatus", "execution");
       setResultPanel("monitorPanel", "execution");
       setResultPanel("actions", "execution");
       setResultPanel("executionRows", "execution");
@@ -2510,6 +2516,11 @@
         : approvalStatus === "rejected"
           ? "当前运行记录不可执行，请回到场景配置或上游数据层调整。"
           : handoff.release_note;
+      const canPublish = Boolean(latestRunId) && can("publish_execution") && ["approved", "auto_approved"].includes(approvalStatus);
+      field("publishExecution").disabled = !canPublish;
+      field("publishStatus").textContent = canPublish
+        ? `当前运行记录 ${latestRunId} 已放行，可发布执行包。`
+        : "审批通过或自动通过后，可生成执行批次并写入下游策略表。";
       field("handoffPanel").innerHTML = `
         <div class="row">
           <strong>执行状态</strong>

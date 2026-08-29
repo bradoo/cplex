@@ -25,6 +25,7 @@ DATA_PATH = Path(__file__).resolve().parent / "data" / "platform_poc_data.json"
 UPSTREAM_DATA_PATH = Path(__file__).resolve().parent / "data" / "platform_upstream_data.json"
 RUN_HISTORY_PATH = Path(__file__).resolve().parent / "reports" / "platform_runs.jsonl"
 APPROVAL_HISTORY_PATH = Path(__file__).resolve().parent / "reports" / "platform_approvals.jsonl"
+EXECUTION_RELEASE_PATH = Path(__file__).resolve().parent / "reports" / "platform_execution_releases.jsonl"
 REPORTS_DIR = Path(__file__).resolve().parent / "reports"
 NETWORK_MODES = {"strict", "soft_capacity", "capacity_expansion"}
 APPROVAL_ACTIONS = {"submit", "approve", "reject"}
@@ -33,7 +34,7 @@ ROLE_PERMISSIONS = {
     "data_admin": {"view", "edit_upstream"},
     "planner": {"view", "edit_config", "run_model", "submit_approval", "export_report"},
     "approver": {"view", "decide_approval"},
-    "admin": {"view", "edit_upstream", "edit_config", "run_model", "submit_approval", "decide_approval", "export_report"},
+    "admin": {"view", "edit_upstream", "edit_config", "run_model", "submit_approval", "decide_approval", "export_report", "publish_execution"},
 }
 ROLE_LABELS = {
     "viewer": "只读查看",
@@ -852,6 +853,43 @@ def ensure_starrocks_run_history_tables(cursor):
         PROPERTIES ("replication_num" = "1")
         """
     )
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS platform_execution_releases (
+          execution_batch_id VARCHAR(64) NOT NULL,
+          run_id VARCHAR(32) NOT NULL,
+          created_at DATETIME NOT NULL,
+          actor VARCHAR(64) NOT NULL,
+          status VARCHAR(32) NOT NULL,
+          target_systems VARCHAR(256) NOT NULL,
+          release_summary VARCHAR(2048) NOT NULL
+        )
+        PRIMARY KEY(execution_batch_id)
+        DISTRIBUTED BY HASH(execution_batch_id) BUCKETS 4
+        PROPERTIES ("replication_num" = "1")
+        """
+    )
+    for table, payload_label in (
+        ("published_network_strategy", "仓网策略"),
+        ("published_replenishment_plan", "补货计划"),
+        ("published_service_allocation", "服务商分单策略"),
+        ("published_staffing_plan", "排班计划"),
+    ):
+        cursor.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {table} (
+              execution_batch_id VARCHAR(64) NOT NULL,
+              run_id VARCHAR(32) NOT NULL,
+              created_at DATETIME NOT NULL,
+              target_system VARCHAR(32) NOT NULL,
+              payload_type VARCHAR(64) NOT NULL,
+              payload_json VARCHAR(65533) NOT NULL
+            )
+            DUPLICATE KEY(execution_batch_id, run_id)
+            DISTRIBUTED BY HASH(execution_batch_id) BUCKETS 4
+            PROPERTIES ("replication_num" = "1")
+            """
+        )
 
 
 def save_starrocks_run_history(record, result):
@@ -1315,6 +1353,172 @@ def append_approval_event(run_id, action, actor, comment):
     with APPROVAL_HISTORY_PATH.open("a", encoding="utf-8") as file:
         file.write(json.dumps(event, ensure_ascii=False) + "\n")
     return event, None
+
+
+def load_execution_payload(run_id):
+    if starrocks_upstream_enabled():
+        with starrocks_connection() as connection:
+            with connection.cursor() as cursor:
+                ensure_starrocks_run_history_tables(cursor)
+                cursor.execute(
+                    """
+                    SELECT run_id, playbook_name, approval_level
+                    FROM platform_run_history
+                    WHERE run_id = %s
+                    """,
+                    (run_id,),
+                )
+                run_row = cursor.fetchone()
+                if not run_row:
+                    return None
+                cursor.execute(
+                    """
+                    SELECT model_key, result_json
+                    FROM platform_run_model_results
+                    WHERE run_id = %s
+                    """,
+                    (run_id,),
+                )
+                model_results = {}
+                for row in cursor.fetchall():
+                    try:
+                        model_results[row["model_key"]] = json.loads(row["result_json"])
+                    except json.JSONDecodeError:
+                        model_results[row["model_key"]] = {}
+                approval = load_starrocks_approval_states(cursor, [run_id]).get(
+                    run_id,
+                    default_approval_state(run_row["approval_level"]),
+                )
+        return {
+            "run_id": run_id,
+            "playbook_name": run_row["playbook_name"],
+            "approval": approval,
+            "model_results": model_results,
+        }
+    for row in load_run_history(100):
+        if row.get("run_id") == run_id:
+            return {
+                "run_id": run_id,
+                "playbook_name": row.get("playbook_name", ""),
+                "approval": row.get("approval") or default_approval_state(row["summary"]["approval_level"]),
+                "model_results": {},
+            }
+    return None
+
+
+def build_execution_release_payload(run_id, actor):
+    payload = load_execution_payload(run_id)
+    if not payload:
+        return None, f"Unknown run_id: {run_id}"
+    approval_status = (payload.get("approval") or {}).get("status")
+    if approval_status not in {"approved", "auto_approved"}:
+        return None, f"运行批次 {run_id} 尚未审批通过，不能发布执行。"
+
+    model_results = payload.get("model_results", {})
+    network = model_results.get("network", {})
+    replenishment = model_results.get("replenishment", {})
+    service_mix = model_results.get("service_mix", {})
+    staffing = model_results.get("staffing", {})
+    created_at = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
+    execution_batch_id = f"EXEC-{datetime.now(timezone.utc).astimezone().strftime('%Y%m%d')}-{run_id}-{uuid.uuid4().hex[:6]}"
+    targets = [
+        {
+            "system": "WMS",
+            "table": "published_network_strategy",
+            "payload_type": "warehouse_fulfillment_strategy",
+            "payload": {
+                "opened_warehouses": network.get("opened_warehouses", []),
+                "capacity_plan": network.get("capacity_plan", []),
+                "fulfillment_plan": network.get("fulfillment_plan", {}),
+            },
+        },
+        {
+            "system": "TMS",
+            "table": "published_replenishment_plan",
+            "payload_type": "replenishment_transport_plan",
+            "payload": {
+                "orders": replenishment.get("orders", []),
+                "inventory_projection": replenishment.get("inventory_projection", {}),
+            },
+        },
+        {
+            "system": "OMS",
+            "table": "published_service_allocation",
+            "payload_type": "service_allocation_policy",
+            "payload": {
+                "used_services": service_mix.get("used_services", []),
+                "allocation": service_mix.get("allocation", {}),
+            },
+        },
+        {
+            "system": "HR/WFM",
+            "table": "published_staffing_plan",
+            "payload_type": "staffing_schedule",
+            "payload": {
+                "schedule": staffing.get("schedule", {}),
+                "shortages": staffing.get("shortages", {}),
+                "workloads": staffing.get("workloads", {}),
+            },
+        },
+    ]
+    release = {
+        "execution_batch_id": execution_batch_id,
+        "run_id": run_id,
+        "created_at": created_at,
+        "actor": actor or "admin",
+        "status": "published",
+        "playbook_name": payload.get("playbook_name", ""),
+        "targets": targets,
+        "summary": f"已向 {', '.join(target['system'] for target in targets)} 生成执行策略包。",
+    }
+    return release, None
+
+
+def save_execution_release(release):
+    if starrocks_upstream_enabled():
+        with starrocks_connection() as connection:
+            with connection.cursor() as cursor:
+                ensure_starrocks_run_history_tables(cursor)
+                cursor.execute(
+                    """
+                    INSERT INTO platform_execution_releases
+                    (execution_batch_id, run_id, created_at, actor, status, target_systems, release_summary)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        release["execution_batch_id"],
+                        release["run_id"],
+                        release["created_at"].replace("T", " ")[:19],
+                        release["actor"],
+                        release["status"],
+                        ",".join(target["system"] for target in release["targets"]),
+                        release["summary"],
+                    ),
+                )
+                for target in release["targets"]:
+                    cursor.execute(
+                        f"""
+                        INSERT INTO {target['table']}
+                        (execution_batch_id, run_id, created_at, target_system, payload_type, payload_json)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                        """,
+                        (
+                            release["execution_batch_id"],
+                            release["run_id"],
+                            release["created_at"].replace("T", " ")[:19],
+                            target["system"],
+                            target["payload_type"],
+                            json.dumps(target["payload"], ensure_ascii=False, default=str),
+                        ),
+                    )
+            connection.commit()
+        release["storage"] = platform_run_history_source_label().replace("platform_run_history", "platform_execution_releases")
+        return release
+    EXECUTION_RELEASE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with EXECUTION_RELEASE_PATH.open("a", encoding="utf-8") as file:
+        file.write(json.dumps(release, ensure_ascii=False) + "\n")
+    release["storage"] = str(EXECUTION_RELEASE_PATH.relative_to(Path(__file__).resolve().parent.parent))
+    return release
 
 
 def build_run_history_record(result):
@@ -3281,6 +3485,29 @@ def update_run_approval():
             "message": "审批状态已更新",
             "approval": event,
             "data_source": platform_run_history_source_label(),
+        }
+    )
+
+
+@app.post("/api/platform/publish-execution")
+def publish_execution():
+    permission_error = require_permission("publish_execution")
+    if permission_error:
+        return permission_error
+    payload = request.get_json(silent=True) or {}
+    run_id = str(payload.get("run_id") or "").strip()
+    actor = str(payload.get("actor") or current_role()).strip()
+    if not run_id:
+        return jsonify({"status": "error", "message": "run_id is required"}), 400
+    release, error = build_execution_release_payload(run_id, actor)
+    if error:
+        return jsonify({"status": "error", "message": error}), 400
+    release = save_execution_release(release)
+    return jsonify(
+        {
+            "status": "ok",
+            "message": "执行策略包已发布",
+            "release": release,
         }
     )
 
