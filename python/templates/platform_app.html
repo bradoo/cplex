@@ -991,6 +991,12 @@
             <div id="shortageCard" class="metric"><span class="label">总缺口</span><strong id="shortage" class="value">-</strong></div>
           </div>
           <div>
+            <h3>企业就绪度总览</h3>
+            <div id="enterpriseReadinessPanel" class="diff-panel">
+              <p class="small">加载平台级数据、模型、治理、审计和执行闭环状态。</p>
+            </div>
+          </div>
+          <div>
             <h3>收益归因与经营影响</h3>
             <div id="businessValuePanel" class="diff-panel">
               <p class="small">运行后显示成本、缺口、收入风险和协同效率的经营口径。</p>
@@ -1428,6 +1434,35 @@
           <td>${h(model.prepare_note)}</td>
         </tr>
       `).join("");
+    }
+
+    async function loadEnterpriseReadiness() {
+      const response = await fetch("/api/platform/enterprise-readiness");
+      const data = await response.json();
+      const blockers = data.blockers && data.blockers.length ? `阻塞项：${data.blockers.map(h).join("、")}` : "无上线阻塞项";
+      field("enterpriseReadinessPanel").innerHTML = `
+        <div class="row">
+          <strong>${h(data.level)}</strong>
+          <span class="small">${blockers}</span>
+          <span class="status">评分 ${fmt(data.score)}</span>
+        </div>
+        <table>
+          <thead>
+            <tr><th>领域</th><th>状态</th><th>证据</th><th>负责人</th><th>下一步</th></tr>
+          </thead>
+          <tbody>
+            ${data.domains.map((row) => `
+              <tr>
+                <td><strong>${h(row.domain)}</strong></td>
+                <td><span class="status">${h(row.status)}</span></td>
+                <td>${h(row.evidence)}</td>
+                <td>${h(row.owner)}</td>
+                <td>${h(row.next_step)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
     }
 
     async function loadLineage() {
@@ -2481,7 +2516,7 @@
     loadOverview().then(() => {
       applyRoleControls();
       const initialRun = can("run_model") ? run(false) : Promise.resolve();
-      return Promise.all([initialRun, compare(), loadDataLayer(), loadConfigAudit(), loadUpstreamData(), loadSourceStatus(), loadDataQuality(), loadScaleSnapshot(), loadLineage(), loadRunHistory(), loadConstraintExplanations()]);
+      return Promise.all([initialRun, compare(), loadDataLayer(), loadConfigAudit(), loadUpstreamData(), loadSourceStatus(), loadDataQuality(), loadScaleSnapshot(), loadEnterpriseReadiness(), loadLineage(), loadRunHistory(), loadConstraintExplanations()]);
     });
   </script>
 </body>

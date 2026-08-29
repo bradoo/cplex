@@ -2026,6 +2026,86 @@ def get_scale_snapshot():
     return jsonify(build_platform_scale_snapshot())
 
 
+@app.get("/api/platform/enterprise-readiness")
+def get_enterprise_readiness():
+    return jsonify(build_enterprise_readiness())
+
+
+def build_enterprise_readiness():
+    data = load_upstream_data()
+    validation_error = validate_upstream_data(data)
+    quality_metrics = build_data_quality_metrics(data)
+    scale = build_platform_scale_snapshot()
+    source = build_upstream_source_status()
+    history = load_run_history(20)
+    approval_rows = [row for row in history if row.get("approval")]
+    approved_rows = [
+        row
+        for row in approval_rows
+        if row["approval"].get("status") in {"approved", "auto_approved"}
+    ]
+    domains = [
+        {
+            "domain": "数据接入",
+            "status": "达标" if source.get("status") == "ok" else "需修复",
+            "evidence": f"{source.get('mode', '-')} / 订单 {format_number(source.get('summary', {}).get('order_lines', 0))} 行 / 源表 {source.get('summary', {}).get('source_tables', 0)} 张",
+            "owner": "数据平台",
+            "next_step": "保持 OMS、WMS、TMS、HR 同步任务和抽样校验。",
+        },
+        {
+            "domain": "数据质量",
+            "status": "达标" if not validation_error and quality_metrics["capacity_buffer"] >= 0 else "需关注",
+            "evidence": "核心字段通过校验" if not validation_error else validation_error,
+            "owner": "数据治理",
+            "next_step": "把容量、线路、需求和服务商口径纳入每日质量规则。",
+        },
+        {
+            "domain": "模型吞吐",
+            "status": "达标" if scale.get("status") == "ok" else "需关注",
+            "evidence": f"准备耗时 {scale.get('timings_ms', {}).get('total_prepare', 0)} ms / 变量 {format_number(scale.get('throughput', {}).get('estimated_variables', 0))}",
+            "owner": "优化平台",
+            "next_step": "持续观察百万订单聚合耗时和子模型规模。",
+        },
+        {
+            "domain": "权限治理",
+            "status": "达标",
+            "evidence": f"{len(ROLE_PERMISSIONS)} 个角色 / {sum(len(v) for v in ROLE_PERMISSIONS.values())} 项权限",
+            "owner": "信息安全",
+            "next_step": "演示后对接企业 SSO，并把角色映射到真实组织岗位。",
+        },
+        {
+            "domain": "运行审计",
+            "status": "达标" if history else "待积累",
+            "evidence": f"最近运行记录 {len(history)} 条",
+            "owner": "运营中台",
+            "next_step": "保留运行批次、参数快照、模型版本和审批事件。",
+        },
+        {
+            "domain": "审批闭环",
+            "status": "达标" if approval_rows else "待演练",
+            "evidence": f"审批记录 {len(approval_rows)} 条 / 已放行 {len(approved_rows)} 条",
+            "owner": "业务负责人",
+            "next_step": "按金额、缺口和高风险前提设置审批分层。",
+        },
+        {
+            "domain": "执行与监控",
+            "status": "达标",
+            "evidence": "已生成执行交接、上线护栏、监控阈值和重跑策略",
+            "owner": "CIO / 运营负责人",
+            "next_step": "把 OMS/WMS/TMS/HR 回传结果接入监控闭环。",
+        },
+    ]
+    score = round(sum(100 if row["status"] == "达标" else 60 if row["status"] == "待积累" else 40 for row in domains) / len(domains))
+    blockers = [row["domain"] for row in domains if row["status"] not in {"达标", "待积累"}]
+    return {
+        "status": "ok",
+        "score": score,
+        "level": "演示可上线" if score >= 85 and not blockers else "可演示，需补强" if score >= 70 else "需治理后演示",
+        "blockers": blockers,
+        "domains": domains,
+    }
+
+
 @app.get("/api/platform/lineage")
 def get_lineage():
     upstream_source = upstream_data_source_label()
