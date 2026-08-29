@@ -1903,6 +1903,140 @@ def build_data_quality_checks(data, validation_error):
     return checks
 
 
+def build_data_quarantine(data):
+    issues = []
+
+    def add_issue(issue_type, severity, entity, field, value, reason, suggestion):
+        issues.append(
+            {
+                "type": issue_type,
+                "severity": severity,
+                "entity": entity,
+                "field": field,
+                "value": value,
+                "reason": reason,
+                "suggestion": suggestion,
+            }
+        )
+
+    if not isinstance(data, dict):
+        add_issue("结构错误", "block", "upstream", "data", type(data).__name__, "上游数据不是对象结构。", "重新拉取上游快照或回退到最近可用版本。")
+        return build_quarantine_response(data, issues)
+
+    validation_error = validate_upstream_data(data)
+    if validation_error:
+        add_issue("结构错误", "block", "upstream", "schema", validation_error, "基础结构校验未通过，模型入参不可信。", "先修复必填字段、类型或引用关系，再允许进入模型层。")
+
+    network = data.get("network") or {}
+    warehouses = network.get("warehouses") or {}
+    markets = network.get("markets") or {}
+    lanes = network.get("lanes") or []
+    orders = data.get("orders") or []
+
+    required_order_fields = {
+        "order_id": "订单号缺失会导致追溯失败。",
+        "market": "市场缺失会导致需求无法归集。",
+        "channel": "渠道缺失会影响订单结构分析。",
+        "units": "件数缺失会导致需求口径偏差。",
+        "priority": "优先级缺失会影响履约排序。",
+        "requested_delivery_days": "承诺天数缺失会影响 SLA 判断。",
+        "demand_share_bp": "需求占比缺失会影响抽样解释。",
+    }
+    known_markets = set(markets)
+    for index, order in enumerate(orders[:200]):
+        order_id = order.get("order_id") or f"sample_row_{index + 1}"
+        for field, reason in required_order_fields.items():
+            if field not in order or order.get(field) in ("", None):
+                add_issue("缺失字段", "block", order_id, field, order.get(field), reason, "回补字段后重新进入需求聚合；无法回补的订单进入人工队列。")
+        if order.get("market") and known_markets and order["market"] not in known_markets:
+            add_issue("引用异常", "block", order_id, "market", order["market"], "订单市场不在市场需求基础表中。", "维护市场主数据或将订单映射到有效市场。")
+        units = order.get("units")
+        if not isinstance(units, (int, float)) or isinstance(units, bool) or float(units or 0) <= 0:
+            add_issue("超范围值", "block", order_id, "units", units, "订单件数必须为正数。", "修正件数或剔除取消/测试订单。")
+        requested_days = order.get("requested_delivery_days")
+        if not isinstance(requested_days, (int, float)) or isinstance(requested_days, bool) or float(requested_days or 0) <= 0:
+            add_issue("超范围值", "warn", order_id, "requested_delivery_days", requested_days, "承诺天数必须为正数。", "按渠道默认 SLA 回填，或进入客服承诺复核。")
+        share = order.get("demand_share_bp")
+        if not isinstance(share, (int, float)) or isinstance(share, bool) or float(share or 0) < 0:
+            add_issue("超范围值", "warn", order_id, "demand_share_bp", share, "需求占比 bp 不能为负。", "重新计算抽样占比或忽略该统计字段。")
+
+    for warehouse, values in warehouses.items():
+        capacity = values.get("capacity")
+        if not isinstance(capacity, (int, float)) or isinstance(capacity, bool) or float(capacity or 0) <= 0:
+            add_issue("超范围值", "block", warehouse, "capacity", capacity, "仓库容量必须大于 0。", "修正 WMS 仓库能力后再参与选址求解。")
+
+    lane_pairs = {(lane.get("warehouse"), lane.get("market")) for lane in lanes}
+    for warehouse in warehouses:
+        for market in markets:
+            if (warehouse, market) not in lane_pairs:
+                add_issue("缺失字段", "block", f"{warehouse}->{market}", "network.lanes", "-", "仓库到市场缺少线路记录。", "补齐 TMS 线路成本和时效，或明确该线路不可用。")
+
+    for lane in lanes:
+        entity = f"{lane.get('warehouse', '?')}->{lane.get('market', '?')}"
+        if lane.get("warehouse") not in warehouses:
+            add_issue("引用异常", "block", entity, "warehouse", lane.get("warehouse"), "线路引用了不存在的仓库。", "修正仓库编码或同步仓库主数据。")
+        if lane.get("market") not in markets:
+            add_issue("引用异常", "block", entity, "market", lane.get("market"), "线路引用了不存在的市场。", "修正市场编码或同步市场主数据。")
+        market = markets.get(lane.get("market"))
+        if market and isinstance(lane.get("delivery_days"), (int, float)) and lane["delivery_days"] > market.get("max_delivery_days", 0):
+            add_issue("不可用线路", "warn", entity, "delivery_days", lane["delivery_days"], f"线路时效超过市场 SLA {market.get('max_delivery_days')} 天，模型会禁止或规避该线路。", "优化线路时效、放宽 SLA，或准备替代仓/承运商。")
+
+    return build_quarantine_response(data, issues)
+
+
+def build_quarantine_response(data, issues):
+    blocked = [issue for issue in issues if issue["severity"] == "block"]
+    warnings = [issue for issue in issues if issue["severity"] != "block"]
+    by_type = {}
+    for issue in issues:
+        by_type[issue["type"]] = by_type.get(issue["type"], 0) + 1
+    total_orders = upstream_order_line_count(data) if isinstance(data, dict) else 0
+    sampled_orders = len(data.get("orders", [])) if isinstance(data, dict) else 0
+    return {
+        "status": "ok",
+        "scope": "sample_and_master_data",
+        "summary": {
+            "total_issues": len(issues),
+            "blocked": len(blocked),
+            "warnings": len(warnings),
+            "sampled_orders": sampled_orders,
+            "total_orders": total_orders,
+            "by_type": by_type,
+        },
+        "issues": issues[:200],
+        "recommendations": build_quarantine_recommendations(issues, total_orders, sampled_orders),
+    }
+
+
+def build_quarantine_recommendations(issues, total_orders, sampled_orders):
+    if not issues:
+        return [
+            {
+                "priority": "P2",
+                "owner": "数据平台",
+                "action": "当前抽样订单和基础表未发现需隔离异常，继续保留每日质量巡检。",
+            }
+        ]
+    issue_types = {issue["type"] for issue in issues}
+    recommendations = []
+    if "缺失字段" in issue_types:
+        recommendations.append({"priority": "P0", "owner": "数据平台", "action": "对 OMS/WMS/TMS 同步任务增加必填字段拦截和补数重跑。"})
+    if "超范围值" in issue_types:
+        recommendations.append({"priority": "P0", "owner": "业务运营", "action": "确认负数、零值、异常 SLA 是否来自测试单、取消单或手工录入错误。"})
+    if "不可用线路" in issue_types:
+        recommendations.append({"priority": "P1", "owner": "物流运营", "action": "对超过 SLA 的线路建立替代仓、替代承运商或 SLA 放宽审批。"})
+    if "引用异常" in issue_types:
+        recommendations.append({"priority": "P0", "owner": "主数据", "action": "统一市场、仓库、服务商编码，避免事实表无法关联基础表。"})
+    recommendations.append(
+        {
+            "priority": "P1",
+            "owner": "数据治理",
+            "action": f"当前页面检查 {format_number(sampled_orders)} 条订单样本；如需全量拦截，请在 StarRocks 对 {format_number(total_orders)} 条订单建立质量规则表。",
+        }
+    )
+    return recommendations
+
+
 def build_platform_scale_snapshot():
     started_at = perf_counter()
     upstream_data = load_upstream_data()
@@ -2187,6 +2321,12 @@ def get_data_quality():
             "metrics": build_data_quality_metrics(upstream_data),
         }
     )
+
+
+@app.get("/api/platform/data-quarantine")
+def get_data_quarantine():
+    upstream_data = load_upstream_data()
+    return jsonify(build_data_quarantine(upstream_data))
 
 
 @app.get("/api/platform/source-status")

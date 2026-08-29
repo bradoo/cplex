@@ -933,6 +933,7 @@
         <aside class="subnav" aria-label="上游数据二级导航">
           <button class="active" data-subview-button="upstream" data-target="source">数据源</button>
           <button data-subview-button="upstream" data-target="quality">质量校验</button>
+          <button data-subview-button="upstream" data-target="quarantine">异常隔离</button>
           <button data-subview-button="upstream" data-target="scale">规模吞吐</button>
           <button data-subview-button="upstream" data-target="orders">订单明细</button>
           <button data-subview-button="upstream" data-target="edit">业务表编辑</button>
@@ -967,6 +968,29 @@
               <div class="content">
                 <div id="qualityMetrics" class="grid"></div>
                 <div id="qualityChecks" class="rows"></div>
+              </div>
+            </section>
+          </div>
+          <div class="subview" data-subview="upstream" data-subview-id="quarantine">
+            <section>
+              <div class="section-head"><h2>异常数据隔离区</h2><span id="quarantineStatus" class="pill">加载中</span></div>
+              <div class="content">
+                <div id="quarantineMetrics" class="grid"></div>
+                <div>
+                  <h3>被拦截数据</h3>
+                  <div class="table-wrap">
+                    <table>
+                      <thead>
+                        <tr><th>类型</th><th>级别</th><th>对象</th><th>字段</th><th>当前值</th><th>拦截原因</th><th>修复建议</th></tr>
+                      </thead>
+                      <tbody id="quarantineRows"></tbody>
+                    </table>
+                  </div>
+                </div>
+                <div>
+                  <h3>治理建议</h3>
+                  <div id="quarantineRecommendations" class="rows"></div>
+                </div>
               </div>
             </section>
           </div>
@@ -1703,6 +1727,49 @@
           <strong>${h(check.name)}</strong>
           <span class="small">${h(check.detail)}<br>${h(check.action)}</span>
           <span class="status">${check.level === "pass" ? "通过" : "关注"}</span>
+        </div>
+      `).join("");
+    }
+
+    async function loadDataQuarantine() {
+      const response = await fetch("/api/platform/data-quarantine");
+      const data = await response.json();
+      const summary = data.summary || {};
+      const hasBlocked = Number(summary.blocked || 0) > 0;
+      const hasWarnings = Number(summary.warnings || 0) > 0;
+      field("quarantineStatus").textContent = hasBlocked ? "需拦截" : hasWarnings ? "需复核" : "无异常";
+      field("quarantineStatus").style.background = hasBlocked ? "var(--soft-red)" : hasWarnings ? "var(--soft-amber)" : "var(--soft-green)";
+      field("quarantineStatus").style.color = hasBlocked ? "var(--red)" : hasWarnings ? "var(--amber)" : "var(--green)";
+      const metrics = [
+        ["异常总数", summary.total_issues || 0, "当前隔离队列"],
+        ["阻断项", summary.blocked || 0, "不修复不建议进入模型"],
+        ["复核项", summary.warnings || 0, "可运行但需要业务确认"],
+        ["订单样本", `${fmt(summary.sampled_orders || 0)} / ${fmt(summary.total_orders || 0)}`, "已检查样本 / 上游总量"]
+      ];
+      field("quarantineMetrics").innerHTML = metrics.map(([label, value, meaning]) => `
+        <div class="metric ${label === "阻断项" && Number(value) > 0 ? "bad" : label === "复核项" && Number(value) > 0 ? "warn" : "good"}">
+          <span class="label">${h(label)}</span>
+          <strong class="value">${h(value)}</strong>
+          <span class="small">${h(meaning)}</span>
+        </div>
+      `).join("");
+      const issues = data.issues || [];
+      field("quarantineRows").innerHTML = issues.length ? issues.map((issue) => `
+        <tr>
+          <td><strong>${h(issue.type)}</strong></td>
+          <td><span class="status">${h(issue.severity === "block" ? "阻断" : "复核")}</span></td>
+          <td>${h(issue.entity)}</td>
+          <td>${h(issue.field)}</td>
+          <td>${h(issue.value)}</td>
+          <td>${h(issue.reason)}</td>
+          <td>${h(issue.suggestion)}</td>
+        </tr>
+      `).join("") : `<tr><td colspan="7" class="small">当前未发现需要隔离的异常数据。</td></tr>`;
+      field("quarantineRecommendations").innerHTML = (data.recommendations || []).map((item) => `
+        <div class="row">
+          <strong>${h(item.priority)}</strong>
+          <span class="small">${h(item.action)}</span>
+          <span class="status">${h(item.owner)}</span>
         </div>
       `).join("");
     }
@@ -3048,7 +3115,7 @@
         return;
       }
       field("upstreamStatus").textContent = `已保存：${result.data_source}`;
-      await Promise.all([loadUpstreamData(), loadSourceStatus(), loadDataQuality(), loadScaleSnapshot(), loadLineage()]);
+      await Promise.all([loadUpstreamData(), loadSourceStatus(), loadDataQuality(), loadDataQuarantine(), loadScaleSnapshot(), loadLineage()]);
     }
 
     async function saveConfigData() {
@@ -3105,7 +3172,7 @@
     loadOverview().then(() => {
       applyRoleControls();
       const initialRun = can("run_model") ? run(false) : Promise.resolve();
-      return Promise.all([initialRun, compare(), loadDataLayer(), loadConfigAudit(), loadUpstreamData(), loadSourceStatus(), loadDataQuality(), loadScaleSnapshot(), loadEnterpriseReadiness(), loadLineage(), loadRunHistory(), loadConstraintExplanations()]);
+      return Promise.all([initialRun, compare(), loadDataLayer(), loadConfigAudit(), loadUpstreamData(), loadSourceStatus(), loadDataQuality(), loadDataQuarantine(), loadScaleSnapshot(), loadEnterpriseReadiness(), loadLineage(), loadRunHistory(), loadConstraintExplanations()]);
     });
   </script>
 </body>
