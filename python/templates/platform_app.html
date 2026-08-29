@@ -997,6 +997,12 @@
             </div>
           </div>
           <div>
+            <h3>前提假设与数据可信度</h3>
+            <div id="assumptionPanel" class="diff-panel">
+              <p class="small">运行后显示关键业务前提、风险等级和签核动作。</p>
+            </div>
+          </div>
+          <div>
             <h3>决策闭环状态</h3>
             <div id="readinessRows" class="readiness-grid"></div>
           </div>
@@ -1798,6 +1804,7 @@
       renderExecutionPlan(summary.execution_plan || []);
       renderDifference(data.difference);
       renderBusinessValue(data.business_value);
+      renderAssumptionRegister(data.assumption_register);
       renderApprovalWorkflow(data.run_record ? data.run_record.approval : null, data.run_record);
       renderExecutionHandoff(data.execution_handoff, data.run_record ? data.run_record.approval : null);
       renderOperatingMonitor(data.operating_monitor);
@@ -1897,6 +1904,36 @@
             </div>
           `).join("")}
         </div>
+      `;
+    }
+
+    function renderAssumptionRegister(register) {
+      if (!register) {
+        field("assumptionPanel").innerHTML = `<p class="small">当前接口暂未返回前提假设信息。</p>`;
+        return;
+      }
+      field("assumptionPanel").innerHTML = `
+        <div class="row">
+          <strong>${h(register.overall_rating)}</strong>
+          <span class="small">${h(register.signoff_note)}</span>
+          <span class="status">签核清单</span>
+        </div>
+        <table>
+          <thead>
+            <tr><th>前提/口径</th><th>当前值</th><th>风险</th><th>负责人</th><th>签核动作</th></tr>
+          </thead>
+          <tbody>
+            ${register.items.map((row) => `
+              <tr>
+                <td><strong>${h(row.name)}</strong></td>
+                <td>${h(row.value)}</td>
+                <td><span class="status">${h(row.risk)}</span></td>
+                <td>${h(row.owner)}</td>
+                <td>${h(row.action)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
       `;
     }
 

@@ -1331,12 +1331,31 @@ def build_demo_report_markdown(result, timestamp):
                 f"| {markdown_cell(row['name'])} | {markdown_cell(row['planned'])} | "
                 f"{markdown_cell(row['threshold'])} | {markdown_cell(row['state'])} | {markdown_cell(row['action'])} |"
             )
-    lines.extend(["", "## 10. 风险提示", ""])
+    assumptions = result.get("assumption_register", {})
+    if assumptions:
+        lines.extend(
+            [
+                "",
+                "## 10. 前提假设与数据可信度",
+                "",
+                f"- 总体评级：{assumptions['overall_rating']}",
+                f"- 签核建议：{assumptions['signoff_note']}",
+                "",
+                "| 前提/口径 | 当前值 | 风险 | 负责人 | 签核动作 |",
+                "| --- | --- | --- | --- | --- |",
+            ]
+        )
+        for row in assumptions["items"]:
+            lines.append(
+                f"| {markdown_cell(row['name'])} | {markdown_cell(row['value'])} | "
+                f"{markdown_cell(row['risk'])} | {markdown_cell(row['owner'])} | {markdown_cell(row['action'])} |"
+            )
+    lines.extend(["", "## 11. 风险提示", ""])
     lines.extend(f"- {risk}" for risk in summary["risks"])
     lines.extend(
         [
             "",
-            "## 11. 模型结果摘要",
+            "## 12. 模型结果摘要",
             "",
             "| 模型 | 状态 | 摘要 |",
             "| --- | --- | --- |",
@@ -2454,6 +2473,7 @@ def run_case(playbook_id, overrides):
     summary = build_management_summary(network, replenishment, service_mix, staffing, config)
     execution_handoff = build_execution_handoff(summary, network, replenishment, service_mix, staffing)
     operating_monitor = build_operating_monitor(summary, network, replenishment, service_mix, staffing, config)
+    assumption_register = build_assumption_register(config, model_inputs, summary, network, replenishment, service_mix, staffing)
     difference = build_difference_explanation(
         playbook_id,
         config,
@@ -2474,6 +2494,7 @@ def run_case(playbook_id, overrides):
         "summary": summary,
         "execution_handoff": execution_handoff,
         "operating_monitor": operating_monitor,
+        "assumption_register": assumption_register,
         "difference": difference,
         "business_value": business_value,
         "network": network,
@@ -3226,6 +3247,86 @@ def build_business_value(summary, difference):
         "recommendation": recommendation,
         "net_business_value": net_business_value,
         "value_formula": "成本节省 + 收入保护 + 协同效率 - 新增成本 - 收入风险",
+        "items": items,
+    }
+
+
+def build_assumption_register(config, model_inputs, summary, network, replenishment, service_mix, staffing):
+    network_input = model_inputs["network"]
+    replenishment_input = model_inputs["replenishment"]
+    service_input = model_inputs["service_level"]
+    total_market_demand = sum(float(row.get("demand") or 0) for row in network_input["markets"].values())
+    total_capacity = sum(float(row.get("capacity") or 0) for row in network_input["warehouses"].values())
+    blocked_lanes = len([lane for lane in network_input["lane_costs_and_sla"] if not lane["allowed_by_sla"]])
+    service_capacity = sum(float(row.get("capacity") or 0) for row in service_input["services"].values())
+    replenishment_demand = sum(float(value or 0) for value in replenishment_input["demand"].values())
+    total_shortage = float(summary.get("total_shortage") or 0)
+
+    items = [
+        {
+            "name": "需求预测倍率",
+            "value": f"{float(config.get('demand_multiplier') or 1):g}x / 市场需求 {total_market_demand:g}",
+            "risk": "高" if float(config.get("demand_multiplier") or 1) >= 1.25 else "中" if float(config.get("demand_multiplier") or 1) > 1 else "低",
+            "owner": "运营计划",
+            "action": "确认促销、旺季和渠道活动预测是否已进入上游需求。",
+        },
+        {
+            "name": "仓网容量口径",
+            "value": f"容量 {total_capacity:g} / 需求 {total_market_demand:g}",
+            "risk": "高" if total_capacity < total_market_demand else "低",
+            "owner": "仓网运营",
+            "action": "确认可用容量是否扣除了冻结库位、退货处理和异常件缓冲。",
+        },
+        {
+            "name": "线路 SLA 覆盖",
+            "value": f"被 SLA 禁止线路 {blocked_lanes:g} 条",
+            "risk": "中" if blocked_lanes else "低",
+            "owner": "物流计划",
+            "action": "确认线路时效是否使用最近履约表现，而不是静态承诺时效。",
+        },
+        {
+            "name": "补货供应约束",
+            "value": f"预测需求 {replenishment_demand:g} / 空运周容量 {config.get('air_capacity')}",
+            "risk": "高" if replenishment.get("total_stockout", 0) else "中",
+            "owner": "供应链计划",
+            "action": "确认供应商交期、箱规和空运舱位锁定比例。",
+        },
+        {
+            "name": "服务商能力",
+            "value": f"服务能力 {service_capacity:g} / 服务成本 {format_number(summary.get('service_cost') or 0)}",
+            "risk": "中" if service_capacity < total_market_demand else "低",
+            "owner": "物流采购",
+            "action": "确认服务商峰值承诺、价格阶梯和违约兜底条款。",
+        },
+        {
+            "name": "人力到岗假设",
+            "value": f"排班缺口 {float(staffing.get('total_shortage') or 0):g}",
+            "risk": "高" if staffing.get("total_shortage", 0) else "低",
+            "owner": "客服/仓内排班",
+            "action": "确认临时人力池、加班审批和跨技能支援可用性。",
+        },
+        {
+            "name": "缺口承接口径",
+            "value": f"总缺口 {total_shortage:g}",
+            "risk": "高" if total_shortage > 100 else "中" if total_shortage > 0 else "低",
+            "owner": "业务负责人",
+            "action": "确认缺口是否可通过预算、SLA 放宽或人工兜底承接。",
+        },
+    ]
+    high_count = sum(1 for row in items if row["risk"] == "高")
+    medium_count = sum(1 for row in items if row["risk"] == "中")
+    if high_count:
+        overall_rating = f"{high_count} 项高风险前提"
+        signoff_note = "建议先完成高风险前提签核，再提交审批或执行。"
+    elif medium_count:
+        overall_rating = f"{medium_count} 项中风险前提"
+        signoff_note = "可进入审批，但需要在执行交接中保留监控和回滚条件。"
+    else:
+        overall_rating = "前提稳定"
+        signoff_note = "核心前提均为低风险，可作为自动执行候选。"
+    return {
+        "overall_rating": overall_rating,
+        "signoff_note": signoff_note,
         "items": items,
     }
 
