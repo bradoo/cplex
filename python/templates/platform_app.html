@@ -577,6 +577,45 @@
       font-size: 13px;
     }
 
+    .handoff-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .handoff-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      background: #fff;
+      display: grid;
+      gap: 6px;
+      min-height: 108px;
+    }
+
+    .handoff-card strong {
+      font-size: 15px;
+    }
+
+    .gate-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .gate {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      background: #fff;
+      display: grid;
+      gap: 4px;
+    }
+
+    .gate.pass { border-color: #bcebd5; background: var(--soft-green); }
+    .gate.wait { border-color: #ffd799; background: var(--soft-amber); }
+    .gate.warn { border-color: #f5bbb7; background: var(--soft-red); }
+
     .run-steps {
       display: grid;
       grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -692,7 +731,7 @@
 
     @media (max-width: 1040px) {
       .top, .page, .two-col { grid-template-columns: 1fr; }
-      .flow, .grid, .scale-metrics, .readiness-grid, .impact-grid, .run-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .flow, .grid, .scale-metrics, .readiness-grid, .impact-grid, .run-steps, .handoff-grid, .gate-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .explain-grid { grid-template-columns: 1fr; }
       .diff-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .lineage-diagram { overflow-x: auto; padding-bottom: 6px; }
@@ -701,7 +740,7 @@
     }
 
     @media (max-width: 640px) {
-      .flow, .grid, .scale-metrics, .diff-grid, .readiness-grid, .impact-grid, .run-steps { grid-template-columns: 1fr; }
+      .flow, .grid, .scale-metrics, .diff-grid, .readiness-grid, .impact-grid, .run-steps, .handoff-grid, .gate-list { grid-template-columns: 1fr; }
       .flow-step::after { display: none; }
       .row, .cost-cards { grid-template-columns: 1fr; }
     }
@@ -964,6 +1003,12 @@
               <button id="rejectRun" type="button">驳回方案</button>
             </div>
             <div id="approvalStatus" class="status-line">运行并保存记录后可发起审批。</div>
+          </div>
+          <div>
+            <h3>执行交接与上线护栏</h3>
+            <div id="handoffPanel" class="diff-panel">
+              <p class="small">运行后显示下游系统交接、上线闸门和回滚条件。</p>
+            </div>
           </div>
           <div class="two-col">
             <div>
@@ -1741,6 +1786,7 @@
       renderExecutionPlan(summary.execution_plan || []);
       renderDifference(data.difference);
       renderApprovalWorkflow(data.run_record ? data.run_record.approval : null, data.run_record);
+      renderExecutionHandoff(data.execution_handoff, data.run_record ? data.run_record.approval : null);
     }
 
     function renderApprovalWorkflow(approval, runRecord) {
@@ -1762,6 +1808,59 @@
       field("approvalStatus").textContent = runRecord
         ? `当前运行记录：${runRecord.run_id}，${status.status_label || "待提交"}，当前角色：${field("roleSelect").selectedOptions[0].textContent}`
         : "运行并保存记录后可发起审批。";
+    }
+
+    function renderExecutionHandoff(handoff, approval) {
+      if (!handoff) {
+        field("handoffPanel").innerHTML = `<p class="small">当前接口暂未返回执行交接信息。</p>`;
+        return;
+      }
+      const approvalStatus = approval ? approval.status : "not_submitted";
+      const releaseState = approvalStatus === "approved" || approvalStatus === "auto_approved"
+        ? "已放行，可进入下游执行"
+        : approvalStatus === "rejected"
+          ? "已驳回，需调整后重新运行"
+          : handoff.release_state;
+      const releaseNote = approvalStatus === "approved"
+        ? "审批已通过，下游系统可以按本批次版本口径接收执行包。"
+        : approvalStatus === "rejected"
+          ? "当前运行记录不可执行，请回到场景配置或上游数据层调整。"
+          : handoff.release_note;
+      field("handoffPanel").innerHTML = `
+        <div class="row">
+          <strong>执行状态</strong>
+          <span class="small">${h(releaseNote)}</span>
+          <span class="status">${h(releaseState)}</span>
+        </div>
+        <div class="handoff-grid">
+          ${handoff.downstream.map((item) => `
+            <div class="handoff-card">
+              <strong>${h(item.system)}</strong>
+              <span class="small">${h(item.payload)}</span>
+              <span class="small">负责人：${h(item.owner)}</span>
+              <span class="status">${h(item.status)}</span>
+            </div>
+          `).join("")}
+        </div>
+        <div class="gate-list">
+          ${handoff.gates.map((gate) => {
+            const klass = gate.status === "通过" ? "pass" : gate.status === "待审批" ? "wait" : "warn";
+            return `
+              <div class="gate ${klass}">
+                <strong>${h(gate.name)}</strong>
+                <span class="status">${h(gate.status)}</span>
+                <span class="small">${h(gate.detail)}</span>
+              </div>
+            `;
+          }).join("")}
+        </div>
+        <div>
+          <h3>回滚条件</h3>
+          <ul class="actions">
+            ${handoff.rollback.map((item) => `<li>${h(item)}</li>`).join("")}
+          </ul>
+        </div>
+      `;
     }
 
     function renderLineage(lineage) {
@@ -2098,6 +2197,7 @@
       if (latestCaseData && latestCaseData.run_record) {
         latestCaseData.run_record.approval = data.approval;
         renderApprovalWorkflow(data.approval, latestCaseData.run_record);
+        renderExecutionHandoff(latestCaseData.execution_handoff, data.approval);
         renderReadiness(latestCaseData);
       }
       await loadRunHistory();

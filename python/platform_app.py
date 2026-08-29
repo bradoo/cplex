@@ -1273,7 +1273,28 @@ def build_demo_report_markdown(result, timestamp):
             f"| {markdown_cell(row['owner'])} | {markdown_cell(row['priority'])} | "
             f"{markdown_cell(row['trigger'])} | {markdown_cell(row['action'])} |"
         )
-    lines.extend(["", "## 7. 风险提示", ""])
+    handoff = result.get("execution_handoff", {})
+    if handoff:
+        lines.extend(
+            [
+                "",
+                "## 7. 执行交接与上线护栏",
+                "",
+                f"- 执行状态：{handoff['release_state']}",
+                f"- 放行说明：{handoff['release_note']}",
+                "",
+                "| 下游系统 | 交接内容 | 负责人 | 状态 |",
+                "| --- | --- | --- | --- |",
+            ]
+        )
+        for row in handoff["downstream"]:
+            lines.append(
+                f"| {markdown_cell(row['system'])} | {markdown_cell(row['payload'])} | "
+                f"{markdown_cell(row['owner'])} | {markdown_cell(row['status'])} |"
+            )
+        lines.extend(["", "### 回滚条件", ""])
+        lines.extend(f"- {item}" for item in handoff["rollback"])
+    lines.extend(["", "## 8. 风险提示", ""])
     lines.extend(f"- {risk}" for risk in summary["risks"])
     lines.extend(
         [
@@ -2394,6 +2415,7 @@ def run_case(playbook_id, overrides):
     staffing = solve_staffing_case(config)
 
     summary = build_management_summary(network, replenishment, service_mix, staffing, config)
+    execution_handoff = build_execution_handoff(summary, network, replenishment, service_mix, staffing)
     difference = build_difference_explanation(
         playbook_id,
         config,
@@ -2411,6 +2433,7 @@ def run_case(playbook_id, overrides):
         "config": public_config(config),
         "model_inputs": model_inputs,
         "summary": summary,
+        "execution_handoff": execution_handoff,
         "difference": difference,
         "network": network,
         "replenishment": replenishment,
@@ -2970,6 +2993,62 @@ def build_execution_plan(network, replenishment, staffing, approval_level):
         }
     )
     return plan
+
+
+def build_execution_handoff(summary, network, replenishment, service_mix, staffing):
+    total_shortage = float(summary.get("total_shortage") or 0)
+    approval_level = summary.get("approval_level", "人工确认")
+    can_auto_release = approval_level == "自动执行" and total_shortage == 0
+    blocked_reason = "审批通过后放行" if not can_auto_release else "满足自动执行阈值"
+    if total_shortage > 0:
+        blocked_reason = f"仍有 {total_shortage:g} 单/件/人班缺口，需要业务确认兜底动作"
+    if approval_level == "管理层审批":
+        blocked_reason = "需管理层确认预算、SLA 或缺口承接口径"
+
+    downstream = [
+        {
+            "system": "OMS",
+            "payload": "市场履约分配、异常订单标记",
+            "owner": "订单运营",
+            "status": "待审批" if not can_auto_release else "可下发",
+        },
+        {
+            "system": "WMS",
+            "payload": "开仓清单、仓库容量占用、波次作业预估",
+            "owner": "仓网运营",
+            "status": "待确认" if network.get("opened_warehouses") else "无需变更",
+        },
+        {
+            "system": "TMS",
+            "payload": "补货渠道、服务商组合、线路时效约束",
+            "owner": "物流计划",
+            "status": "待确认" if replenishment.get("orders") or service_mix.get("used_services") else "无需变更",
+        },
+        {
+            "system": "HR / WFM",
+            "payload": "排班缺口、临时人力池、加班窗口",
+            "owner": "客服/仓内排班",
+            "status": "需兜底" if staffing.get("total_shortage", 0) else "可执行",
+        },
+    ]
+    gates = [
+        {"name": "版本锁定", "status": "通过", "detail": "运行记录已生成上游、配置和模型版本指纹。"},
+        {"name": "模型求解", "status": "通过", "detail": "仓网、补货、服务组合和排班模型均返回结果。"},
+        {"name": "风险承接", "status": "关注" if total_shortage > 0 else "通过", "detail": "存在缺口时必须明确人工兜底、预算或 SLA 放宽口径。"},
+        {"name": "审批闸门", "status": "通过" if can_auto_release else "待审批", "detail": blocked_reason},
+    ]
+    rollback = [
+        "下发后 30 分钟内 WMS 容量确认失败，回退到上一批次仓网分配。",
+        "TMS 服务商确认运力低于计划 95%，重新运行稳健服务方案。",
+        "实际缺口超过模型预测 10%，冻结自动下发并升级业务负责人确认。",
+    ]
+    return {
+        "release_state": "可自动下发" if can_auto_release else "等待审批放行",
+        "release_note": blocked_reason,
+        "downstream": downstream,
+        "gates": gates,
+        "rollback": rollback,
+    }
 
 
 def build_difference_explanation(playbook_id, config, summary, network, replenishment, service_mix, staffing):
