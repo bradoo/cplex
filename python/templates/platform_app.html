@@ -145,6 +145,7 @@
 
     .page[data-layer="config"].active,
     .page[data-layer="inputs"].active,
+    .page[data-layer="lineage"].active,
     .page[data-layer="results"].active,
     .page[data-layer="constraints"].active {
       grid-template-columns: 220px minmax(0, 1fr);
@@ -152,12 +153,14 @@
 
     .page[data-layer="config"] > section,
     .page[data-layer="inputs"] > section,
+    .page[data-layer="lineage"] > section,
     .page[data-layer="results"] > section {
       grid-column: 2;
     }
 
     .page[data-layer="config"] > .subnav,
     .page[data-layer="inputs"] > .subnav,
+    .page[data-layer="lineage"] > .subnav,
     .page[data-layer="results"] > .subnav {
       grid-column: 1;
       grid-row: 1 / span 2;
@@ -743,7 +746,7 @@
 
     .code-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: 1fr;
       gap: 12px;
     }
 
@@ -857,12 +860,15 @@
       .top, .page, .two-col, .subpage-shell { grid-template-columns: 1fr; }
       .page[data-layer="config"].active,
       .page[data-layer="inputs"].active,
+      .page[data-layer="lineage"].active,
       .page[data-layer="results"].active,
       .page[data-layer="constraints"].active { grid-template-columns: 1fr; }
       .page[data-layer="config"] > section,
       .page[data-layer="config"] > .subnav,
       .page[data-layer="inputs"] > section,
       .page[data-layer="inputs"] > .subnav,
+      .page[data-layer="lineage"] > section,
+      .page[data-layer="lineage"] > .subnav,
       .page[data-layer="results"] > section,
       .page[data-layer="results"] > .subnav,
       .page[data-layer="constraints"] > section,
@@ -873,7 +879,6 @@
       .subnav { position: static; grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .flow, .grid, .scale-metrics, .readiness-grid, .impact-grid, .run-steps, .handoff-grid, .gate-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .model-explain-layout { grid-template-columns: 1fr; }
-      .code-grid { grid-template-columns: 1fr; }
       .explain-grid { grid-template-columns: 1fr; }
       .diff-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .lineage-diagram { overflow-x: auto; padding-bottom: 6px; }
@@ -1279,19 +1284,25 @@
     </div>
 
     <div class="page" data-layer="lineage">
-      <section>
+      <aside class="subnav" aria-label="数据血缘二级导航">
+        <button class="active" data-lineage-view-button="flow" type="button">可视化流程</button>
+        <button data-lineage-view-button="nodes" type="button">节点总览</button>
+        <button data-lineage-view-button="transforms" type="button">转换规则</button>
+        <button data-lineage-view-button="fields" type="button">字段映射</button>
+      </aside>
+      <section data-lineage-view="flow">
         <div class="section-head"><h2>可视化数据血缘</h2><span class="pill">Flow</span></div>
         <div class="content">
           <div class="lineage-diagram" id="lineageDiagram"></div>
         </div>
       </section>
-      <section>
+      <section data-lineage-view="nodes">
         <div class="section-head"><h2>数据血缘总览</h2><span class="pill">Lineage</span></div>
         <div class="content">
           <div id="lineageNodeRows" class="rows"></div>
         </div>
       </section>
-      <section>
+      <section data-lineage-view="transforms">
         <div class="section-head"><h2>转换规则</h2></div>
         <div class="content">
           <table>
@@ -1302,7 +1313,7 @@
           </table>
         </div>
       </section>
-      <section>
+      <section data-lineage-view="fields">
         <div class="section-head"><h2>字段映射</h2></div>
         <div class="content">
           <table>
@@ -1456,6 +1467,7 @@
       });
       initializeResultsSubnavigation(saved.results || "summary");
       initializeModelInputNavigation(saved.inputs || "network");
+      initializeLineageSubnavigation(saved.lineage || "flow");
     }
 
     function setResultPanel(panelId, group) {
@@ -1523,6 +1535,23 @@
       });
       saveSubnavState("inputs", target);
       renderInputs();
+    }
+
+    function initializeLineageSubnavigation(initialTarget) {
+      activateLineageView(initialTarget);
+      document.querySelectorAll("[data-lineage-view-button]").forEach((button) => {
+        button.addEventListener("click", () => activateLineageView(button.dataset.lineageViewButton));
+      });
+    }
+
+    function activateLineageView(target) {
+      document.querySelectorAll("[data-lineage-view]").forEach((section) => {
+        section.classList.toggle("result-panel-hidden", section.dataset.lineageView !== target);
+      });
+      document.querySelectorAll("[data-lineage-view-button]").forEach((button) => {
+        button.classList.toggle("active", button.dataset.lineageViewButton === target);
+      });
+      saveSubnavState("lineage", target);
     }
 
     async function loadOverview() {
