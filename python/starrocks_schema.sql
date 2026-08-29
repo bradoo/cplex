@@ -213,3 +213,12 @@ CREATE TABLE IF NOT EXISTS platform_run_model_results (
 DUPLICATE KEY(run_id, model_key)
 DISTRIBUTED BY HASH(run_id) BUCKETS 4
 PROPERTIES ("replication_num" = "1");
+
+CREATE TABLE IF NOT EXISTS platform_run_version_snapshot (
+  run_id VARCHAR(32) NOT NULL,
+  version_key VARCHAR(64) NOT NULL,
+  version_value VARCHAR(512) NOT NULL
+)
+DUPLICATE KEY(run_id, version_key)
+DISTRIBUTED BY HASH(run_id) BUCKETS 4
+PROPERTIES ("replication_num" = "1");

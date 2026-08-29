@@ -1,6 +1,8 @@
+import hashlib
 import json
 import math
 import os
+import subprocess
 import tempfile
 import uuid
 from datetime import datetime, timezone
@@ -33,6 +35,7 @@ STARROCKS_SOURCE_TABLES = [
     ("platform_run_history", "求解运行主表"),
     ("platform_run_config_snapshot", "运行参数快照"),
     ("platform_run_model_results", "模型结果明细"),
+    ("platform_run_version_snapshot", "运行版本快照"),
     ("upstream_network_warehouses", "仓库能力"),
     ("upstream_network_markets", "市场需求"),
     ("upstream_network_lanes", "仓网线路"),
@@ -656,6 +659,58 @@ def platform_run_history_source_label():
     return str(RUN_HISTORY_PATH.relative_to(Path(__file__).resolve().parent.parent))
 
 
+def stable_digest(value):
+    payload = json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
+
+
+def current_model_version():
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=Path(__file__).resolve().parent.parent,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        version = completed.stdout.strip()
+        if version:
+            dirty = subprocess.run(
+                ["git", "diff", "--quiet"],
+                cwd=Path(__file__).resolve().parent.parent,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+            return f"{version}-dirty" if dirty.returncode else version
+    except Exception:
+        pass
+    return stable_digest(Path(__file__).read_text(encoding="utf-8"))
+
+
+def build_run_version_snapshot(result):
+    model_inputs = result["model_inputs"]
+    upstream_digest_source = {
+        "source": model_inputs["lineage"]["upstream_source"],
+        "network": model_inputs["network"],
+        "replenishment": model_inputs["replenishment"],
+        "service_level": model_inputs["service_level"],
+    }
+    config_digest = stable_digest(result["config"])
+    upstream_digest = stable_digest(upstream_digest_source)
+    model_version = current_model_version()
+    run_batch_id = f"RUN-{datetime.now(timezone.utc).astimezone().strftime('%Y%m%d')}-{result['playbook']}-{uuid.uuid4().hex[:6]}"
+    return {
+        "run_batch_id": run_batch_id,
+        "upstream_version": f"UP-{upstream_digest}",
+        "config_version": f"CFG-{config_digest}",
+        "model_version": f"CODE-{model_version}",
+        "solver_version": "docplex",
+    }
+
+
 def ensure_starrocks_run_history_tables(cursor):
     cursor.execute(
         """
@@ -710,6 +765,18 @@ def ensure_starrocks_run_history_tables(cursor):
         PROPERTIES ("replication_num" = "1")
         """
     )
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS platform_run_version_snapshot (
+          run_id VARCHAR(32) NOT NULL,
+          version_key VARCHAR(64) NOT NULL,
+          version_value VARCHAR(512) NOT NULL
+        )
+        DUPLICATE KEY(run_id, version_key)
+        DISTRIBUTED BY HASH(run_id) BUCKETS 4
+        PROPERTIES ("replication_num" = "1")
+        """
+    )
 
 
 def save_starrocks_run_history(record, result):
@@ -758,6 +825,10 @@ def save_starrocks_run_history(record, result):
                 VALUES (%s, %s, %s, %s, %s, %s)
                 """,
                 model_rows,
+            )
+            cursor.executemany(
+                "INSERT INTO platform_run_version_snapshot (run_id, version_key, version_value) VALUES (%s, %s, %s)",
+                [(record["run_id"], key, value) for key, value in record["versions"].items()],
             )
         connection.commit()
 
@@ -815,6 +886,19 @@ def load_starrocks_run_history(limit=20):
                         configs[row["run_id"]][row["config_key"]] = json.loads(row["config_value"])
                     except json.JSONDecodeError:
                         configs[row["run_id"]][row["config_key"]] = row["config_value"]
+                versions = {run_id: {} for run_id in run_ids}
+                cursor.execute(
+                    f"""
+                    SELECT run_id, version_key, version_value
+                    FROM platform_run_version_snapshot
+                    WHERE run_id IN ({placeholders})
+                    """,
+                    run_ids,
+                )
+                for row in cursor.fetchall():
+                    versions[row["run_id"]][row["version_key"]] = row["version_value"]
+            else:
+                versions = {}
     return [
         {
             "run_id": row["run_id"],
@@ -836,6 +920,7 @@ def load_starrocks_run_history(limit=20):
                 "management_readout": row["management_readout"],
             },
             "next_action": row["next_action"],
+            "versions": versions.get(row["run_id"], {}),
             "storage": platform_run_history_source_label(),
         }
         for row in rows
@@ -845,12 +930,15 @@ def load_starrocks_run_history(limit=20):
 def build_run_history_record(result):
     summary = result["summary"]
     difference = result.get("difference", {})
+    versions = build_run_version_snapshot(result)
     return {
         "run_id": uuid.uuid4().hex[:8],
         "created_at": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
+        "run_batch_id": versions["run_batch_id"],
         "playbook": result["playbook"],
         "playbook_name": result["playbook_name"],
         "config": result["config"],
+        "versions": versions,
         "summary": {
             "total_cost": summary["total_cost"],
             "network_cost": summary["network_cost"],

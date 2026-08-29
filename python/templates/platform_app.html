@@ -1712,10 +1712,15 @@
       const modelSections = Object.keys(data.model_inputs || {}).filter((key) => key !== "lineage");
       const allSolved = [data.network, data.replenishment, data.service_mix, data.staffing].every((item) => item.status === "optimal");
       const historySaved = Boolean(data.run_record);
+      const versions = data.run_record && data.run_record.versions ? data.run_record.versions : {};
       const reportReady = Boolean(lastReportPath);
       const executionReady = Boolean(data.summary.execution_plan && data.summary.execution_plan.length);
       const rows = [
+        ["运行批次", versions.run_batch_id ? "已生成" : "未生成", versions.run_batch_id || "等待保存运行记录", Boolean(versions.run_batch_id)],
         ["上游数据", "已接入", data.model_inputs.lineage.upstream_source, true],
+        ["上游版本", versions.upstream_version ? "已锁定" : "未锁定", versions.upstream_version || "运行后生成版本指纹", Boolean(versions.upstream_version)],
+        ["配置版本", versions.config_version ? "已锁定" : "未锁定", versions.config_version || "运行后生成版本指纹", Boolean(versions.config_version)],
+        ["模型版本", versions.model_version ? "已锁定" : "未锁定", versions.model_version || "运行后记录代码版本", Boolean(versions.model_version)],
         ["模型入参", `${modelSections.length} 个模型`, modelSections.join(", "), modelSections.length >= 4],
         ["CPLEX 求解", allSolved ? "已完成" : "需检查", allSolved ? "四个模型均 optimal" : "至少一个模型非 optimal", allSolved],
         ["差异解释", data.difference ? "已生成" : "未生成", data.difference ? data.difference.headline : "-", Boolean(data.difference)],
@@ -1937,7 +1942,7 @@
       }
       field("historyRows").innerHTML = rows.map((row) => (
         `<tr>
-          <td><strong>${h(formatRunTime(row.created_at))}</strong><div class="small">${h(row.run_id)}</div></td>
+          <td><strong>${h(formatRunTime(row.created_at))}</strong><div class="small">${h(row.versions && row.versions.run_batch_id ? row.versions.run_batch_id : row.run_id)}</div></td>
           <td>${h(row.playbook_name)}</td>
           <td>${fmt(row.summary.total_cost)}</td>
           <td>${fmt(row.summary.total_shortage)}</td>
