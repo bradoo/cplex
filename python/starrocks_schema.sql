@@ -169,3 +169,47 @@ CREATE TABLE IF NOT EXISTS platform_config_audit (
 DUPLICATE KEY(audit_id)
 DISTRIBUTED BY HASH(audit_id) BUCKETS 4
 PROPERTIES ("replication_num" = "1");
+
+CREATE TABLE IF NOT EXISTS platform_run_history (
+  run_id VARCHAR(32) NOT NULL,
+  created_at DATETIME NOT NULL,
+  playbook_id VARCHAR(64) NOT NULL,
+  playbook_name VARCHAR(128) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  total_cost DOUBLE NOT NULL,
+  network_cost DOUBLE NOT NULL,
+  replenishment_cost DOUBLE NOT NULL,
+  staffing_cost DOUBLE NOT NULL,
+  service_cost DOUBLE NOT NULL,
+  total_shortage DOUBLE NOT NULL,
+  approval_level VARCHAR(64) NOT NULL,
+  next_action VARCHAR(1024) NOT NULL,
+  difference_headline VARCHAR(1024) NOT NULL,
+  management_readout VARCHAR(2048) NOT NULL,
+  upstream_source VARCHAR(512) NOT NULL,
+  config_source VARCHAR(512) NOT NULL
+)
+PRIMARY KEY(run_id)
+DISTRIBUTED BY HASH(run_id) BUCKETS 4
+PROPERTIES ("replication_num" = "1");
+
+CREATE TABLE IF NOT EXISTS platform_run_config_snapshot (
+  run_id VARCHAR(32) NOT NULL,
+  config_key VARCHAR(64) NOT NULL,
+  config_value VARCHAR(512) NOT NULL
+)
+DUPLICATE KEY(run_id, config_key)
+DISTRIBUTED BY HASH(run_id) BUCKETS 4
+PROPERTIES ("replication_num" = "1");
+
+CREATE TABLE IF NOT EXISTS platform_run_model_results (
+  run_id VARCHAR(32) NOT NULL,
+  model_key VARCHAR(64) NOT NULL,
+  model_status VARCHAR(32) NOT NULL,
+  cost DOUBLE NOT NULL,
+  shortage DOUBLE NOT NULL,
+  result_json VARCHAR(65533) NOT NULL
+)
+DUPLICATE KEY(run_id, model_key)
+DISTRIBUTED BY HASH(run_id) BUCKETS 4
+PROPERTIES ("replication_num" = "1");

@@ -30,6 +30,9 @@ STARROCKS_SOURCE_TABLES = [
     ("platform_playbooks", "场景方案配置"),
     ("platform_assets", "平台资产导航"),
     ("platform_capabilities", "平台能力说明"),
+    ("platform_run_history", "求解运行主表"),
+    ("platform_run_config_snapshot", "运行参数快照"),
+    ("platform_run_model_results", "模型结果明细"),
     ("upstream_network_warehouses", "仓库能力"),
     ("upstream_network_markets", "市场需求"),
     ("upstream_network_lanes", "仓网线路"),
@@ -326,6 +329,7 @@ def build_upstream_source_status():
     try:
         with starrocks_connection() as connection:
             with connection.cursor() as cursor:
+                ensure_starrocks_run_history_tables(cursor)
                 tables = []
                 for table, role in table_specs:
                     cursor.execute(f"SELECT COUNT(*) AS row_count FROM `{table}`")
@@ -618,6 +622,14 @@ def save_json_file(path, data):
 
 def append_run_history(result):
     record = build_run_history_record(result)
+    if starrocks_upstream_enabled():
+        try:
+            save_starrocks_run_history(record, result)
+            record["storage"] = platform_run_history_source_label()
+            return record
+        except Exception:
+            # Keep demo runs usable if the local StarRocks instance is restarted mid-demo.
+            record["storage"] = str(RUN_HISTORY_PATH.relative_to(Path(__file__).resolve().parent.parent))
     RUN_HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
     with RUN_HISTORY_PATH.open("a", encoding="utf-8") as file:
         file.write(json.dumps(record, ensure_ascii=False) + "\n")
@@ -625,11 +637,209 @@ def append_run_history(result):
 
 
 def load_run_history(limit=20):
+    if starrocks_upstream_enabled():
+        try:
+            return load_starrocks_run_history(limit)
+        except Exception:
+            pass
     if not RUN_HISTORY_PATH.exists():
         return []
     with RUN_HISTORY_PATH.open(encoding="utf-8") as file:
         rows = [json.loads(line) for line in file if line.strip()]
     return list(reversed(rows[-limit:]))
+
+
+def platform_run_history_source_label():
+    if starrocks_upstream_enabled():
+        config = starrocks_config()
+        return f"starrocks://{config['host']}:{config['port']}/{config['database']}.platform_run_history"
+    return str(RUN_HISTORY_PATH.relative_to(Path(__file__).resolve().parent.parent))
+
+
+def ensure_starrocks_run_history_tables(cursor):
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS platform_run_history (
+          run_id VARCHAR(32) NOT NULL,
+          created_at DATETIME NOT NULL,
+          playbook_id VARCHAR(64) NOT NULL,
+          playbook_name VARCHAR(128) NOT NULL,
+          status VARCHAR(32) NOT NULL,
+          total_cost DOUBLE NOT NULL,
+          network_cost DOUBLE NOT NULL,
+          replenishment_cost DOUBLE NOT NULL,
+          staffing_cost DOUBLE NOT NULL,
+          service_cost DOUBLE NOT NULL,
+          total_shortage DOUBLE NOT NULL,
+          approval_level VARCHAR(64) NOT NULL,
+          next_action VARCHAR(1024) NOT NULL,
+          difference_headline VARCHAR(1024) NOT NULL,
+          management_readout VARCHAR(2048) NOT NULL,
+          upstream_source VARCHAR(512) NOT NULL,
+          config_source VARCHAR(512) NOT NULL
+        )
+        PRIMARY KEY(run_id)
+        DISTRIBUTED BY HASH(run_id) BUCKETS 4
+        PROPERTIES ("replication_num" = "1")
+        """
+    )
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS platform_run_config_snapshot (
+          run_id VARCHAR(32) NOT NULL,
+          config_key VARCHAR(64) NOT NULL,
+          config_value VARCHAR(512) NOT NULL
+        )
+        DUPLICATE KEY(run_id, config_key)
+        DISTRIBUTED BY HASH(run_id) BUCKETS 4
+        PROPERTIES ("replication_num" = "1")
+        """
+    )
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS platform_run_model_results (
+          run_id VARCHAR(32) NOT NULL,
+          model_key VARCHAR(64) NOT NULL,
+          model_status VARCHAR(32) NOT NULL,
+          cost DOUBLE NOT NULL,
+          shortage DOUBLE NOT NULL,
+          result_json VARCHAR(65533) NOT NULL
+        )
+        DUPLICATE KEY(run_id, model_key)
+        DISTRIBUTED BY HASH(run_id) BUCKETS 4
+        PROPERTIES ("replication_num" = "1")
+        """
+    )
+
+
+def save_starrocks_run_history(record, result):
+    summary = record["summary"]
+    lineage = result["model_inputs"]["lineage"]
+    model_rows = build_run_model_result_rows(record["run_id"], result)
+    with starrocks_connection() as connection:
+        with connection.cursor() as cursor:
+            ensure_starrocks_run_history_tables(cursor)
+            cursor.execute(
+                """
+                INSERT INTO platform_run_history
+                (run_id, created_at, playbook_id, playbook_name, status, total_cost, network_cost,
+                 replenishment_cost, staffing_cost, service_cost, total_shortage, approval_level,
+                 next_action, difference_headline, management_readout, upstream_source, config_source)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    record["run_id"],
+                    record["created_at"].replace("T", " ")[:19],
+                    record["playbook"],
+                    record["playbook_name"],
+                    result["status"],
+                    summary["total_cost"],
+                    summary["network_cost"],
+                    summary["replenishment_cost"],
+                    summary["staffing_cost"],
+                    summary["service_cost"],
+                    summary["total_shortage"],
+                    summary["approval_level"],
+                    record["next_action"],
+                    record["difference"]["headline"],
+                    record["difference"]["management_readout"],
+                    lineage["upstream_source"],
+                    lineage["scenario_config_source"],
+                ),
+            )
+            cursor.executemany(
+                "INSERT INTO platform_run_config_snapshot (run_id, config_key, config_value) VALUES (%s, %s, %s)",
+                [(record["run_id"], key, json.dumps(value, ensure_ascii=False)) for key, value in record["config"].items()],
+            )
+            cursor.executemany(
+                """
+                INSERT INTO platform_run_model_results
+                (run_id, model_key, model_status, cost, shortage, result_json)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                model_rows,
+            )
+        connection.commit()
+
+
+def build_run_model_result_rows(run_id, result):
+    specs = [
+        ("network", result["network"], "cost", "total_unfulfilled"),
+        ("replenishment", result["replenishment"], "total_cost", "total_stockout"),
+        ("service_mix", result["service_mix"], "total_cost", "sla_risk"),
+        ("staffing", result["staffing"], "total_cost", "total_shortage"),
+    ]
+    return [
+        (
+            run_id,
+            key,
+            model_result.get("status", "-"),
+            float(model_result.get(cost_key) or 0),
+            float(model_result.get(shortage_key) or 0),
+            json.dumps(model_result, ensure_ascii=False, default=str),
+        )
+        for key, model_result, cost_key, shortage_key in specs
+    ]
+
+
+def load_starrocks_run_history(limit=20):
+    with starrocks_connection() as connection:
+        with connection.cursor() as cursor:
+            ensure_starrocks_run_history_tables(cursor)
+            cursor.execute(
+                """
+                SELECT run_id, created_at, playbook_id, playbook_name, total_cost, network_cost,
+                       replenishment_cost, staffing_cost, service_cost, total_shortage,
+                       approval_level, next_action, difference_headline, management_readout
+                FROM platform_run_history
+                ORDER BY created_at DESC
+                LIMIT %s
+                """,
+                (limit,),
+            )
+            rows = list(cursor.fetchall())
+            run_ids = [row["run_id"] for row in rows]
+            configs = {run_id: {} for run_id in run_ids}
+            if run_ids:
+                placeholders = ",".join(["%s"] * len(run_ids))
+                cursor.execute(
+                    f"""
+                    SELECT run_id, config_key, config_value
+                    FROM platform_run_config_snapshot
+                    WHERE run_id IN ({placeholders})
+                    """,
+                    run_ids,
+                )
+                for row in cursor.fetchall():
+                    try:
+                        configs[row["run_id"]][row["config_key"]] = json.loads(row["config_value"])
+                    except json.JSONDecodeError:
+                        configs[row["run_id"]][row["config_key"]] = row["config_value"]
+    return [
+        {
+            "run_id": row["run_id"],
+            "created_at": row["created_at"].isoformat(timespec="seconds") if hasattr(row["created_at"], "isoformat") else str(row["created_at"]),
+            "playbook": row["playbook_id"],
+            "playbook_name": row["playbook_name"],
+            "config": configs.get(row["run_id"], {}),
+            "summary": {
+                "total_cost": float(row["total_cost"]),
+                "network_cost": float(row["network_cost"]),
+                "replenishment_cost": float(row["replenishment_cost"]),
+                "staffing_cost": float(row["staffing_cost"]),
+                "service_cost": float(row["service_cost"]),
+                "total_shortage": float(row["total_shortage"]),
+                "approval_level": row["approval_level"],
+            },
+            "difference": {
+                "headline": row["difference_headline"],
+                "management_readout": row["management_readout"],
+            },
+            "next_action": row["next_action"],
+            "storage": platform_run_history_source_label(),
+        }
+        for row in rows
+    ]
 
 
 def build_run_history_record(result):
@@ -1780,7 +1990,7 @@ def get_run_history():
     return jsonify(
         {
             "status": "ok",
-            "data_source": str(RUN_HISTORY_PATH.relative_to(Path(__file__).resolve().parent.parent)),
+            "data_source": platform_run_history_source_label(),
             "rows": load_run_history(limit),
         }
     )
