@@ -707,6 +707,23 @@
       align-content: start;
     }
 
+    .page[data-layer="constraints"] .explain-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .model-explain-layout {
+      display: grid;
+      grid-template-columns: minmax(280px, 0.82fr) minmax(380px, 1.18fr);
+      gap: 14px;
+      align-items: start;
+    }
+
+    .model-explain-copy {
+      display: grid;
+      gap: 10px;
+      min-width: 0;
+    }
+
     .explain-list {
       display: grid;
       gap: 7px;
@@ -855,6 +872,7 @@
       }
       .subnav { position: static; grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .flow, .grid, .scale-metrics, .readiness-grid, .impact-grid, .run-steps, .handoff-grid, .gate-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .model-explain-layout { grid-template-columns: 1fr; }
       .code-grid { grid-template-columns: 1fr; }
       .explain-grid { grid-template-columns: 1fr; }
       .diff-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1818,50 +1836,54 @@
       `).join("");
       field("constraintCards").innerHTML = data.models.map((model) => `
         <div class="explain-card" data-constraint-view="${h(model.id)}">
-          <div>
-            <h3>${h(model.name)}</h3>
-            <p class="small">${h(model.business_question)}</p>
-          </div>
-          <div>
-            <strong>决策变量</strong>
-            <ul class="explain-list">
-              ${model.variables.map((item) => `
-                <li><strong>${h(item.name)}</strong><span class="small">${h(item.type)}：${h(item.meaning)}</span></li>
-              `).join("")}
-            </ul>
-          </div>
-          <div>
-            <strong>目标函数</strong>
-            <p class="small">${h(model.objective)}</p>
-          </div>
-          <div>
-            <strong>核心约束</strong>
-            <ul class="explain-list">
-              ${model.constraints.map((item) => `
-                <li>
-                  <strong>${h(item.name)}</strong>
-                  <span class="formula">${h(item.formula)}</span>
-                  <span class="small">${h(item.meaning)}</span>
-                </li>
-              `).join("")}
-            </ul>
-          </div>
-          <div>
-            <strong>输出字段</strong>
-            <div class="lineage-tags">
-              ${model.outputs.map((item) => `<span class="lineage-tag">${h(item)}</span>`).join("")}
-            </div>
-          </div>
-          <div>
-            <strong>代码实现</strong>
-            <div class="code-grid">
-              <div class="code-block">
-                <span class="small">Python / DOcplex</span>
-                <pre><code>${h(model.implementation.python)}</code></pre>
+          <div class="model-explain-layout">
+            <div class="model-explain-copy">
+              <div>
+                <h3>${h(model.name)}</h3>
+                <p class="small">${h(model.business_question)}</p>
               </div>
-              <div class="code-block">
-                <span class="small">OPL 模型表达</span>
-                <pre><code>${h(model.implementation.opl)}</code></pre>
+              <div>
+                <strong>决策变量</strong>
+                <ul class="explain-list">
+                  ${model.variables.map((item) => `
+                    <li><strong>${h(item.name)}</strong><span class="small">${h(item.type)}：${h(item.meaning)}</span></li>
+                  `).join("")}
+                </ul>
+              </div>
+              <div>
+                <strong>目标函数</strong>
+                <p class="small">${h(model.objective)}</p>
+              </div>
+              <div>
+                <strong>核心约束</strong>
+                <ul class="explain-list">
+                  ${model.constraints.map((item) => `
+                    <li>
+                      <strong>${h(item.name)}</strong>
+                      <span class="formula">${h(item.formula)}</span>
+                      <span class="small">${h(item.meaning)}</span>
+                    </li>
+                  `).join("")}
+                </ul>
+              </div>
+              <div>
+                <strong>输出字段</strong>
+                <div class="lineage-tags">
+                  ${model.outputs.map((item) => `<span class="lineage-tag">${h(item)}</span>`).join("")}
+                </div>
+              </div>
+            </div>
+            <div>
+              <strong>代码实现</strong>
+              <div class="code-grid">
+                <div class="code-block">
+                  <span class="small">Python / DOcplex</span>
+                  <pre><code>${h(model.implementation.python)}</code></pre>
+                </div>
+                <div class="code-block">
+                  <span class="small">OPL 模型表达</span>
+                  <pre><code>${h(model.implementation.opl)}</code></pre>
+                </div>
               </div>
             </div>
           </div>
