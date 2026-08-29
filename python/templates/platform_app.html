@@ -991,6 +991,12 @@
             <div id="shortageCard" class="metric"><span class="label">总缺口</span><strong id="shortage" class="value">-</strong></div>
           </div>
           <div>
+            <h3>收益归因与经营影响</h3>
+            <div id="businessValuePanel" class="diff-panel">
+              <p class="small">运行后显示成本、缺口、收入风险和协同效率的经营口径。</p>
+            </div>
+          </div>
+          <div>
             <h3>决策闭环状态</h3>
             <div id="readinessRows" class="readiness-grid"></div>
           </div>
@@ -1791,6 +1797,7 @@
       renderModelRows(data);
       renderExecutionPlan(summary.execution_plan || []);
       renderDifference(data.difference);
+      renderBusinessValue(data.business_value);
       renderApprovalWorkflow(data.run_record ? data.run_record.approval : null, data.run_record);
       renderExecutionHandoff(data.execution_handoff, data.run_record ? data.run_record.approval : null);
       renderOperatingMonitor(data.operating_monitor);
@@ -1866,6 +1873,29 @@
           <ul class="actions">
             ${handoff.rollback.map((item) => `<li>${h(item)}</li>`).join("")}
           </ul>
+        </div>
+      `;
+    }
+
+    function renderBusinessValue(value) {
+      if (!value) {
+        field("businessValuePanel").innerHTML = `<p class="small">当前接口暂未返回收益归因信息。</p>`;
+        return;
+      }
+      field("businessValuePanel").innerHTML = `
+        <div class="row">
+          <strong>${h(value.recommendation)}</strong>
+          <span class="small">${h(value.executive_takeaway)}</span>
+          <span class="status">${h(value.value_formula)}</span>
+        </div>
+        <div class="diff-grid">
+          ${value.items.map((item) => `
+            <div class="diff-card ${item.name === "净经营影响" && Number(value.net_business_value) < 0 ? "bad" : item.name === "净经营影响" ? "good" : "info"}">
+              <span class="label">${h(item.name)}</span>
+              <strong>${h(item.value)}</strong>
+              <span>${h(item.meaning)}</span>
+            </div>
+          `).join("")}
         </div>
       `;
     }

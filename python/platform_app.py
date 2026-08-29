@@ -1257,12 +1257,30 @@ def build_demo_report_markdown(result, timestamp):
         )
     lines.extend(["", "### 变化原因", ""])
     lines.extend(f"- {driver}" for driver in difference["drivers"])
-    lines.extend(["", "## 5. 建议动作", ""])
+    business_value = result.get("business_value", {})
+    if business_value:
+        lines.extend(
+            [
+                "",
+                "## 5. 收益归因与经营影响",
+                "",
+                f"- 管理结论：{business_value['executive_takeaway']}",
+                f"- 价值口径：{business_value['value_formula']}",
+                "",
+                "| 项目 | 金额/数值 | 说明 |",
+                "| --- | ---: | --- |",
+            ]
+        )
+        for row in business_value["items"]:
+            lines.append(
+                f"| {markdown_cell(row['name'])} | {markdown_cell(row['value'])} | {markdown_cell(row['meaning'])} |"
+            )
+    lines.extend(["", "## 6. 建议动作", ""])
     lines.extend(f"- {action}" for action in summary["actions"])
     lines.extend(
         [
             "",
-            "## 6. 执行计划",
+            "## 7. 执行计划",
             "",
             "| 负责人 | 优先级 | 触发条件 | 执行动作 |",
             "| --- | --- | --- | --- |",
@@ -1278,7 +1296,7 @@ def build_demo_report_markdown(result, timestamp):
         lines.extend(
             [
                 "",
-                "## 7. 执行交接与上线护栏",
+                "## 8. 执行交接与上线护栏",
                 "",
                 f"- 执行状态：{handoff['release_state']}",
                 f"- 放行说明：{handoff['release_note']}",
@@ -1299,7 +1317,7 @@ def build_demo_report_markdown(result, timestamp):
         lines.extend(
             [
                 "",
-                "## 8. 上线监控与重跑触发",
+                "## 9. 上线监控与重跑触发",
                 "",
                 f"- 监控状态：{monitor['overall_state']}",
                 f"- 值班口径：{monitor['watch_window']}",
@@ -1313,12 +1331,12 @@ def build_demo_report_markdown(result, timestamp):
                 f"| {markdown_cell(row['name'])} | {markdown_cell(row['planned'])} | "
                 f"{markdown_cell(row['threshold'])} | {markdown_cell(row['state'])} | {markdown_cell(row['action'])} |"
             )
-    lines.extend(["", "## 9. 风险提示", ""])
+    lines.extend(["", "## 10. 风险提示", ""])
     lines.extend(f"- {risk}" for risk in summary["risks"])
     lines.extend(
         [
             "",
-            "## 10. 模型结果摘要",
+            "## 11. 模型结果摘要",
             "",
             "| 模型 | 状态 | 摘要 |",
             "| --- | --- | --- |",
@@ -2445,6 +2463,7 @@ def run_case(playbook_id, overrides):
         service_mix,
         staffing,
     )
+    business_value = build_business_value(summary, difference)
 
     return {
         "status": "ok",
@@ -2456,6 +2475,7 @@ def run_case(playbook_id, overrides):
         "execution_handoff": execution_handoff,
         "operating_monitor": operating_monitor,
         "difference": difference,
+        "business_value": business_value,
         "network": network,
         "replenishment": replenishment,
         "service_mix": service_mix,
@@ -3144,6 +3164,69 @@ def build_operating_monitor(summary, network, replenishment, service_mix, staffi
         "rerun_policy": "任一 P0 告警触发立即重跑；两项关注连续两轮出现则升级人工复核。",
         "signals": signals,
         "business_owner": "运营中台值班经理",
+    }
+
+
+def build_business_value(summary, difference):
+    metric_lookup = {row["label"]: row for row in difference.get("metrics", [])}
+    cost_delta = float(metric_lookup.get("综合成本", {}).get("delta") or 0)
+    shortage_delta = float(metric_lookup.get("总缺口", {}).get("delta") or 0)
+    cost_avoidance = max(-cost_delta, 0)
+    incremental_cost = max(cost_delta, 0)
+    protected_revenue = max(-shortage_delta, 0) * 35
+    revenue_at_risk = max(shortage_delta, 0) * 35
+    automation_hours_saved = 6 if summary.get("approval_level") == "自动执行" else 3
+    collaboration_value = automation_hours_saved * 180
+    net_business_value = round(cost_avoidance + protected_revenue + collaboration_value - incremental_cost - revenue_at_risk, 2)
+
+    if net_business_value > 0:
+        takeaway = f"相对基准预计净收益 {net_business_value:g}，可优先推进执行评审。"
+        recommendation = "建议执行"
+    elif net_business_value < 0:
+        takeaway = f"相对基准预计净影响 {net_business_value:g}，需要明确服务收益或风险承接口径。"
+        recommendation = "建议复核"
+    else:
+        takeaway = "相对基准经营影响接近持平，重点比较执行复杂度和风险暴露。"
+        recommendation = "中性观察"
+
+    items = [
+        {
+            "name": "成本节省",
+            "value": format_number(cost_avoidance),
+            "meaning": "综合成本低于基准时形成的直接节省。",
+        },
+        {
+            "name": "新增成本",
+            "value": format_number(incremental_cost),
+            "meaning": "为提升服务稳定性、扩容或补货承接的增量成本。",
+        },
+        {
+            "name": "收入保护",
+            "value": format_number(protected_revenue),
+            "meaning": "缺口少于基准时，按每单/件 35 的毛利保护口径估算。",
+        },
+        {
+            "name": "收入风险",
+            "value": format_number(revenue_at_risk),
+            "meaning": "缺口高于基准时，按每单/件 35 的毛利风险口径估算。",
+        },
+        {
+            "name": "协同效率",
+            "value": format_number(collaboration_value),
+            "meaning": f"按 {automation_hours_saved:g} 小时跨部门协同节省、每小时 180 的人力成本估算。",
+        },
+        {
+            "name": "净经营影响",
+            "value": format_signed(net_business_value),
+            "meaning": "成本、缺口和协同效率合并后的演示口径，不替代财务结算。",
+        },
+    ]
+    return {
+        "executive_takeaway": takeaway,
+        "recommendation": recommendation,
+        "net_business_value": net_business_value,
+        "value_formula": "成本节省 + 收入保护 + 协同效率 - 新增成本 - 收入风险",
+        "items": items,
     }
 
 
