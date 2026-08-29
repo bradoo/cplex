@@ -222,3 +222,16 @@ CREATE TABLE IF NOT EXISTS platform_run_version_snapshot (
 DUPLICATE KEY(run_id, version_key)
 DISTRIBUTED BY HASH(run_id) BUCKETS 4
 PROPERTIES ("replication_num" = "1");
+
+CREATE TABLE IF NOT EXISTS platform_run_approvals (
+  approval_id VARCHAR(32) NOT NULL,
+  run_id VARCHAR(32) NOT NULL,
+  created_at DATETIME NOT NULL,
+  action VARCHAR(32) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  actor VARCHAR(64) NOT NULL,
+  comment VARCHAR(2048) NOT NULL
+)
+DUPLICATE KEY(approval_id)
+DISTRIBUTED BY HASH(run_id) BUCKETS 4
+PROPERTIES ("replication_num" = "1");

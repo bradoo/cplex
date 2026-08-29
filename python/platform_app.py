@@ -24,8 +24,10 @@ app = Flask(__name__)
 DATA_PATH = Path(__file__).resolve().parent / "data" / "platform_poc_data.json"
 UPSTREAM_DATA_PATH = Path(__file__).resolve().parent / "data" / "platform_upstream_data.json"
 RUN_HISTORY_PATH = Path(__file__).resolve().parent / "reports" / "platform_runs.jsonl"
+APPROVAL_HISTORY_PATH = Path(__file__).resolve().parent / "reports" / "platform_approvals.jsonl"
 REPORTS_DIR = Path(__file__).resolve().parent / "reports"
 NETWORK_MODES = {"strict", "soft_capacity", "capacity_expansion"}
+APPROVAL_ACTIONS = {"submit", "approve", "reject"}
 STARROCKS_DEFAULT_LIMIT = 1000
 STARROCKS_SOURCE_TABLES = [
     ("upstream_orders", "订单事实表"),
@@ -36,6 +38,7 @@ STARROCKS_SOURCE_TABLES = [
     ("platform_run_config_snapshot", "运行参数快照"),
     ("platform_run_model_results", "模型结果明细"),
     ("platform_run_version_snapshot", "运行版本快照"),
+    ("platform_run_approvals", "审批流转记录"),
     ("upstream_network_warehouses", "仓库能力"),
     ("upstream_network_markets", "市场需求"),
     ("upstream_network_lanes", "仓网线路"),
@@ -777,6 +780,22 @@ def ensure_starrocks_run_history_tables(cursor):
         PROPERTIES ("replication_num" = "1")
         """
     )
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS platform_run_approvals (
+          approval_id VARCHAR(32) NOT NULL,
+          run_id VARCHAR(32) NOT NULL,
+          created_at DATETIME NOT NULL,
+          action VARCHAR(32) NOT NULL,
+          status VARCHAR(32) NOT NULL,
+          actor VARCHAR(64) NOT NULL,
+          comment VARCHAR(2048) NOT NULL
+        )
+        DUPLICATE KEY(approval_id)
+        DISTRIBUTED BY HASH(run_id) BUCKETS 4
+        PROPERTIES ("replication_num" = "1")
+        """
+    )
 
 
 def save_starrocks_run_history(record, result):
@@ -897,8 +916,10 @@ def load_starrocks_run_history(limit=20):
                 )
                 for row in cursor.fetchall():
                     versions[row["run_id"]][row["version_key"]] = row["version_value"]
+                approvals = load_starrocks_approval_states(cursor, run_ids)
             else:
                 versions = {}
+                approvals = {}
     return [
         {
             "run_id": row["run_id"],
@@ -921,10 +942,118 @@ def load_starrocks_run_history(limit=20):
             },
             "next_action": row["next_action"],
             "versions": versions.get(row["run_id"], {}),
+            "approval": approvals.get(row["run_id"], default_approval_state(row["approval_level"])),
             "storage": platform_run_history_source_label(),
         }
         for row in rows
     ]
+
+
+def default_approval_state(approval_level):
+    return {
+        "status": "auto_approved" if approval_level == "自动执行" else "not_submitted",
+        "status_label": "自动通过" if approval_level == "自动执行" else "待提交",
+        "actor": "system" if approval_level == "自动执行" else "",
+        "comment": "自动执行层级无需人工审批。" if approval_level == "自动执行" else "",
+        "created_at": "",
+    }
+
+
+def approval_status_label(status):
+    return {
+        "submitted": "待审批",
+        "approved": "已批准",
+        "rejected": "已驳回",
+        "auto_approved": "自动通过",
+        "not_submitted": "待提交",
+    }.get(status, status)
+
+
+def approval_status_for_action(action):
+    return {
+        "submit": "submitted",
+        "approve": "approved",
+        "reject": "rejected",
+    }[action]
+
+
+def load_starrocks_approval_states(cursor, run_ids):
+    if not run_ids:
+        return {}
+    placeholders = ",".join(["%s"] * len(run_ids))
+    cursor.execute(
+        f"""
+        SELECT run_id, created_at, action, status, actor, comment
+        FROM platform_run_approvals
+        WHERE run_id IN ({placeholders})
+        ORDER BY created_at ASC, approval_id ASC
+        """,
+        run_ids,
+    )
+    states = {}
+    for row in cursor.fetchall():
+        states[row["run_id"]] = {
+            "status": row["status"],
+            "status_label": approval_status_label(row["status"]),
+            "actor": row["actor"],
+            "comment": row["comment"],
+            "created_at": row["created_at"].isoformat(timespec="seconds") if hasattr(row["created_at"], "isoformat") else str(row["created_at"]),
+            "last_action": row["action"],
+        }
+    return states
+
+
+def run_exists(run_id):
+    if starrocks_upstream_enabled():
+        with starrocks_connection() as connection:
+            with connection.cursor() as cursor:
+                ensure_starrocks_run_history_tables(cursor)
+                cursor.execute("SELECT COUNT(*) AS row_count FROM platform_run_history WHERE run_id = %s", (run_id,))
+                return int(cursor.fetchone()["row_count"]) > 0
+    return any(row.get("run_id") == run_id for row in load_run_history(100))
+
+
+def append_approval_event(run_id, action, actor, comment):
+    if action not in APPROVAL_ACTIONS:
+        return None, f"Unknown approval action: {action}"
+    if not run_exists(run_id):
+        return None, f"Unknown run_id: {run_id}"
+    event = {
+        "approval_id": uuid.uuid4().hex[:8],
+        "run_id": run_id,
+        "created_at": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
+        "action": action,
+        "status": approval_status_for_action(action),
+        "status_label": approval_status_label(approval_status_for_action(action)),
+        "actor": actor or "demo.cio",
+        "comment": comment or "",
+    }
+    if starrocks_upstream_enabled():
+        with starrocks_connection() as connection:
+            with connection.cursor() as cursor:
+                ensure_starrocks_run_history_tables(cursor)
+                cursor.execute(
+                    """
+                    INSERT INTO platform_run_approvals
+                    (approval_id, run_id, created_at, action, status, actor, comment)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        event["approval_id"],
+                        event["run_id"],
+                        event["created_at"].replace("T", " ")[:19],
+                        event["action"],
+                        event["status"],
+                        event["actor"],
+                        event["comment"],
+                    ),
+                )
+            connection.commit()
+        return event, None
+    APPROVAL_HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with APPROVAL_HISTORY_PATH.open("a", encoding="utf-8") as file:
+        file.write(json.dumps(event, ensure_ascii=False) + "\n")
+    return event, None
 
 
 def build_run_history_record(result):
@@ -952,6 +1081,7 @@ def build_run_history_record(result):
             "headline": difference.get("headline", ""),
             "management_readout": difference.get("management_readout", ""),
         },
+        "approval": default_approval_state(summary["approval_level"]),
         "next_action": summary["execution_plan"][0]["action"] if summary.get("execution_plan") else "",
     }
 
@@ -2080,6 +2210,28 @@ def get_run_history():
             "status": "ok",
             "data_source": platform_run_history_source_label(),
             "rows": load_run_history(limit),
+        }
+    )
+
+
+@app.post("/api/platform/approval")
+def update_run_approval():
+    payload = request.get_json(silent=True) or {}
+    run_id = str(payload.get("run_id") or "").strip()
+    action = str(payload.get("action") or "").strip()
+    actor = str(payload.get("actor") or "demo.cio").strip()
+    comment = str(payload.get("comment") or "").strip()
+    if not run_id:
+        return jsonify({"status": "error", "message": "run_id is required"}), 400
+    event, error = append_approval_event(run_id, action, actor, comment)
+    if error:
+        return jsonify({"status": "error", "message": error}), 400
+    return jsonify(
+        {
+            "status": "ok",
+            "message": "审批状态已更新",
+            "approval": event,
+            "data_source": platform_run_history_source_label(),
         }
     )
 
