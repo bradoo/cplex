@@ -1294,12 +1294,31 @@ def build_demo_report_markdown(result, timestamp):
             )
         lines.extend(["", "### 回滚条件", ""])
         lines.extend(f"- {item}" for item in handoff["rollback"])
-    lines.extend(["", "## 8. 风险提示", ""])
+    monitor = result.get("operating_monitor", {})
+    if monitor:
+        lines.extend(
+            [
+                "",
+                "## 8. 上线监控与重跑触发",
+                "",
+                f"- 监控状态：{monitor['overall_state']}",
+                f"- 值班口径：{monitor['watch_window']}",
+                "",
+                "| 指标 | 计划值 | 告警阈值 | 当前状态 | 处置动作 |",
+                "| --- | ---: | --- | --- | --- |",
+            ]
+        )
+        for row in monitor["signals"]:
+            lines.append(
+                f"| {markdown_cell(row['name'])} | {markdown_cell(row['planned'])} | "
+                f"{markdown_cell(row['threshold'])} | {markdown_cell(row['state'])} | {markdown_cell(row['action'])} |"
+            )
+    lines.extend(["", "## 9. 风险提示", ""])
     lines.extend(f"- {risk}" for risk in summary["risks"])
     lines.extend(
         [
             "",
-            "## 8. 模型结果摘要",
+            "## 10. 模型结果摘要",
             "",
             "| 模型 | 状态 | 摘要 |",
             "| --- | --- | --- |",
@@ -2416,6 +2435,7 @@ def run_case(playbook_id, overrides):
 
     summary = build_management_summary(network, replenishment, service_mix, staffing, config)
     execution_handoff = build_execution_handoff(summary, network, replenishment, service_mix, staffing)
+    operating_monitor = build_operating_monitor(summary, network, replenishment, service_mix, staffing, config)
     difference = build_difference_explanation(
         playbook_id,
         config,
@@ -2434,6 +2454,7 @@ def run_case(playbook_id, overrides):
         "model_inputs": model_inputs,
         "summary": summary,
         "execution_handoff": execution_handoff,
+        "operating_monitor": operating_monitor,
         "difference": difference,
         "network": network,
         "replenishment": replenishment,
@@ -3048,6 +3069,81 @@ def build_execution_handoff(summary, network, replenishment, service_mix, staffi
         "downstream": downstream,
         "gates": gates,
         "rollback": rollback,
+    }
+
+
+def build_operating_monitor(summary, network, replenishment, service_mix, staffing, config):
+    total_demand = sum(
+        sum(row["orders"] for row in allocations)
+        for key, allocations in network.get("fulfillment_plan", {}).items()
+        if not key.endswith("_average_days")
+    )
+    total_demand += float(network.get("total_unfulfilled") or 0)
+    replenishment_units = sum(float(row.get("units") or 0) for row in replenishment.get("orders", []))
+    service_orders = sum(float(row.get("orders") or 0) for row in service_mix.get("used_services", []))
+    staffing_shortage = float(staffing.get("total_shortage") or 0)
+    shortage = float(summary.get("total_shortage") or 0)
+    cost = float(summary.get("total_cost") or 0)
+    demand_multiplier = float(config.get("demand_multiplier") or 1)
+
+    signals = [
+        {
+            "name": "订单需求偏差",
+            "planned": f"{total_demand:g} 单",
+            "threshold": "实际订单较计划偏差 > 8%",
+            "state": "高关注" if demand_multiplier >= 1.25 else "正常",
+            "action": "触发需求重估并重跑仓网、服务组合模型。",
+        },
+        {
+            "name": "履约缺口",
+            "planned": f"{network.get('total_unfulfilled', 0):g} 单",
+            "threshold": "未履约订单 > 0 或单市场缺口连续 2 小时扩大",
+            "state": "告警" if network.get("total_unfulfilled", 0) else "正常",
+            "action": "切换软容量或扩容方案，确认可承接仓库与服务商。",
+        },
+        {
+            "name": "补货执行偏差",
+            "planned": f"{replenishment_units:g} 件",
+            "threshold": "供应商确认量低于计划 95%",
+            "state": "告警" if replenishment.get("total_stockout", 0) else "正常",
+            "action": "重跑补货模型并优先评估空运容量与缺货罚分。",
+        },
+        {
+            "name": "服务商承载",
+            "planned": f"{service_orders:g} 单",
+            "threshold": "任一服务商接单量超过确认能力 95%",
+            "state": "正常",
+            "action": "拆分到备选服务商或放宽低优先级市场时效。",
+        },
+        {
+            "name": "排班缺口",
+            "planned": f"{staffing_shortage:g} 人班",
+            "threshold": "缺口 > 0 或临时人力到岗率 < 98%",
+            "state": "告警" if staffing_shortage else "正常",
+            "action": "启用加班池、外包客服或降低非关键工单 SLA。",
+        },
+        {
+            "name": "成本偏差",
+            "planned": f"{cost:g}",
+            "threshold": "实际执行成本较模型计划偏差 > 5%",
+            "state": "关注" if summary.get("approval_level") != "自动执行" else "正常",
+            "action": "冻结自动下发，提交业务负责人复核预算口径。",
+        },
+    ]
+    severe = sum(1 for row in signals if row["state"] == "告警")
+    watch = sum(1 for row in signals if row["state"] in {"关注", "高关注"})
+    if severe:
+        overall_state = f"{severe} 项告警，建议当班重跑"
+    elif watch:
+        overall_state = f"{watch} 项关注，进入灰度观察"
+    else:
+        overall_state = "指标稳定，可按批次执行"
+    return {
+        "overall_state": overall_state,
+        "watch_window": "上线后 2 小时高频监控；随后按 30 分钟滚动复核订单、库存、运力和人力偏差。",
+        "rerun_policy": "任一 P0 告警触发立即重跑；两项关注连续两轮出现则升级人工复核。",
+        "signals": signals,
+        "business_owner": "运营中台值班经理",
     }
 
 
