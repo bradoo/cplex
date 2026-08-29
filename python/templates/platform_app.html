@@ -997,6 +997,12 @@
             </div>
           </div>
           <div>
+            <h3>决策权衡与冲突解释</h3>
+            <div id="tradeoffPanel" class="diff-panel">
+              <p class="small">运行后显示成本、服务、缺口、审批和前提风险之间的取舍。</p>
+            </div>
+          </div>
+          <div>
             <h3>前提假设与数据可信度</h3>
             <div id="assumptionPanel" class="diff-panel">
               <p class="small">运行后显示关键业务前提、风险等级和签核动作。</p>
@@ -1804,6 +1810,7 @@
       renderExecutionPlan(summary.execution_plan || []);
       renderDifference(data.difference);
       renderBusinessValue(data.business_value);
+      renderDecisionTradeoff(data.decision_tradeoff);
       renderAssumptionRegister(data.assumption_register);
       renderApprovalWorkflow(data.run_record ? data.run_record.approval : null, data.run_record);
       renderExecutionHandoff(data.execution_handoff, data.run_record ? data.run_record.approval : null);
@@ -1904,6 +1911,35 @@
             </div>
           `).join("")}
         </div>
+      `;
+    }
+
+    function renderDecisionTradeoff(tradeoff) {
+      if (!tradeoff) {
+        field("tradeoffPanel").innerHTML = `<p class="small">当前接口暂未返回决策权衡信息。</p>`;
+        return;
+      }
+      field("tradeoffPanel").innerHTML = `
+        <div class="row">
+          <strong>${h(tradeoff.recommendation)}</strong>
+          <span class="small">${h(tradeoff.rationale)}</span>
+          <span class="status">Trade-off</span>
+        </div>
+        <table>
+          <thead>
+            <tr><th>决策维度</th><th>当前判断</th><th>管理含义</th><th>建议取舍</th></tr>
+          </thead>
+          <tbody>
+            ${tradeoff.dimensions.map((row) => `
+              <tr>
+                <td><strong>${h(row.dimension)}</strong></td>
+                <td><span class="status">${h(row.status)}</span></td>
+                <td>${h(row.meaning)}</td>
+                <td>${h(row.tradeoff)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
       `;
     }
 

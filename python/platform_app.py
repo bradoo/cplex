@@ -1275,12 +1275,31 @@ def build_demo_report_markdown(result, timestamp):
             lines.append(
                 f"| {markdown_cell(row['name'])} | {markdown_cell(row['value'])} | {markdown_cell(row['meaning'])} |"
             )
-    lines.extend(["", "## 6. 建议动作", ""])
+    tradeoff = result.get("decision_tradeoff", {})
+    if tradeoff:
+        lines.extend(
+            [
+                "",
+                "## 6. 决策权衡与冲突解释",
+                "",
+                f"- 推荐口径：{tradeoff['recommendation']}",
+                f"- 决策理由：{tradeoff['rationale']}",
+                "",
+                "| 决策维度 | 当前判断 | 管理含义 | 建议取舍 |",
+                "| --- | --- | --- | --- |",
+            ]
+        )
+        for row in tradeoff["dimensions"]:
+            lines.append(
+                f"| {markdown_cell(row['dimension'])} | {markdown_cell(row['status'])} | "
+                f"{markdown_cell(row['meaning'])} | {markdown_cell(row['tradeoff'])} |"
+            )
+    lines.extend(["", "## 7. 建议动作", ""])
     lines.extend(f"- {action}" for action in summary["actions"])
     lines.extend(
         [
             "",
-            "## 7. 执行计划",
+            "## 8. 执行计划",
             "",
             "| 负责人 | 优先级 | 触发条件 | 执行动作 |",
             "| --- | --- | --- | --- |",
@@ -1296,7 +1315,7 @@ def build_demo_report_markdown(result, timestamp):
         lines.extend(
             [
                 "",
-                "## 8. 执行交接与上线护栏",
+                "## 9. 执行交接与上线护栏",
                 "",
                 f"- 执行状态：{handoff['release_state']}",
                 f"- 放行说明：{handoff['release_note']}",
@@ -1317,7 +1336,7 @@ def build_demo_report_markdown(result, timestamp):
         lines.extend(
             [
                 "",
-                "## 9. 上线监控与重跑触发",
+                "## 10. 上线监控与重跑触发",
                 "",
                 f"- 监控状态：{monitor['overall_state']}",
                 f"- 值班口径：{monitor['watch_window']}",
@@ -1336,7 +1355,7 @@ def build_demo_report_markdown(result, timestamp):
         lines.extend(
             [
                 "",
-                "## 10. 前提假设与数据可信度",
+                "## 11. 前提假设与数据可信度",
                 "",
                 f"- 总体评级：{assumptions['overall_rating']}",
                 f"- 签核建议：{assumptions['signoff_note']}",
@@ -1350,12 +1369,12 @@ def build_demo_report_markdown(result, timestamp):
                 f"| {markdown_cell(row['name'])} | {markdown_cell(row['value'])} | "
                 f"{markdown_cell(row['risk'])} | {markdown_cell(row['owner'])} | {markdown_cell(row['action'])} |"
             )
-    lines.extend(["", "## 11. 风险提示", ""])
+    lines.extend(["", "## 12. 风险提示", ""])
     lines.extend(f"- {risk}" for risk in summary["risks"])
     lines.extend(
         [
             "",
-            "## 12. 模型结果摘要",
+            "## 13. 模型结果摘要",
             "",
             "| 模型 | 状态 | 摘要 |",
             "| --- | --- | --- |",
@@ -2484,6 +2503,7 @@ def run_case(playbook_id, overrides):
         staffing,
     )
     business_value = build_business_value(summary, difference)
+    decision_tradeoff = build_decision_tradeoff(summary, difference, business_value, assumption_register)
 
     return {
         "status": "ok",
@@ -2497,6 +2517,7 @@ def run_case(playbook_id, overrides):
         "assumption_register": assumption_register,
         "difference": difference,
         "business_value": business_value,
+        "decision_tradeoff": decision_tradeoff,
         "network": network,
         "replenishment": replenishment,
         "service_mix": service_mix,
@@ -3328,6 +3349,74 @@ def build_assumption_register(config, model_inputs, summary, network, replenishm
         "overall_rating": overall_rating,
         "signoff_note": signoff_note,
         "items": items,
+    }
+
+
+def build_decision_tradeoff(summary, difference, business_value, assumption_register):
+    metric_lookup = {row["label"]: row for row in difference.get("metrics", [])}
+    cost_delta = float(metric_lookup.get("综合成本", {}).get("delta") or 0)
+    shortage_delta = float(metric_lookup.get("总缺口", {}).get("delta") or 0)
+    service_delta = float(metric_lookup.get("服务组合成本", {}).get("delta") or 0)
+    high_risk_count = sum(1 for row in assumption_register.get("items", []) if row.get("risk") == "高")
+    net_value = float(business_value.get("net_business_value") or 0)
+    approval_level = summary.get("approval_level", "人工确认")
+
+    dimensions = [
+        {
+            "dimension": "成本 vs 服务",
+            "status": "成本上升" if cost_delta > 0 else "成本下降" if cost_delta < 0 else "成本持平",
+            "meaning": "综合成本变化体现仓网、补货、服务和排班的整体资源投入。",
+            "tradeoff": "若成本上升，需要用缺口下降、服务稳定或收入保护解释；若成本下降，需要确认没有隐藏服务风险。",
+        },
+        {
+            "dimension": "缺口 vs 预算",
+            "status": "缺口增加" if shortage_delta > 0 else "缺口减少" if shortage_delta < 0 else "缺口持平",
+            "meaning": "缺口是订单、库存或人力无法完全承接的直接风险。",
+            "tradeoff": "缺口增加时优先保护核心市场；缺口减少时评估新增预算是否值得。",
+        },
+        {
+            "dimension": "服务商组合",
+            "status": "服务成本上升" if service_delta > 0 else "服务成本下降" if service_delta < 0 else "服务成本持平",
+            "meaning": "服务成本变化反映更快时效、更高承载或供应商切换。",
+            "tradeoff": "高峰期可接受短期成本上升，平峰期应回到成本效率优先。",
+        },
+        {
+            "dimension": "审批复杂度",
+            "status": approval_level,
+            "meaning": "审批层级越高，说明预算、缺口或前提不确定性越需要管理确认。",
+            "tradeoff": "自动执行适合低风险批次；人工确认和管理层审批必须保留版本、签核和回滚依据。",
+        },
+        {
+            "dimension": "前提可信度",
+            "status": f"{high_risk_count} 项高风险前提",
+            "meaning": "高风险前提越多，模型结果越依赖业务确认而非自动下发。",
+            "tradeoff": "先签核高风险前提，再讨论执行；否则只能做灰度或演示口径。",
+        },
+        {
+            "dimension": "经营净影响",
+            "status": format_signed(net_value),
+            "meaning": "把成本、缺口、收入风险和协同效率合并成管理视角。",
+            "tradeoff": "净收益为正偏执行，净影响为负偏复核，持平时看执行复杂度。",
+        },
+    ]
+
+    if high_risk_count:
+        recommendation = "先签核再执行"
+        rationale = "存在高风险业务前提，建议先让对应负责人确认口径，再进入审批或下游交接。"
+    elif net_value > 0 and approval_level != "管理层审批":
+        recommendation = "进入执行评审"
+        rationale = "净经营影响为正且审批层级可控，适合推进到执行交接和上线监控。"
+    elif net_value < 0:
+        recommendation = "保守复核"
+        rationale = "净经营影响为负，需要业务确认是否用新增成本换服务稳定或风险降低。"
+    else:
+        recommendation = "灰度观察"
+        rationale = "核心指标没有压倒性优势，建议小范围下发并观察监控指标。"
+
+    return {
+        "recommendation": recommendation,
+        "rationale": rationale,
+        "dimensions": dimensions,
     }
 
 
