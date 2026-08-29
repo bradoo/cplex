@@ -2387,12 +2387,197 @@ def starrocks_lineage_paths():
     }
 
 
+def model_code_examples():
+    return {
+        "network": {
+            "python": """model = Model(name=input_data["model_name"])
+open_warehouse = {w: model.binary_var(name=f"open_{w}") for w in warehouses}
+ship = {(w, m): model.continuous_var(name=f"ship_{w}_to_{m}", lb=0)
+        for w in warehouses for m in markets}
+unfulfilled = {m: model.continuous_var(name=f"unfulfilled_{m}", lb=0)
+               for m in markets}
+
+model.minimize(
+    model.sum(warehouses[w]["fixed_cost"] * open_warehouse[w] for w in warehouses)
+    + model.sum((warehouses[w]["handling_cost"] + lane_costs[w, m]["last_mile_cost"]) * ship[w, m]
+                for w in warehouses for m in markets)
+    + model.sum(unfulfilled_penalty * unfulfilled[m] for m in markets)
+)
+
+for m, data in markets.items():
+    model.add_constraint(model.sum(ship[w, m] for w in warehouses) + unfulfilled[m] == data["demand"])
+for w, data in warehouses.items():
+    model.add_constraint(model.sum(ship[w, m] for m in markets) <= data["capacity"] * open_warehouse[w])
+for (w, m), lane in lane_costs.items():
+    if not lane["allowed_by_sla"]:
+        model.add_constraint(ship[w, m] == 0)""",
+            "opl": """{string} Warehouses = ...;
+{string} Markets = ...;
+float demand[Markets] = ...;
+float capacity[Warehouses] = ...;
+float fixedCost[Warehouses] = ...;
+float unitCost[Warehouses][Markets] = ...;
+int allowedBySla[Warehouses][Markets] = ...;
+
+dvar boolean open[Warehouses];
+dvar float+ ship[Warehouses][Markets];
+dvar float+ unfulfilled[Markets];
+
+minimize
+  sum(w in Warehouses) fixedCost[w] * open[w]
+  + sum(w in Warehouses, m in Markets) unitCost[w][m] * ship[w][m]
+  + sum(m in Markets) unfulfilledPenalty * unfulfilled[m];
+
+subject to {
+  forall(m in Markets)
+    sum(w in Warehouses) ship[w][m] + unfulfilled[m] == demand[m];
+  forall(w in Warehouses)
+    sum(m in Markets) ship[w][m] <= capacity[w] * open[w];
+  forall(w in Warehouses, m in Markets: allowedBySla[w][m] == 0)
+    ship[w][m] == 0;
+}""",
+        },
+        "replenishment": {
+            "python": """model = Model(name="cross_border_ecommerce_replenishment")
+order = {(lane, week): model.continuous_var(name=f"order_{lane}_{week}", lb=0)
+         for lane in lanes for week in weeks}
+ending_inventory = {week: model.continuous_var(name=f"ending_inventory_{week}", lb=0)
+                    for week in weeks}
+stockout = {week: model.continuous_var(name=f"stockout_{week}", lb=0)
+            for week in weeks}
+
+for i, week in enumerate(weeks):
+    starting_inventory = initial_inventory if i == 0 else ending_inventory[weeks[i - 1]]
+    model.add_constraint(
+        ending_inventory[week] == starting_inventory + arrivals(i) - demand[week] + stockout[week]
+    )
+for lane, lane_data in lanes.items():
+    for week in weeks:
+        model.add_constraint(order[lane, week] <= lane_data["weekly_capacity"])
+model.add_constraint(ending_inventory[weeks[-1]] >= target_ending_inventory)
+
+model.minimize(
+    model.sum(lanes[l]["unit_cost"] * order[l, w] for l in lanes for w in weeks)
+    + model.sum(holding_cost * ending_inventory[w] for w in weeks)
+    + model.sum(stockout_penalty * stockout[w] for w in weeks)
+)""",
+            "opl": """{string} Weeks = ...;
+{string} Lanes = ...;
+int leadTime[Lanes] = ...;
+float demand[Weeks] = ...;
+float weeklyCapacity[Lanes] = ...;
+float unitCost[Lanes] = ...;
+
+dvar float+ order[Lanes][Weeks];
+dvar float+ endingInventory[Weeks];
+dvar float+ stockout[Weeks];
+
+minimize
+  sum(l in Lanes, w in Weeks) unitCost[l] * order[l][w]
+  + sum(w in Weeks) holdingCost * endingInventory[w]
+  + sum(w in Weeks) stockoutPenalty * stockout[w];
+
+subject to {
+  forall(w in Weeks)
+    endingInventory[w] == previousInventory(w) + arrivals(w) - demand[w] + stockout[w];
+  forall(l in Lanes, w in Weeks)
+    order[l][w] <= weeklyCapacity[l];
+  endingInventory[last(Weeks)] >= targetEndingInventory;
+}""",
+        },
+        "service_level": {
+            "python": """model = Model(name=input_data["model_name"])
+use_service = {s: model.binary_var(name=f"use_{s}") for s in services}
+orders = {(s, m): model.continuous_var(name=f"orders_{s}_to_{m}", lb=0)
+          for s in services for m in markets}
+
+model.minimize(
+    model.sum(services[s]["fixed_cost"] * use_service[s] for s in services)
+    + model.sum(services[s]["unit_cost_by_market"][m] * orders[s, m]
+                for s in services for m in markets)
+)
+for m, data in markets.items():
+    model.add_constraint(model.sum(orders[s, m] for s in services) == data["demand"])
+    model.add_constraint(
+        model.sum(services[s]["delivery_days_by_market"][m] * orders[s, m] for s in services)
+        <= data["max_avg_delivery_days"] * data["demand"]
+    )
+for s, data in services.items():
+    model.add_constraint(model.sum(orders[s, m] for m in markets) <= data["capacity"] * use_service[s])""",
+            "opl": """{string} Services = ...;
+{string} Markets = ...;
+float demand[Markets] = ...;
+float capacity[Services] = ...;
+float fixedCost[Services] = ...;
+float unitCost[Services][Markets] = ...;
+float deliveryDays[Services][Markets] = ...;
+
+dvar boolean useService[Services];
+dvar float+ orders[Services][Markets];
+
+minimize
+  sum(s in Services) fixedCost[s] * useService[s]
+  + sum(s in Services, m in Markets) unitCost[s][m] * orders[s][m];
+
+subject to {
+  forall(m in Markets)
+    sum(s in Services) orders[s][m] == demand[m];
+  forall(m in Markets)
+    sum(s in Services) deliveryDays[s][m] * orders[s][m] <= maxAvgDays[m] * demand[m];
+  forall(s in Services)
+    sum(m in Markets) orders[s][m] <= capacity[s] * useService[s];
+}""",
+        },
+        "staffing": {
+            "python": """solver = solve_staff_scheduling_soft if config.get("soft_staffing") else solve_staff_scheduling
+result = solver(
+    employees=problem["employees"],
+    days=problem["days"],
+    required_staff=problem["required_staff"],
+    availability=problem["availability"],
+    max_shifts_per_employee=problem["max_shifts_per_employee"],
+    skills=problem["skills"],
+    skill_requirements=problem["skill_requirements"],
+    shift_costs=problem["shift_costs"],
+    preferences=problem["preferences"],
+    cost_weight=0.002,
+    preference_weight=0.04,
+    log_output=False,
+)""",
+            "opl": """{string} Employees = ...;
+{string} Days = ...;
+{string} Skills = ...;
+int requiredStaff[Days] = ...;
+int availability[Employees][Days] = ...;
+int hasSkill[Employees][Skills] = ...;
+int skillRequirement[Days][Skills] = ...;
+float shiftCost[Employees][Days] = ...;
+
+dvar boolean work[Employees][Days];
+dvar float+ shortage[Days];
+
+minimize
+  sum(e in Employees, d in Days) shiftCost[e][d] * work[e][d]
+  + sum(d in Days) shortagePenalty * shortage[d];
+
+subject to {
+  forall(d in Days)
+    sum(e in Employees) work[e][d] + shortage[d] >= requiredStaff[d];
+  forall(e in Employees, d in Days)
+    work[e][d] <= availability[e][d];
+  forall(d in Days, k in Skills)
+    sum(e in Employees) hasSkill[e][k] * work[e][d] >= skillRequirement[d][k];
+  forall(e in Employees)
+    sum(d in Days) work[e][d] <= maxShiftsPerEmployee;
+}""",
+        },
+    }
+
+
 @app.get("/api/platform/model-explanations")
 def get_model_explanations():
-    return jsonify(
-        {
-            "status": "ok",
-            "models": [
+    code_examples = model_code_examples()
+    models = [
                 {
                     "id": "network",
                     "name": "仓网选址与履约模型",
@@ -2410,6 +2595,7 @@ def get_model_explanations():
                         {"name": "SLA 可用线路", "formula": "ship[w,m] = 0 if delivery_days[w,m] > max_delivery_days[m]", "meaning": "超过承诺时效的线路不能被 CPLEX 选择"},
                     ],
                     "outputs": ["opened_warehouses", "fulfillment_plan", "capacity_plan", "total_unfulfilled", "total_cost"],
+                    "implementation": code_examples["network"],
                 },
                 {
                     "id": "replenishment",
@@ -2427,6 +2613,7 @@ def get_model_explanations():
                         {"name": "期末库存", "formula": "inventory[last_week] >= target_ending_inventory", "meaning": "避免方案只顾眼前缺货、不保留安全库存"},
                     ],
                     "outputs": ["orders", "inventory_projection", "total_stockout", "transport_cost", "total_cost"],
+                    "implementation": code_examples["replenishment"],
                 },
                 {
                     "id": "service_level",
@@ -2443,6 +2630,7 @@ def get_model_explanations():
                         {"name": "服务商容量", "formula": "sum_m orders[s,m] <= capacity[s] * use_service[s]", "meaning": "未启用服务商不能接单，启用后也不能超过能力"},
                     ],
                     "outputs": ["used_services", "allocation", "average_days", "total_cost"],
+                    "implementation": code_examples["service_level"],
                 },
                 {
                     "id": "staffing",
@@ -2460,10 +2648,10 @@ def get_model_explanations():
                         {"name": "最大班次数", "formula": "sum_d work[e,d] <= max_shifts_per_employee", "meaning": "控制员工工作负荷，避免排班不可执行"},
                     ],
                     "outputs": ["assignments", "total_shortage", "coverage", "total_cost"],
+                    "implementation": code_examples["staffing"],
                 },
-            ],
-        }
-    )
+    ]
+    return jsonify({"status": "ok", "models": models})
 
 
 @app.put("/api/platform/upstream-data")

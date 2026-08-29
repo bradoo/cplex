@@ -143,6 +143,35 @@
 
     .page.active { display: grid; }
 
+    .page[data-layer="config"].active,
+    .page[data-layer="inputs"].active,
+    .page[data-layer="results"].active,
+    .page[data-layer="constraints"].active {
+      grid-template-columns: 220px minmax(0, 1fr);
+    }
+
+    .page[data-layer="config"] > section,
+    .page[data-layer="inputs"] > section,
+    .page[data-layer="results"] > section {
+      grid-column: 2;
+    }
+
+    .page[data-layer="config"] > .subnav,
+    .page[data-layer="inputs"] > .subnav,
+    .page[data-layer="results"] > .subnav {
+      grid-column: 1;
+      grid-row: 1 / span 2;
+    }
+
+    .page[data-layer="constraints"] > section {
+      grid-column: 2;
+    }
+
+    .page[data-layer="constraints"] > .subnav {
+      grid-column: 1;
+      grid-row: 1;
+    }
+
     section {
       background: var(--panel);
       border: 1px solid var(--line);
@@ -695,6 +724,32 @@
       gap: 3px;
     }
 
+    .code-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .code-block {
+      min-width: 0;
+      display: grid;
+      gap: 7px;
+    }
+
+    .code-block pre {
+      max-height: 360px;
+      margin: 0;
+      padding: 12px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #111827;
+      color: #e5edf7;
+      font-size: 12px;
+      line-height: 1.5;
+      white-space: pre;
+    }
+
     .formula {
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
       color: #435161;
@@ -707,6 +762,58 @@
       gap: 8px;
       padding-left: 18px;
       margin: 0;
+    }
+
+    .subpage-shell {
+      display: grid;
+      grid-template-columns: 220px minmax(0, 1fr);
+      gap: 16px;
+      align-items: start;
+    }
+
+    .subnav {
+      position: sticky;
+      top: 14px;
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .subnav button {
+      width: 100%;
+      justify-content: flex-start;
+      background: #f8fafc;
+      color: var(--ink);
+      border-color: var(--line);
+      text-align: left;
+    }
+
+    .subnav button.active {
+      border-color: #9fb8ff;
+      background: var(--soft-blue);
+      color: #25437a;
+    }
+
+    .subviews {
+      display: grid;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .subview {
+      display: none;
+      gap: 14px;
+    }
+
+    .subview.active {
+      display: grid;
+    }
+
+    .result-panel-hidden {
+      display: none !important;
     }
 
     table {
@@ -730,8 +837,25 @@
     }
 
     @media (max-width: 1040px) {
-      .top, .page, .two-col { grid-template-columns: 1fr; }
+      .top, .page, .two-col, .subpage-shell { grid-template-columns: 1fr; }
+      .page[data-layer="config"].active,
+      .page[data-layer="inputs"].active,
+      .page[data-layer="results"].active,
+      .page[data-layer="constraints"].active { grid-template-columns: 1fr; }
+      .page[data-layer="config"] > section,
+      .page[data-layer="config"] > .subnav,
+      .page[data-layer="inputs"] > section,
+      .page[data-layer="inputs"] > .subnav,
+      .page[data-layer="results"] > section,
+      .page[data-layer="results"] > .subnav,
+      .page[data-layer="constraints"] > section,
+      .page[data-layer="constraints"] > .subnav {
+        grid-column: 1;
+        grid-row: auto;
+      }
+      .subnav { position: static; grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .flow, .grid, .scale-metrics, .readiness-grid, .impact-grid, .run-steps, .handoff-grid, .gate-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .code-grid { grid-template-columns: 1fr; }
       .explain-grid { grid-template-columns: 1fr; }
       .diff-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .lineage-diagram { overflow-x: auto; padding-bottom: 6px; }
@@ -743,6 +867,7 @@
       .flow, .grid, .scale-metrics, .diff-grid, .readiness-grid, .impact-grid, .run-steps, .handoff-grid, .gate-list { grid-template-columns: 1fr; }
       .flow-step::after { display: none; }
       .row, .cost-cards { grid-template-columns: 1fr; }
+      .subnav { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -780,68 +905,86 @@
 
   <main class="wrap">
     <div class="page" data-layer="upstream">
-      <section>
-        <div class="section-head"><h2>上游数据接入层</h2><span id="upstreamSource" class="pill">Source</span></div>
-        <div class="content">
-          <p class="small">这一层接入 OMS、WMS、TMS、HR 口径的业务数据；当前 POC 使用 StarRocks 承载订单事实表和模型基础表。</p>
-          <div id="upstreamSummary" class="rows"></div>
-        </div>
-      </section>
-      <section>
-        <div class="section-head"><h2>数据源运行状态</h2><span id="sourceStatus" class="pill">加载中</span></div>
-        <div class="content">
-          <div id="sourceMetrics" class="scale-metrics"></div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr><th>上游表</th><th>业务角色</th><th>行数</th></tr>
-              </thead>
-              <tbody id="sourceTableRows"></tbody>
-            </table>
+      <div class="subpage-shell" data-subpage="upstream">
+        <aside class="subnav" aria-label="上游数据二级导航">
+          <button class="active" data-subview-button="upstream" data-target="source">数据源</button>
+          <button data-subview-button="upstream" data-target="quality">质量校验</button>
+          <button data-subview-button="upstream" data-target="scale">规模吞吐</button>
+          <button data-subview-button="upstream" data-target="orders">订单明细</button>
+          <button data-subview-button="upstream" data-target="edit">业务表编辑</button>
+        </aside>
+        <div class="subviews">
+          <div class="subview active" data-subview="upstream" data-subview-id="source">
+            <section>
+              <div class="section-head"><h2>上游数据接入层</h2><span id="upstreamSource" class="pill">Source</span></div>
+              <div class="content">
+                <p class="small">这一层接入 OMS、WMS、TMS、HR 口径的业务数据；当前 POC 使用 StarRocks 承载订单事实表和模型基础表。</p>
+                <div id="upstreamSummary" class="rows"></div>
+              </div>
+            </section>
+            <section>
+              <div class="section-head"><h2>数据源运行状态</h2><span id="sourceStatus" class="pill">加载中</span></div>
+              <div class="content">
+                <div id="sourceMetrics" class="scale-metrics"></div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr><th>上游表</th><th>业务角色</th><th>行数</th></tr>
+                    </thead>
+                    <tbody id="sourceTableRows"></tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
           </div>
-        </div>
-      </section>
-      <section>
-        <div class="section-head"><h2>数据质量校验</h2><span id="qualityStatus" class="pill">加载中</span></div>
-        <div class="content">
-          <div id="qualityMetrics" class="grid"></div>
-          <div id="qualityChecks" class="rows"></div>
-        </div>
-      </section>
-      <section>
-        <div class="section-head"><h2>吞吐量与模型规模</h2><span id="scaleStatus" class="pill">加载中</span></div>
-        <div class="content">
-          <div id="scaleMetrics" class="scale-metrics"></div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr><th>子模型</th><th>入参集合</th><th>源数据行</th><th>变量估算</th><th>约束估算</th><th>说明</th></tr>
-              </thead>
-              <tbody id="scaleModelRows"></tbody>
-            </table>
+          <div class="subview" data-subview="upstream" data-subview-id="quality">
+            <section>
+              <div class="section-head"><h2>数据质量校验</h2><span id="qualityStatus" class="pill">加载中</span></div>
+              <div class="content">
+                <div id="qualityMetrics" class="grid"></div>
+                <div id="qualityChecks" class="rows"></div>
+              </div>
+            </section>
           </div>
-        </div>
-      </section>
-      <section>
-        <div class="section-head"><h2>订单明细抽样</h2><span id="orderSampleStatus" class="pill">加载中</span></div>
-        <div class="content">
-          <div class="button-row">
-            <button id="showFirstOrders">显示前 100 条</button>
-            <button id="showAllOrders">显示全部抽样</button>
+          <div class="subview" data-subview="upstream" data-subview-id="scale">
+            <section>
+              <div class="section-head"><h2>吞吐量与模型规模</h2><span id="scaleStatus" class="pill">加载中</span></div>
+              <div class="content">
+                <div id="scaleMetrics" class="scale-metrics"></div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr><th>子模型</th><th>入参集合</th><th>源数据行</th><th>变量估算</th><th>约束估算</th><th>说明</th></tr>
+                    </thead>
+                    <tbody id="scaleModelRows"></tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
           </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr><th>订单号</th><th>市场</th><th>渠道</th><th>件数</th><th>优先级</th><th>承诺天数</th><th>需求占比 bp</th></tr>
-              </thead>
-              <tbody id="orderSampleRows"></tbody>
-            </table>
+          <div class="subview" data-subview="upstream" data-subview-id="orders">
+            <section>
+              <div class="section-head"><h2>订单明细抽样</h2><span id="orderSampleStatus" class="pill">加载中</span></div>
+              <div class="content">
+                <div class="button-row">
+                  <button id="showFirstOrders">显示前 100 条</button>
+                  <button id="showAllOrders">显示全部抽样</button>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr><th>订单号</th><th>市场</th><th>渠道</th><th>件数</th><th>优先级</th><th>承诺天数</th><th>需求占比 bp</th></tr>
+                    </thead>
+                    <tbody id="orderSampleRows"></tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
           </div>
-        </div>
-      </section>
-      <section>
-        <div class="section-head"><h2>上游业务表编辑</h2><span class="pill">Editable</span></div>
-        <div class="content">
+          <div class="subview" data-subview="upstream" data-subview-id="edit">
+            <section>
+              <div class="section-head"><h2>上游业务表编辑</h2><span class="pill">Editable</span></div>
+              <div class="content">
           <div>
             <h3>市场需求表</h3>
             <div class="table-wrap">
@@ -880,15 +1023,18 @@
             <button class="run" id="saveUpstream">保存上游数据</button>
           </div>
           <div id="upstreamStatus" class="status-line">表格修改后点击保存，会写入上游数据层。</div>
+              </div>
+            </section>
+          </div>
         </div>
-      </section>
+      </div>
     </div>
 
     <div class="page" data-layer="config">
+      <aside id="playbooks" class="subnav" aria-label="场景配置导航"></aside>
       <section>
         <div class="section-head"><h2>方案配置</h2><span id="configSource" class="pill">加载中</span></div>
         <div class="content">
-          <div id="playbooks" class="playbooks"></div>
           <div class="fields">
             <div class="field">
               <label for="demand">需求倍率</label>
@@ -934,10 +1080,16 @@
     </div>
 
     <div class="page" data-layer="inputs">
+      <aside class="subnav" aria-label="模型入参导航">
+        <button class="active" data-model-input="network" type="button">仓网选址与履约</button>
+        <button data-model-input="replenishment" type="button">补货计划</button>
+        <button data-model-input="service_level" type="button">服务水平组合</button>
+        <button data-model-input="staffing" type="button">人员排班</button>
+      </aside>
       <section>
         <div class="section-head"><h2>入参选择</h2><span id="inputPlaybook" class="pill">等待运行</span></div>
         <div class="content">
-          <div class="field">
+          <div class="field" hidden>
             <label for="modelInputSelect">选择模型</label>
             <select id="modelInputSelect">
               <option value="network">仓网选址与履约</option>
@@ -965,6 +1117,14 @@
     </div>
 
     <div class="page" data-layer="results">
+      <aside class="subnav" aria-label="求解结果二级导航">
+        <button class="active" data-result-view-button="summary" type="button">运行概览</button>
+        <button data-result-view-button="enterprise" type="button">企业就绪</button>
+        <button data-result-view-button="value" type="button">经营价值</button>
+        <button data-result-view-button="governance" type="button">治理审批</button>
+        <button data-result-view-button="execution" type="button">执行闭环</button>
+        <button data-result-view-button="models" type="button">模型分析</button>
+      </aside>
       <section>
         <div class="section-head"><h2>运行控制</h2><span id="current" class="pill">等待运行</span></div>
         <div class="content">
@@ -1138,6 +1298,7 @@
     </div>
 
     <div class="page" data-layer="constraints">
+      <aside id="constraintModelNav" class="subnav" aria-label="模型约束导航"></aside>
       <section>
         <div class="section-head"><h2>模型约束解释</h2><span class="pill">Model Logic</span></div>
         <div class="content">
@@ -1161,9 +1322,11 @@
     let latestRunId = "";
     let runSequence = 0;
     let orderSampleLimit = 100;
+    let selectedConstraintModel = "";
     const activeLayer = document.body.dataset.activeLayer || "upstream";
     const stateKey = "cplexPlatformPocState";
     const roleKey = "cplexPlatformPocRole";
+    const subnavKey = "cplexPlatformPocSubnav";
     const rolePermissions = {
       viewer: ["view"],
       data_admin: ["view", "edit_upstream"],
@@ -1239,6 +1402,111 @@
       });
     }
 
+    function loadSubnavState() {
+      try {
+        return JSON.parse(localStorage.getItem(subnavKey) || "{}");
+      } catch (_error) {
+        return {};
+      }
+    }
+
+    function saveSubnavState(group, target) {
+      const state = loadSubnavState();
+      state[group] = target;
+      localStorage.setItem(subnavKey, JSON.stringify(state));
+    }
+
+    function activateSubview(group, target) {
+      document.querySelectorAll(`[data-subview="${group}"]`).forEach((view) => {
+        view.classList.toggle("active", view.dataset.subviewId === target);
+      });
+      document.querySelectorAll(`[data-subview-button="${group}"]`).forEach((button) => {
+        button.classList.toggle("active", button.dataset.target === target);
+      });
+      saveSubnavState(group, target);
+    }
+
+    function initializeSubnavigation() {
+      const saved = loadSubnavState();
+      document.querySelectorAll("[data-subpage]").forEach((shell) => {
+        const group = shell.dataset.subpage;
+        const fallback = shell.querySelector("[data-subview-button]")?.dataset.target;
+        activateSubview(group, saved[group] || fallback);
+      });
+      document.querySelectorAll("[data-subview-button]").forEach((button) => {
+        button.addEventListener("click", () => activateSubview(button.dataset.subviewButton, button.dataset.target));
+      });
+      initializeResultsSubnavigation(saved.results || "summary");
+      initializeModelInputNavigation(saved.inputs || "network");
+    }
+
+    function setResultPanel(panelId, group) {
+      const node = field(panelId);
+      if (node) {
+        node.closest(".content > div, .content > ul, .content > table")?.setAttribute("data-result-view", group);
+      }
+    }
+
+    function initializeResultsSubnavigation(initialTarget) {
+      const runSection = field("run")?.closest("section");
+      if (runSection) {
+        runSection.dataset.resultView = "summary";
+      }
+      setResultPanel("totalCard", "summary");
+      setResultPanel("executiveBriefPanel", "summary");
+      setResultPanel("enterpriseReadinessPanel", "enterprise");
+      setResultPanel("businessValuePanel", "value");
+      setResultPanel("tradeoffPanel", "value");
+      setResultPanel("differencePanel", "value");
+      setResultPanel("assumptionPanel", "governance");
+      setResultPanel("readinessRows", "governance");
+      setResultPanel("approvalWorkflow", "governance");
+      setResultPanel("handoffPanel", "execution");
+      setResultPanel("monitorPanel", "execution");
+      setResultPanel("actions", "execution");
+      setResultPanel("executionRows", "execution");
+      setResultPanel("bars", "models");
+      setResultPanel("scenarioRecommendation", "models");
+      setResultPanel("historyRows", "models");
+      activateResultView(initialTarget);
+      document.querySelectorAll("[data-result-view-button]").forEach((button) => {
+        button.addEventListener("click", () => activateResultView(button.dataset.resultViewButton));
+      });
+    }
+
+    function activateResultView(target) {
+      document.querySelectorAll("[data-result-view]").forEach((panel) => {
+        panel.classList.toggle("result-panel-hidden", panel.dataset.resultView !== target);
+      });
+      document.querySelectorAll("[data-result-view-button]").forEach((button) => {
+        button.classList.toggle("active", button.dataset.resultViewButton === target);
+      });
+      saveSubnavState("results", target);
+    }
+
+    function initializeModelInputNavigation(initialTarget) {
+      const select = field("modelInputSelect");
+      if (select) {
+        select.value = initialTarget;
+      }
+      document.querySelectorAll("[data-model-input]").forEach((button) => {
+        button.addEventListener("click", () => activateModelInput(button.dataset.modelInput));
+      });
+      activateModelInput(initialTarget);
+    }
+
+    function activateModelInput(target) {
+      const select = field("modelInputSelect");
+      if (select) {
+        select.value = target;
+      }
+      document.querySelectorAll("[data-model-input]").forEach((button) => {
+        button.classList.toggle("active", button.dataset.modelInput === target);
+      });
+      saveSubnavState("inputs", target);
+      renderInputs();
+    }
+
     async function loadOverview() {
       const response = await fetch("/api/platform/overview");
       const data = await response.json();
@@ -1246,7 +1514,7 @@
       loadSharedState();
       field("configSource").textContent = data.data_source;
       field("playbooks").innerHTML = data.playbooks.map((item) => (
-        `<button data-id="${h(item.id)}" class="playbook ${item.id === selected ? "active" : ""}">
+        `<button data-id="${h(item.id)}" class="playbook ${item.id === selected ? "active" : ""}" type="button">
           <strong>${h(item.name)}</strong><span>${h(item.description)}</span>
         </button>`
       )).join("");
@@ -1543,8 +1811,13 @@
     async function loadConstraintExplanations() {
       const response = await fetch("/api/platform/model-explanations");
       const data = await response.json();
+      const saved = loadSubnavState();
+      selectedConstraintModel = saved.constraints || selectedConstraintModel || (data.models[0] ? data.models[0].id : "");
+      field("constraintModelNav").innerHTML = data.models.map((model) => `
+        <button data-constraint-model="${h(model.id)}" type="button">${h(model.name)}</button>
+      `).join("");
       field("constraintCards").innerHTML = data.models.map((model) => `
-        <div class="explain-card">
+        <div class="explain-card" data-constraint-view="${h(model.id)}">
           <div>
             <h3>${h(model.name)}</h3>
             <p class="small">${h(model.business_question)}</p>
@@ -1579,8 +1852,36 @@
               ${model.outputs.map((item) => `<span class="lineage-tag">${h(item)}</span>`).join("")}
             </div>
           </div>
+          <div>
+            <strong>代码实现</strong>
+            <div class="code-grid">
+              <div class="code-block">
+                <span class="small">Python / DOcplex</span>
+                <pre><code>${h(model.implementation.python)}</code></pre>
+              </div>
+              <div class="code-block">
+                <span class="small">OPL 模型表达</span>
+                <pre><code>${h(model.implementation.opl)}</code></pre>
+              </div>
+            </div>
+          </div>
         </div>
       `).join("");
+      document.querySelectorAll("[data-constraint-model]").forEach((button) => {
+        button.addEventListener("click", () => activateConstraintModel(button.dataset.constraintModel));
+      });
+      activateConstraintModel(selectedConstraintModel);
+    }
+
+    function activateConstraintModel(target) {
+      selectedConstraintModel = target;
+      document.querySelectorAll("[data-constraint-model]").forEach((button) => {
+        button.classList.toggle("active", button.dataset.constraintModel === target);
+      });
+      document.querySelectorAll("[data-constraint-view]").forEach((card) => {
+        card.classList.toggle("result-panel-hidden", card.dataset.constraintView !== target);
+      });
+      saveSubnavState("constraints", target);
     }
 
     function renderLineageDiagram(data) {
@@ -2561,6 +2862,7 @@
     }
 
     activateLayer();
+    initializeSubnavigation();
     initializeRole();
     renderRunSteps();
     field("run").addEventListener("click", () => run(true));
