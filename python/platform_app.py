@@ -2529,21 +2529,45 @@ subject to {
 }""",
         },
         "staffing": {
-            "python": """solver = solve_staff_scheduling_soft if config.get("soft_staffing") else solve_staff_scheduling
-result = solver(
-    employees=problem["employees"],
-    days=problem["days"],
-    required_staff=problem["required_staff"],
-    availability=problem["availability"],
-    max_shifts_per_employee=problem["max_shifts_per_employee"],
-    skills=problem["skills"],
-    skill_requirements=problem["skill_requirements"],
-    shift_costs=problem["shift_costs"],
-    preferences=problem["preferences"],
-    cost_weight=0.002,
-    preference_weight=0.04,
-    log_output=False,
-)""",
+            "python": """model = Model(name="staff_scheduling_soft")
+work = {(e, d): model.binary_var(name=f"work_{e}_{d}")
+        for e in employees for d in days}
+shortage = {d: model.integer_var(name=f"shortage_{d}", lb=0)
+            for d in days}
+skill_shortage = {(d, k): model.integer_var(name=f"skill_shortage_{d}_{k}", lb=0)
+                  for d in days for k in skill_requirements.get(d, {})}
+max_workload = model.integer_var(name="max_workload", lb=0)
+min_workload = model.integer_var(name="min_workload", lb=0)
+
+total_shortage = model.sum(shortage[d] for d in days)
+total_skill_shortage = model.sum(skill_shortage.values())
+preference_score = model.sum(preference_value(preferences, e, d) * work[e, d]
+                             for e in employees for d in days)
+total_cost = model.sum(shift_cost(shift_costs, e, d) * work[e, d]
+                       for e in employees for d in days)
+model.minimize(
+    shortage_penalty * total_shortage
+    + skill_shortage_penalty * total_skill_shortage
+    + max_workload - min_workload
+    + cost_weight * total_cost
+    - preference_weight * preference_score
+)
+
+for d in days:
+    model.add_constraint(model.sum(work[e, d] for e in employees) + shortage[d] == required_staff[d])
+for e in employees:
+    workload = model.sum(work[e, d] for d in days)
+    model.add_constraint(workload <= max_shifts_per_employee)
+    model.add_constraint(workload <= max_workload)
+    model.add_constraint(workload >= min_workload)
+    for d in days:
+        model.add_constraint(work[e, d] <= availability[e][d])
+for d in days:
+    for skill, required in skill_requirements.get(d, {}).items():
+        model.add_constraint(
+            model.sum(work[e, d] for e in employees if skill in skills.get(e, []))
+            + skill_shortage[d, skill] >= required
+        )""",
             "opl": """{string} Employees = ...;
 {string} Days = ...;
 {string} Skills = ...;
@@ -2552,23 +2576,33 @@ int availability[Employees][Days] = ...;
 int hasSkill[Employees][Skills] = ...;
 int skillRequirement[Days][Skills] = ...;
 float shiftCost[Employees][Days] = ...;
+float preference[Employees][Days] = ...;
 
 dvar boolean work[Employees][Days];
-dvar float+ shortage[Days];
+dvar int+ shortage[Days];
+dvar int+ skillShortage[Days][Skills];
+dvar int+ maxWorkload;
+dvar int+ minWorkload;
 
 minimize
-  sum(e in Employees, d in Days) shiftCost[e][d] * work[e][d]
-  + sum(d in Days) shortagePenalty * shortage[d];
+  shortagePenalty * sum(d in Days) shortage[d]
+  + skillShortagePenalty * sum(d in Days, k in Skills) skillShortage[d][k]
+  + maxWorkload - minWorkload
+  + costWeight * sum(e in Employees, d in Days) shiftCost[e][d] * work[e][d]
+  - preferenceWeight * sum(e in Employees, d in Days) preference[e][d] * work[e][d];
 
 subject to {
   forall(d in Days)
-    sum(e in Employees) work[e][d] + shortage[d] >= requiredStaff[d];
+    sum(e in Employees) work[e][d] + shortage[d] == requiredStaff[d];
   forall(e in Employees, d in Days)
     work[e][d] <= availability[e][d];
   forall(d in Days, k in Skills)
-    sum(e in Employees) hasSkill[e][k] * work[e][d] >= skillRequirement[d][k];
-  forall(e in Employees)
+    sum(e in Employees) hasSkill[e][k] * work[e][d] + skillShortage[d][k] >= skillRequirement[d][k];
+  forall(e in Employees) {
     sum(d in Days) work[e][d] <= maxShiftsPerEmployee;
+    sum(d in Days) work[e][d] <= maxWorkload;
+    sum(d in Days) work[e][d] >= minWorkload;
+  }
 }""",
         },
     }
