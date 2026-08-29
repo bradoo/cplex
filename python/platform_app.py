@@ -2103,7 +2103,46 @@ def build_enterprise_readiness():
         "level": "演示可上线" if score >= 85 and not blockers else "可演示，需补强" if score >= 70 else "需治理后演示",
         "blockers": blockers,
         "domains": domains,
+        "roadmap": build_enterprise_roadmap(score, blockers),
     }
+
+
+def build_enterprise_roadmap(score, blockers):
+    readiness_label = "高" if score >= 85 and not blockers else "中" if score >= 70 else "低"
+    return [
+        {
+            "phase": "P0 演示前",
+            "theme": "稳定演示与口径一致",
+            "scope": "固定 StarRocks 数据源、运行记录、审批状态和报告导出链路。",
+            "owner": "优化平台 / 运营中台",
+            "exit_criteria": "经理现场能完整走通：改参数、运行、审批、回放、导出报告。",
+            "readiness": readiness_label,
+        },
+        {
+            "phase": "P1 试点期",
+            "theme": "接入真实系统闭环",
+            "scope": "接 OMS/WMS/TMS/HR 回传，补齐执行结果、异常原因和重跑触发。",
+            "owner": "CIO / 数据平台 / 业务负责人",
+            "exit_criteria": "连续 2 周每日批次可追溯，人工调整原因可沉淀为规则。",
+            "readiness": "中",
+        },
+        {
+            "phase": "P2 规模化",
+            "theme": "多站点多市场推广",
+            "scope": "支持多仓、多国家、多服务商合同和多目标权重治理。",
+            "owner": "供应链技术 / 全球运营",
+            "exit_criteria": "覆盖核心市场 80% 订单量，并形成月度收益复盘机制。",
+            "readiness": "规划中",
+        },
+        {
+            "phase": "P3 企业级",
+            "theme": "自动化与模型治理",
+            "scope": "引入模型版本发布、A/B 策略、漂移监控、权限审计和 SLA 看板。",
+            "owner": "CIO / 信息安全 / 算法治理",
+            "exit_criteria": "模型变更可审批、可回滚、可审计，关键决策纳入治理委员会。",
+            "readiness": "规划中",
+        },
+    ]
 
 
 @app.get("/api/platform/lineage")
