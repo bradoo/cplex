@@ -562,6 +562,7 @@
     .diff-card.good { border-color: #bcebd5; background: var(--soft-green); }
     .diff-card.bad { border-color: #f5bbb7; background: var(--soft-red); }
     .diff-card.info { border-color: #b9cef9; background: var(--soft-blue); }
+    .diff-card.warn { border-color: #ffd799; background: var(--soft-amber); }
 
     .diff-card .label {
       color: var(--muted);
@@ -1198,6 +1199,12 @@
             </div>
           </div>
           <div>
+            <h3>模型结果业务解释</h3>
+            <div id="resultExplainPanel" class="diff-panel">
+              <p class="small">运行后显示各模型的瓶颈约束、成本驱动和可调整业务杠杆。</p>
+            </div>
+          </div>
+          <div>
             <h3>前提假设与数据可信度</h3>
             <div id="assumptionPanel" class="diff-panel">
               <p class="small">运行后显示关键业务前提、风险等级和签核动作。</p>
@@ -1493,6 +1500,7 @@
       setResultPanel("enterpriseReadinessPanel", "enterprise");
       setResultPanel("businessValuePanel", "value");
       setResultPanel("tradeoffPanel", "value");
+      setResultPanel("resultExplainPanel", "value");
       setResultPanel("differencePanel", "value");
       setResultPanel("assumptionPanel", "governance");
       setResultPanel("readinessRows", "governance");
@@ -2254,6 +2262,7 @@
       renderDifference(data.difference);
       renderBusinessValue(data.business_value);
       renderDecisionTradeoff(data.decision_tradeoff);
+      renderResultExplainability(data.result_explainability);
       renderExecutiveBrief(data.executive_brief);
       renderAssumptionRegister(data.assumption_register);
       renderApprovalWorkflow(data.run_record ? data.run_record.approval : null, data.run_record);
@@ -2384,6 +2393,62 @@
             `).join("")}
           </tbody>
         </table>
+      `;
+    }
+
+    function renderResultExplainability(explainability) {
+      if (!explainability) {
+        field("resultExplainPanel").innerHTML = `<p class="small">当前接口暂未返回模型结果解释。</p>`;
+        return;
+      }
+      field("resultExplainPanel").innerHTML = `
+        <div class="row">
+          <strong>${h(explainability.decision_focus)}</strong>
+          <span class="small">${h(explainability.headline)}</span>
+          <span class="status">Explain</span>
+        </div>
+        <div>
+          <h3>成本驱动</h3>
+          <div class="diff-grid">
+            ${explainability.cost_drivers.map((item, index) => `
+              <div class="diff-card ${index === 0 ? "warn" : "info"}">
+                <span class="label">${h(item.name)}</span>
+                <strong>${fmt(item.value)}</strong>
+                <span>${h(item.meaning)}</span>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+        <div>
+          <h3>瓶颈约束解释</h3>
+          <table>
+            <thead>
+              <tr><th>模型</th><th>当前信号</th><th>为什么</th><th>可调业务杠杆</th></tr>
+            </thead>
+            <tbody>
+              ${explainability.bottlenecks.map((row) => `
+                <tr>
+                  <td><strong>${h(row.model)}</strong></td>
+                  <td><span class="status">${h(row.signal)}</span></td>
+                  <td>${h(row.why)}</td>
+                  <td>${h(row.lever)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+        <div>
+          <h3>参数敏感动作</h3>
+          <div class="rows">
+            ${explainability.sensitivity.map((item) => `
+              <div class="row">
+                <strong>${h(item.lever)}</strong>
+                <span class="small">${h(item.expected)}</span>
+                <span class="status">当前 ${h(item.current)}</span>
+              </div>
+            `).join("")}
+          </div>
+        </div>
       `;
     }
 

@@ -3079,6 +3079,14 @@ def run_case(playbook_id, overrides):
     )
     business_value = build_business_value(summary, difference)
     decision_tradeoff = build_decision_tradeoff(summary, difference, business_value, assumption_register)
+    result_explainability = build_result_explainability(
+        config,
+        summary,
+        network,
+        replenishment,
+        service_mix,
+        staffing,
+    )
     executive_brief = build_executive_brief(
         config,
         summary,
@@ -3102,6 +3110,7 @@ def run_case(playbook_id, overrides):
         "difference": difference,
         "business_value": business_value,
         "decision_tradeoff": decision_tradeoff,
+        "result_explainability": result_explainability,
         "executive_brief": executive_brief,
         "network": network,
         "replenishment": replenishment,
@@ -3854,6 +3863,124 @@ def build_business_value(summary, difference):
         "net_business_value": net_business_value,
         "value_formula": "成本节省 + 收入保护 + 协同效率 - 新增成本 - 收入风险",
         "items": items,
+    }
+
+
+def build_result_explainability(config, summary, network, replenishment, service_mix, staffing):
+    capacity_plan = network.get("capacity_plan") or []
+    tight_warehouses = sorted(
+        [
+            {
+                "name": row["warehouse"],
+                "usage": round(float(row.get("used_capacity") or 0) / max(float(row.get("base_capacity") or 1), 1) * 100, 1),
+                "detail": f"使用 {format_number(row.get('used_capacity', 0))} / 基础产能 {format_number(row.get('base_capacity', 0))}",
+            }
+            for row in capacity_plan
+        ],
+        key=lambda item: item["usage"],
+        reverse=True,
+    )
+    replenishment_orders = replenishment.get("orders") or []
+    air_orders = sum(float(row.get("units") or 0) for row in replenishment_orders if row.get("lane") == "air")
+    ocean_orders = sum(float(row.get("units") or 0) for row in replenishment_orders if row.get("lane") == "ocean")
+    service_usage = sorted(
+        service_mix.get("used_services") or [],
+        key=lambda row: float(row.get("orders") or 0),
+        reverse=True,
+    )
+    staffing_shortages = staffing.get("shortages") or {}
+    shortage_days = [
+        f"{day} 缺 {amount} 人"
+        for day, amount in staffing_shortages.items()
+        if float(amount or 0) > 0
+    ]
+    network_shortage = float(network.get("total_unfulfilled") or 0)
+    stockout = float(replenishment.get("total_stockout") or 0)
+    staffing_shortage = float(staffing.get("total_shortage") or 0)
+    cost_items = [
+        ("仓网成本", float(summary.get("network_cost") or 0), "仓库固定成本、处理成本、末端配送和缺口/扩容成本"),
+        ("补货成本", float(summary.get("replenishment_cost") or 0), "空运/海运运输、库存持有和缺货罚分"),
+        ("服务组合成本", float(summary.get("service_cost") or 0), "服务商固定成本和履约单价"),
+        ("排班成本", float(summary.get("staffing_cost") or 0), "班次成本、偏好损失和软约束缺口"),
+    ]
+    cost_items.sort(key=lambda item: item[1], reverse=True)
+    bottlenecks = [
+        {
+            "model": "仓网选址与履约",
+            "signal": "存在未履约订单" if network_shortage else "仓网约束可满足",
+            "why": (
+                f"SLA 与仓库容量共同限制了可用履约路径，仍有 {format_number(network_shortage)} 单需要缺口或扩容兜底。"
+                if network_shortage
+                else f"当前启用 {len(network.get('opened_warehouses') or [])} 个仓，最高仓库使用率 {tight_warehouses[0]['usage'] if tight_warehouses else 0:g}%。"
+            ),
+            "lever": "放宽 SLA、打开临时扩容或提高高压仓产能。",
+        },
+        {
+            "model": "跨境补货",
+            "signal": "补货缺货约束触发" if stockout else "补货库存平衡可满足",
+            "why": (
+                f"需求和运输提前期叠加后仍有 {format_number(stockout)} 件缺货，空运容量是最直接的缓冲。"
+                if stockout
+                else f"本次补货分配为空运 {format_number(air_orders)} 件、海运 {format_number(ocean_orders)} 件，期末库存约束已满足。"
+            ),
+            "lever": "增加空运周容量、提前海运下单或降低目标期末库存。",
+        },
+        {
+            "model": "服务水平组合",
+            "signal": "服务商容量/时效决定分单结构",
+            "why": (
+                f"订单主要落在 {service_usage[0]['service']}，承接 {format_number(service_usage[0]['orders'])} 单。"
+                if service_usage
+                else "当前没有可用服务商分配结果。"
+            ),
+            "lever": "引入备选服务商、调整市场平均时效目标或重谈高成本线路单价。",
+        },
+        {
+            "model": "门店/仓内排班",
+            "signal": "排班软缺口触发" if staffing_shortage else "排班覆盖可满足",
+            "why": (
+                "；".join(shortage_days[:4])
+                if shortage_days
+                else f"员工工作量差异为 {format_number(staffing.get('fairness_spread', 0))}，当前班次满足每日覆盖和技能要求。"
+            ),
+            "lever": "增加临时工、放宽最大班次数或调整周末可用性。",
+        },
+    ]
+    sensitivity = [
+        {
+            "lever": "需求倍率",
+            "current": config.get("demand_multiplier"),
+            "expected": "提高会同步抬升仓网需求、补货需求和服务商订单，通常推高成本与缺口风险。",
+        },
+        {
+            "lever": "空运周容量",
+            "current": config.get("air_capacity"),
+            "expected": "提高可降低补货缺货，但会把更多订单推向高单价运输。",
+        },
+        {
+            "lever": "SLA 放宽天数",
+            "current": config.get("sla_extra_days"),
+            "expected": "放宽会释放更多仓到市场线路，可能降低未履约，但需评估客户体验。",
+        },
+        {
+            "lever": "缺口罚分",
+            "current": config.get("unfulfilled_penalty"),
+            "expected": "提高会迫使模型优先满足需求，可能带来更高履约或扩容成本。",
+        },
+    ]
+    return {
+        "headline": f"最大成本驱动为{cost_items[0][0]}，占综合成本 {round(cost_items[0][1] / max(float(summary.get('total_cost') or 1), 1) * 100, 1):g}%。",
+        "cost_drivers": [
+            {"name": name, "value": value, "meaning": meaning}
+            for name, value, meaning in cost_items
+        ],
+        "bottlenecks": bottlenecks,
+        "sensitivity": sensitivity,
+        "decision_focus": (
+            "先处理缺口类瓶颈，再评估成本优化空间。"
+            if network_shortage + stockout + staffing_shortage > 0
+            else "当前核心约束可满足，可重点比较成本结构和服务体验。"
+        ),
     }
 
 
