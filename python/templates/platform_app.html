@@ -718,6 +718,15 @@
         <span class="pill">数据层：OMS / WMS / TMS / HR</span>
         <span class="pill">模型层：DOcplex / CPLEX</span>
         <span class="pill">决策层：KPI / 审批 / 行动</span>
+        <label class="pill" for="roleSelect">角色
+          <select id="roleSelect">
+            <option value="planner">计划员</option>
+            <option value="approver">审批人</option>
+            <option value="data_admin">数据管理员</option>
+            <option value="viewer">只读查看</option>
+            <option value="admin">管理员</option>
+          </select>
+        </label>
       </div>
     </div>
     <nav class="wrap flow" aria-label="平台流程导航">
@@ -1073,6 +1082,14 @@
     let orderSampleLimit = 100;
     const activeLayer = document.body.dataset.activeLayer || "upstream";
     const stateKey = "cplexPlatformPocState";
+    const roleKey = "cplexPlatformPocRole";
+    const rolePermissions = {
+      viewer: ["view"],
+      data_admin: ["view", "edit_upstream"],
+      planner: ["view", "edit_config", "run_model", "submit_approval", "export_report"],
+      approver: ["view", "decide_approval"],
+      admin: ["view", "edit_upstream", "edit_config", "run_model", "submit_approval", "decide_approval", "export_report"]
+    };
 
     const fmt = (value) => Number(value || 0).toLocaleString("zh-CN", { maximumFractionDigits: 2 });
     const h = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
@@ -1083,6 +1100,54 @@
       "'": "&#39;"
     }[char]));
     const field = (id) => document.getElementById(id);
+
+    function currentRole() {
+      return field("roleSelect").value || "planner";
+    }
+
+    function can(permission) {
+      return (rolePermissions[currentRole()] || []).includes(permission);
+    }
+
+    function fetchOptions(options = {}) {
+      return {
+        ...options,
+        headers: {
+          ...(options.headers || {}),
+          "X-Platform-Role": currentRole()
+        }
+      };
+    }
+
+    function applyRoleControls() {
+      const controls = [
+        ["saveUpstream", "edit_upstream"],
+        ["saveConfig", "edit_config"],
+        ["run", "run_model"],
+        ["runFromConfig", "run_model"],
+        ["runFromInputs", "run_model"],
+        ["exportReport", "export_report"]
+      ];
+      controls.forEach(([id, permission]) => {
+        if (field(id)) {
+          field(id).disabled = !can(permission);
+        }
+      });
+      renderApprovalWorkflow(latestCaseData && latestCaseData.run_record ? latestCaseData.run_record.approval : null, latestCaseData ? latestCaseData.run_record : null);
+    }
+
+    function initializeRole() {
+      const savedRole = localStorage.getItem(roleKey) || "planner";
+      if (rolePermissions[savedRole]) {
+        field("roleSelect").value = savedRole;
+      }
+      field("roleSelect").addEventListener("change", () => {
+        localStorage.setItem(roleKey, currentRole());
+        applyRoleControls();
+        loadRunHistory();
+      });
+      applyRoleControls();
+    }
 
     function activateLayer() {
       document.querySelectorAll("[data-layer]").forEach((page) => {
@@ -1568,7 +1633,7 @@
 
     function setRunBusy(isBusy) {
       ["run", "runFromConfig", "runFromInputs"].forEach((id) => {
-        field(id).disabled = isBusy;
+        field(id).disabled = isBusy || !can("run_model");
       });
     }
 
@@ -1611,11 +1676,11 @@
       field("inputPlaybook").textContent = "生成中";
       setRunBusy(true);
       renderRunSteps(0, 0);
-      const responsePromise = fetch("/api/platform/run", {
+      const responsePromise = fetch("/api/platform/run", fetchOptions({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ playbook: selected, overrides: overrides(), save_history: saveHistory })
-      });
+      }));
 
       try {
         await sleep(450);
@@ -1689,13 +1754,13 @@
         `<div class="row"><strong>${h(name)}</strong><span class="small">${h(meaning)}</span><span class="status">${h(value)}</span></div>`
       )).join("");
       const approvalStatus = approval ? approval.status : "not_submitted";
-      const canSubmit = Boolean(runRecord) && ["not_submitted", "rejected"].includes(approvalStatus);
-      const canDecide = Boolean(runRecord) && ["not_submitted", "submitted", "rejected"].includes(approvalStatus);
+      const canSubmit = Boolean(runRecord) && can("submit_approval") && ["not_submitted", "rejected"].includes(approvalStatus);
+      const canDecide = Boolean(runRecord) && can("decide_approval") && approvalStatus === "submitted";
       field("submitApproval").disabled = !canSubmit;
       field("approveRun").disabled = !canDecide;
       field("rejectRun").disabled = !canDecide;
       field("approvalStatus").textContent = runRecord
-        ? `当前运行记录：${runRecord.run_id}，${status.status_label || "待提交"}`
+        ? `当前运行记录：${runRecord.run_id}，${status.status_label || "待提交"}，当前角色：${field("roleSelect").selectedOptions[0].textContent}`
         : "运行并保存记录后可发起审批。";
     }
 
@@ -1986,16 +2051,30 @@
           <td>${h(row.summary.approval_level)}</td>
           <td>${h(row.approval ? row.approval.status_label : "-")}</td>
           <td>${h(row.difference.headline || "-")}</td>
-          <td><button type="button" data-replay-run="${h(row.run_id)}">回放</button></td>
+          <td>
+            <button type="button" data-replay-run="${h(row.run_id)}">回放</button>
+            <button type="button" data-submit-run="${h(row.run_id)}" ${can("submit_approval") && ["not_submitted", "rejected"].includes(row.approval ? row.approval.status : "not_submitted") ? "" : "disabled"}>提交</button>
+            <button type="button" data-approve-run="${h(row.run_id)}" ${can("decide_approval") && row.approval && row.approval.status === "submitted" ? "" : "disabled"}>批准</button>
+            <button type="button" data-reject-run="${h(row.run_id)}" ${can("decide_approval") && row.approval && row.approval.status === "submitted" ? "" : "disabled"}>驳回</button>
+          </td>
         </tr>`
       )).join("");
       document.querySelectorAll("[data-replay-run]").forEach((button) => {
         button.addEventListener("click", () => replayRun(button.dataset.replayRun));
       });
+      document.querySelectorAll("[data-submit-run]").forEach((button) => {
+        button.addEventListener("click", () => updateApproval("submit", button.dataset.submitRun));
+      });
+      document.querySelectorAll("[data-approve-run]").forEach((button) => {
+        button.addEventListener("click", () => updateApproval("approve", button.dataset.approveRun));
+      });
+      document.querySelectorAll("[data-reject-run]").forEach((button) => {
+        button.addEventListener("click", () => updateApproval("reject", button.dataset.rejectRun));
+      });
     }
 
-    async function updateApproval(action) {
-      if (!latestRunId) {
+    async function updateApproval(action, runId = latestRunId) {
+      if (!runId) {
         field("approvalStatus").textContent = "请先运行并保存一条记录。";
         return;
       }
@@ -2005,11 +2084,11 @@
         reject: "审批驳回，需要调整场景参数或数据口径。"
       };
       field("approvalStatus").textContent = "审批流转保存中...";
-      const response = await fetch("/api/platform/approval", {
+      const response = await fetch("/api/platform/approval", fetchOptions({
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ run_id: latestRunId, action, actor: "demo.cio", comment: comments[action] })
-      });
+        body: JSON.stringify({ run_id: runId, action, actor: currentRole(), comment: comments[action] })
+      }));
       const data = await response.json();
       if (!response.ok) {
         field("approvalStatus").textContent = `审批失败：${data.message || "未知错误"}`;
@@ -2065,11 +2144,11 @@
 
     async function exportReport() {
       field("exportStatus").textContent = "导出中...";
-      const response = await fetch("/api/platform/export-report", {
+      const response = await fetch("/api/platform/export-report", fetchOptions({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ playbook: selected, overrides: overrides() })
-      });
+      }));
       const data = await response.json();
       if (!response.ok) {
         field("exportStatus").textContent = `导出失败：${data.message || "未知错误"}`;
@@ -2089,11 +2168,11 @@
         return;
       }
       field("upstreamStatus").textContent = "保存中...";
-      const response = await fetch("/api/platform/upstream-data", {
+      const response = await fetch("/api/platform/upstream-data", fetchOptions({
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ data })
-      });
+      }));
       const result = await response.json();
       if (!response.ok) {
         field("upstreamStatus").textContent = `保存失败：${result.message}`;
@@ -2114,11 +2193,11 @@
       config.unfulfilled_penalty = Number(field("penalty").value);
       config.sla_extra_days = Number(field("sla").value);
       field("configStatus").textContent = "保存中...";
-      const response = await fetch("/api/platform/data", {
+      const response = await fetch("/api/platform/data", fetchOptions({
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ data: platformData })
-      });
+      }));
       const result = await response.json();
       if (!response.ok) {
         field("configStatus").textContent = `保存失败：${result.message}`;
@@ -2131,6 +2210,7 @@
     }
 
     activateLayer();
+    initializeRole();
     renderRunSteps();
     field("run").addEventListener("click", () => run(true));
     field("runFromConfig").addEventListener("click", () => run(true));
@@ -2152,7 +2232,11 @@
       renderOrderSample();
     });
     field("modelInputSelect").addEventListener("change", renderInputs);
-    loadOverview().then(() => Promise.all([run(false), compare(), loadDataLayer(), loadConfigAudit(), loadUpstreamData(), loadSourceStatus(), loadDataQuality(), loadScaleSnapshot(), loadLineage(), loadRunHistory(), loadConstraintExplanations()]));
+    loadOverview().then(() => {
+      applyRoleControls();
+      const initialRun = can("run_model") ? run(false) : Promise.resolve();
+      return Promise.all([initialRun, compare(), loadDataLayer(), loadConfigAudit(), loadUpstreamData(), loadSourceStatus(), loadDataQuality(), loadScaleSnapshot(), loadLineage(), loadRunHistory(), loadConstraintExplanations()]);
+    });
   </script>
 </body>
 </html>

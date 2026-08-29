@@ -28,6 +28,25 @@ APPROVAL_HISTORY_PATH = Path(__file__).resolve().parent / "reports" / "platform_
 REPORTS_DIR = Path(__file__).resolve().parent / "reports"
 NETWORK_MODES = {"strict", "soft_capacity", "capacity_expansion"}
 APPROVAL_ACTIONS = {"submit", "approve", "reject"}
+ROLE_PERMISSIONS = {
+    "viewer": {"view"},
+    "data_admin": {"view", "edit_upstream"},
+    "planner": {"view", "edit_config", "run_model", "submit_approval", "export_report"},
+    "approver": {"view", "decide_approval"},
+    "admin": {"view", "edit_upstream", "edit_config", "run_model", "submit_approval", "decide_approval", "export_report"},
+}
+ROLE_LABELS = {
+    "viewer": "只读查看",
+    "data_admin": "数据管理员",
+    "planner": "计划员",
+    "approver": "审批人",
+    "admin": "管理员",
+}
+APPROVAL_TRANSITIONS = {
+    "not_submitted": {"submit": "submitted"},
+    "rejected": {"submit": "submitted"},
+    "submitted": {"approve": "approved", "reject": "rejected"},
+}
 STARROCKS_DEFAULT_LIMIT = 1000
 STARROCKS_SOURCE_TABLES = [
     ("upstream_orders", "订单事实表"),
@@ -77,6 +96,33 @@ def load_json_upstream_data():
 
 def starrocks_upstream_enabled():
     return os.getenv("PLATFORM_UPSTREAM_SOURCE", "json").lower() == "starrocks"
+
+
+def current_role():
+    role = request.headers.get("X-Platform-Role") or request.args.get("role") or "viewer"
+    return role if role in ROLE_PERMISSIONS else "viewer"
+
+
+def has_permission(permission, role=None):
+    role = role or current_role()
+    return permission in ROLE_PERMISSIONS.get(role, set())
+
+
+def require_permission(permission):
+    role = current_role()
+    if has_permission(permission, role):
+        return None
+    return (
+        jsonify(
+            {
+                "status": "error",
+                "message": f"当前角色 {ROLE_LABELS.get(role, role)} 没有权限执行该操作。",
+                "required_permission": permission,
+                "role": role,
+            }
+        ),
+        403,
+    )
 
 
 def starrocks_config():
@@ -652,14 +698,24 @@ def load_run_history(limit=20):
         return []
     with RUN_HISTORY_PATH.open(encoding="utf-8") as file:
         rows = [json.loads(line) for line in file if line.strip()]
-    return list(reversed(rows[-limit:]))
+    visible_rows = list(reversed(rows[-limit:]))
+    approval_states = load_file_approval_states([row["run_id"] for row in visible_rows])
+    for row in visible_rows:
+        row["approval"] = approval_states.get(
+            row["run_id"],
+            row.get("approval") or default_approval_state(row["summary"]["approval_level"]),
+        )
+    return visible_rows
 
 
 def platform_run_history_source_label():
     if starrocks_upstream_enabled():
         config = starrocks_config()
         return f"starrocks://{config['host']}:{config['port']}/{config['database']}.platform_run_history"
-    return str(RUN_HISTORY_PATH.relative_to(Path(__file__).resolve().parent.parent))
+    try:
+        return str(RUN_HISTORY_PATH.relative_to(Path(__file__).resolve().parent.parent))
+    except ValueError:
+        return str(RUN_HISTORY_PATH)
 
 
 def stable_digest(value):
@@ -1003,6 +1059,50 @@ def load_starrocks_approval_states(cursor, run_ids):
     return states
 
 
+def load_file_approval_states(run_ids=None):
+    if not APPROVAL_HISTORY_PATH.exists():
+        return {}
+    wanted = set(run_ids or [])
+    states = {}
+    with APPROVAL_HISTORY_PATH.open(encoding="utf-8") as file:
+        for line in file:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            run_id = row.get("run_id")
+            if wanted and run_id not in wanted:
+                continue
+            states[run_id] = {
+                "status": row["status"],
+                "status_label": approval_status_label(row["status"]),
+                "actor": row.get("actor", ""),
+                "comment": row.get("comment", ""),
+                "created_at": row.get("created_at", ""),
+                "last_action": row.get("action", ""),
+            }
+    return states
+
+
+def load_run_approval_state(run_id):
+    if starrocks_upstream_enabled():
+        with starrocks_connection() as connection:
+            with connection.cursor() as cursor:
+                ensure_starrocks_run_history_tables(cursor)
+                cursor.execute("SELECT approval_level FROM platform_run_history WHERE run_id = %s", (run_id,))
+                run_row = cursor.fetchone()
+                if not run_row:
+                    return None
+                states = load_starrocks_approval_states(cursor, [run_id])
+                return states.get(run_id, default_approval_state(run_row["approval_level"]))
+    file_state = load_file_approval_states([run_id]).get(run_id)
+    if file_state:
+        return file_state
+    for row in load_run_history(100):
+        if row.get("run_id") == run_id:
+            return row.get("approval") or default_approval_state(row["summary"]["approval_level"])
+    return None
+
+
 def run_exists(run_id):
     if starrocks_upstream_enabled():
         with starrocks_connection() as connection:
@@ -1018,13 +1118,18 @@ def append_approval_event(run_id, action, actor, comment):
         return None, f"Unknown approval action: {action}"
     if not run_exists(run_id):
         return None, f"Unknown run_id: {run_id}"
+    current_state = load_run_approval_state(run_id)
+    current_status = current_state["status"] if current_state else "not_submitted"
+    next_status = APPROVAL_TRANSITIONS.get(current_status, {}).get(action)
+    if not next_status:
+        return None, f"审批状态不允许从 {approval_status_label(current_status)} 执行 {action}"
     event = {
         "approval_id": uuid.uuid4().hex[:8],
         "run_id": run_id,
         "created_at": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
         "action": action,
-        "status": approval_status_for_action(action),
-        "status_label": approval_status_label(approval_status_for_action(action)),
+        "status": next_status,
+        "status_label": approval_status_label(next_status),
         "actor": actor or "demo.cio",
         "comment": comment or "",
     }
@@ -1728,6 +1833,10 @@ def overview():
             "assets": data["assets"],
             "capabilities": data["capabilities"],
             "data_source": platform_data_source_label(),
+            "roles": [
+                {"id": key, "name": ROLE_LABELS[key], "permissions": sorted(value)}
+                for key, value in ROLE_PERMISSIONS.items()
+            ],
         }
     )
 
@@ -1745,6 +1854,9 @@ def get_platform_data():
 
 @app.put("/api/platform/data")
 def update_platform_data():
+    permission_error = require_permission("edit_config")
+    if permission_error:
+        return permission_error
     payload = request.get_json(silent=True) or {}
     data = payload.get("data")
     previous_data = load_platform_data() if starrocks_upstream_enabled() else None
@@ -2076,6 +2188,9 @@ def get_model_explanations():
 
 @app.put("/api/platform/upstream-data")
 def update_upstream_data():
+    permission_error = require_permission("edit_upstream")
+    if permission_error:
+        return permission_error
     payload = request.get_json(silent=True) or {}
     data = payload.get("data")
     if starrocks_upstream_enabled() and isinstance(data, dict):
@@ -2190,6 +2305,9 @@ def build_scenario_recommendation(rows):
 
 @app.post("/api/platform/run")
 def run_platform_case():
+    permission_error = require_permission("run_model")
+    if permission_error:
+        return permission_error
     payload = request.get_json(silent=True) or {}
     playbook_id = payload.get("playbook", "baseline")
     if playbook_id not in playbooks():
@@ -2221,6 +2339,12 @@ def update_run_approval():
     action = str(payload.get("action") or "").strip()
     actor = str(payload.get("actor") or "demo.cio").strip()
     comment = str(payload.get("comment") or "").strip()
+    if action not in APPROVAL_ACTIONS:
+        return jsonify({"status": "error", "message": f"Unknown approval action: {action}"}), 400
+    permission = "submit_approval" if action == "submit" else "decide_approval"
+    permission_error = require_permission(permission)
+    if permission_error:
+        return permission_error
     if not run_id:
         return jsonify({"status": "error", "message": "run_id is required"}), 400
     event, error = append_approval_event(run_id, action, actor, comment)
@@ -2238,6 +2362,9 @@ def update_run_approval():
 
 @app.post("/api/platform/export-report")
 def export_platform_report():
+    permission_error = require_permission("export_report")
+    if permission_error:
+        return permission_error
     payload = request.get_json(silent=True) or {}
     playbook_id = payload.get("playbook", "baseline")
     if playbook_id not in playbooks():
