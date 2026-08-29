@@ -1294,12 +1294,29 @@ def build_demo_report_markdown(result, timestamp):
                 f"| {markdown_cell(row['dimension'])} | {markdown_cell(row['status'])} | "
                 f"{markdown_cell(row['meaning'])} | {markdown_cell(row['tradeoff'])} |"
             )
-    lines.extend(["", "## 7. 建议动作", ""])
+    executive_brief = result.get("executive_brief", {})
+    if executive_brief:
+        lines.extend(
+            [
+                "",
+                "## 7. 管理层汇报摘要",
+                "",
+                f"- 一句话结论：{executive_brief['headline']}",
+                f"- 建议决策：{executive_brief['decision']}",
+                f"- 需要关注：{executive_brief['watchout']}",
+                "",
+                "| 主题 | 内容 |",
+                "| --- | --- |",
+            ]
+        )
+        for row in executive_brief["talking_points"]:
+            lines.append(f"| {markdown_cell(row['topic'])} | {markdown_cell(row['message'])} |")
+    lines.extend(["", "## 8. 建议动作", ""])
     lines.extend(f"- {action}" for action in summary["actions"])
     lines.extend(
         [
             "",
-            "## 8. 执行计划",
+            "## 9. 执行计划",
             "",
             "| 负责人 | 优先级 | 触发条件 | 执行动作 |",
             "| --- | --- | --- | --- |",
@@ -1315,7 +1332,7 @@ def build_demo_report_markdown(result, timestamp):
         lines.extend(
             [
                 "",
-                "## 9. 执行交接与上线护栏",
+                "## 10. 执行交接与上线护栏",
                 "",
                 f"- 执行状态：{handoff['release_state']}",
                 f"- 放行说明：{handoff['release_note']}",
@@ -1336,7 +1353,7 @@ def build_demo_report_markdown(result, timestamp):
         lines.extend(
             [
                 "",
-                "## 10. 上线监控与重跑触发",
+                "## 11. 上线监控与重跑触发",
                 "",
                 f"- 监控状态：{monitor['overall_state']}",
                 f"- 值班口径：{monitor['watch_window']}",
@@ -1355,7 +1372,7 @@ def build_demo_report_markdown(result, timestamp):
         lines.extend(
             [
                 "",
-                "## 11. 前提假设与数据可信度",
+                "## 12. 前提假设与数据可信度",
                 "",
                 f"- 总体评级：{assumptions['overall_rating']}",
                 f"- 签核建议：{assumptions['signoff_note']}",
@@ -1369,12 +1386,12 @@ def build_demo_report_markdown(result, timestamp):
                 f"| {markdown_cell(row['name'])} | {markdown_cell(row['value'])} | "
                 f"{markdown_cell(row['risk'])} | {markdown_cell(row['owner'])} | {markdown_cell(row['action'])} |"
             )
-    lines.extend(["", "## 12. 风险提示", ""])
+    lines.extend(["", "## 13. 风险提示", ""])
     lines.extend(f"- {risk}" for risk in summary["risks"])
     lines.extend(
         [
             "",
-            "## 13. 模型结果摘要",
+            "## 14. 模型结果摘要",
             "",
             "| 模型 | 状态 | 摘要 |",
             "| --- | --- | --- |",
@@ -2671,6 +2688,15 @@ def run_case(playbook_id, overrides):
     )
     business_value = build_business_value(summary, difference)
     decision_tradeoff = build_decision_tradeoff(summary, difference, business_value, assumption_register)
+    executive_brief = build_executive_brief(
+        config,
+        summary,
+        difference,
+        business_value,
+        decision_tradeoff,
+        assumption_register,
+        operating_monitor,
+    )
 
     return {
         "status": "ok",
@@ -2685,6 +2711,7 @@ def run_case(playbook_id, overrides):
         "difference": difference,
         "business_value": business_value,
         "decision_tradeoff": decision_tradeoff,
+        "executive_brief": executive_brief,
         "network": network,
         "replenishment": replenishment,
         "service_mix": service_mix,
@@ -3584,6 +3611,49 @@ def build_decision_tradeoff(summary, difference, business_value, assumption_regi
         "recommendation": recommendation,
         "rationale": rationale,
         "dimensions": dimensions,
+    }
+
+
+def build_executive_brief(config, summary, difference, business_value, decision_tradeoff, assumption_register, operating_monitor):
+    high_risk_count = sum(1 for row in assumption_register.get("items", []) if row.get("risk") == "高")
+    net_value = float(business_value.get("net_business_value") or 0)
+    value_word = "正向" if net_value > 0 else "负向" if net_value < 0 else "持平"
+    headline = (
+        f"{config['name']} 综合成本 {format_number(summary['total_cost'])}，"
+        f"总缺口 {format_number(summary['total_shortage'])}，经营净影响{value_word}。"
+    )
+    if high_risk_count:
+        decision = f"{decision_tradeoff['recommendation']}，先完成 {high_risk_count} 项高风险前提确认。"
+    else:
+        decision = f"{decision_tradeoff['recommendation']}，按审批分层 {summary['approval_level']} 推进。"
+    watchout = operating_monitor.get("overall_state", "等待运行后生成监控状态")
+    talking_points = [
+        {
+            "topic": "业务价值",
+            "message": business_value.get("executive_takeaway", "等待收益归因生成。"),
+        },
+        {
+            "topic": "关键取舍",
+            "message": decision_tradeoff.get("rationale", "等待决策权衡生成。"),
+        },
+        {
+            "topic": "审批口径",
+            "message": f"当前审批层级为 {summary['approval_level']}，需要和执行交接、版本快照共同留痕。",
+        },
+        {
+            "topic": "数据可信度",
+            "message": assumption_register.get("signoff_note", "等待前提假设签核。"),
+        },
+        {
+            "topic": "上线观察",
+            "message": operating_monitor.get("rerun_policy", "等待监控策略生成。"),
+        },
+    ]
+    return {
+        "headline": headline,
+        "decision": decision,
+        "watchout": watchout,
+        "talking_points": talking_points,
     }
 
 

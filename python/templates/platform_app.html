@@ -991,6 +991,12 @@
             <div id="shortageCard" class="metric"><span class="label">总缺口</span><strong id="shortage" class="value">-</strong></div>
           </div>
           <div>
+            <h3>管理层汇报摘要</h3>
+            <div id="executiveBriefPanel" class="diff-panel">
+              <p class="small">运行后生成一页式汇报结论、建议决策和重点关注项。</p>
+            </div>
+          </div>
+          <div>
             <h3>企业就绪度总览</h3>
             <div id="enterpriseReadinessPanel" class="diff-panel">
               <p class="small">加载平台级数据、模型、治理、审计和执行闭环状态。</p>
@@ -1886,6 +1892,7 @@
       renderDifference(data.difference);
       renderBusinessValue(data.business_value);
       renderDecisionTradeoff(data.decision_tradeoff);
+      renderExecutiveBrief(data.executive_brief);
       renderAssumptionRegister(data.assumption_register);
       renderApprovalWorkflow(data.run_record ? data.run_record.approval : null, data.run_record);
       renderExecutionHandoff(data.execution_handoff, data.run_record ? data.run_record.approval : null);
@@ -2015,6 +2022,29 @@
             `).join("")}
           </tbody>
         </table>
+      `;
+    }
+
+    function renderExecutiveBrief(brief) {
+      if (!brief) {
+        field("executiveBriefPanel").innerHTML = `<p class="small">当前接口暂未返回管理层汇报摘要。</p>`;
+        return;
+      }
+      field("executiveBriefPanel").innerHTML = `
+        <div class="row">
+          <strong>${h(brief.decision)}</strong>
+          <span class="small">${h(brief.headline)}</span>
+          <span class="status">${h(brief.watchout)}</span>
+        </div>
+        <div class="rows">
+          ${brief.talking_points.map((row) => `
+            <div class="row">
+              <strong>${h(row.topic)}</strong>
+              <span class="small">${h(row.message)}</span>
+              <span class="status">汇报要点</span>
+            </div>
+          `).join("")}
+        </div>
       `;
     }
 
