@@ -1005,6 +1005,162 @@ def load_starrocks_run_history(limit=20):
     ]
 
 
+def load_starrocks_run_audit_report(run_id):
+    with starrocks_connection() as connection:
+        with connection.cursor() as cursor:
+            ensure_starrocks_run_history_tables(cursor)
+            cursor.execute(
+                """
+                SELECT run_id, created_at, playbook_id, playbook_name, status, total_cost,
+                       network_cost, replenishment_cost, staffing_cost, service_cost,
+                       total_shortage, approval_level, next_action, difference_headline,
+                       management_readout, upstream_source, config_source
+                FROM platform_run_history
+                WHERE run_id = %s
+                """,
+                (run_id,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            cursor.execute(
+                """
+                SELECT config_key, config_value
+                FROM platform_run_config_snapshot
+                WHERE run_id = %s
+                ORDER BY config_key
+                """,
+                (run_id,),
+            )
+            config = {}
+            for item in cursor.fetchall():
+                try:
+                    config[item["config_key"]] = json.loads(item["config_value"])
+                except json.JSONDecodeError:
+                    config[item["config_key"]] = item["config_value"]
+            cursor.execute(
+                """
+                SELECT version_key, version_value
+                FROM platform_run_version_snapshot
+                WHERE run_id = %s
+                ORDER BY version_key
+                """,
+                (run_id,),
+            )
+            versions = {item["version_key"]: item["version_value"] for item in cursor.fetchall()}
+            cursor.execute(
+                """
+                SELECT model_key, model_status, cost, shortage, result_json
+                FROM platform_run_model_results
+                WHERE run_id = %s
+                ORDER BY model_key
+                """,
+                (run_id,),
+            )
+            model_results = []
+            for item in cursor.fetchall():
+                try:
+                    detail = json.loads(item["result_json"])
+                except json.JSONDecodeError:
+                    detail = {}
+                model_results.append(
+                    {
+                        "model_key": item["model_key"],
+                        "status": item["model_status"],
+                        "cost": float(item["cost"]),
+                        "shortage": float(item["shortage"]),
+                        "detail_keys": sorted(detail.keys())[:8],
+                    }
+                )
+            approval = load_starrocks_approval_states(cursor, [run_id]).get(
+                run_id,
+                default_approval_state(row["approval_level"]),
+            )
+    return build_run_audit_report(
+        {
+            "run_id": row["run_id"],
+            "created_at": row["created_at"].isoformat(timespec="seconds") if hasattr(row["created_at"], "isoformat") else str(row["created_at"]),
+            "playbook": row["playbook_id"],
+            "playbook_name": row["playbook_name"],
+            "status": row["status"],
+            "config": config,
+            "summary": {
+                "total_cost": float(row["total_cost"]),
+                "network_cost": float(row["network_cost"]),
+                "replenishment_cost": float(row["replenishment_cost"]),
+                "staffing_cost": float(row["staffing_cost"]),
+                "service_cost": float(row["service_cost"]),
+                "total_shortage": float(row["total_shortage"]),
+                "approval_level": row["approval_level"],
+            },
+            "difference": {
+                "headline": row["difference_headline"],
+                "management_readout": row["management_readout"],
+            },
+            "next_action": row["next_action"],
+            "versions": versions,
+            "approval": approval,
+            "model_results": model_results,
+            "sources": {
+                "upstream": row["upstream_source"],
+                "config": row["config_source"],
+                "history": platform_run_history_source_label(),
+            },
+        }
+    )
+
+
+def build_run_audit_report(record):
+    versions = record.get("versions", {})
+    summary = record.get("summary", {})
+    config = record.get("config", {})
+    approval = record.get("approval") or default_approval_state(summary.get("approval_level", ""))
+    sources = record.get("sources") or {"history": record.get("storage", platform_run_history_source_label())}
+    evidence = [
+        {"name": "运行批次", "value": versions.get("run_batch_id") or record.get("run_batch_id") or record.get("run_id", "-"), "meaning": "一次可追责决策的唯一批次号"},
+        {"name": "上游数据版本", "value": versions.get("upstream_version", "-"), "meaning": "由上游来源和模型基础表生成的指纹"},
+        {"name": "场景配置版本", "value": versions.get("config_version", "-"), "meaning": "由本次方案参数生成的指纹"},
+        {"name": "模型代码版本", "value": versions.get("model_version", "-"), "meaning": "运行时后端代码 Git 版本或文件指纹"},
+        {"name": "求解器版本", "value": versions.get("solver_version", "-"), "meaning": "本次求解使用的优化引擎标识"},
+    ]
+    config_items = [
+        {"key": key, "value": value}
+        for key, value in sorted(config.items())
+    ]
+    model_results = record.get("model_results") or []
+    return {
+        "run_id": record.get("run_id", ""),
+        "created_at": record.get("created_at", ""),
+        "playbook": record.get("playbook", ""),
+        "playbook_name": record.get("playbook_name", ""),
+        "status": record.get("status", "optimal"),
+        "summary": summary,
+        "difference": record.get("difference", {}),
+        "approval": approval,
+        "next_action": record.get("next_action", ""),
+        "sources": sources,
+        "evidence": evidence,
+        "config_items": config_items,
+        "model_results": model_results,
+        "audit_conclusion": (
+            f"本批次使用 {record.get('playbook_name', '-')}，审批状态为 {approval.get('status_label', '-')}；"
+            f"综合成本 {format_number(summary.get('total_cost', 0))}，总缺口 {format_number(summary.get('total_shortage', 0))}。"
+        ),
+    }
+
+
+def load_run_audit_report(run_id):
+    if starrocks_upstream_enabled():
+        try:
+            return load_starrocks_run_audit_report(run_id)
+        except Exception:
+            pass
+    for row in load_run_history(100):
+        if row.get("run_id") == run_id:
+            return build_run_audit_report(row)
+    return None
+
+
 def default_approval_state(approval_level):
     return {
         "status": "auto_approved" if approval_level == "自动执行" else "not_submitted",
@@ -2830,6 +2986,19 @@ def get_run_history():
             "status": "ok",
             "data_source": platform_run_history_source_label(),
             "rows": load_run_history(limit),
+        }
+    )
+
+
+@app.get("/api/platform/run-report/<run_id>")
+def get_run_report(run_id):
+    report = load_run_audit_report(str(run_id).strip())
+    if not report:
+        return jsonify({"status": "error", "message": f"Unknown run_id: {run_id}"}), 404
+    return jsonify(
+        {
+            "status": "ok",
+            "report": report,
         }
     )
 

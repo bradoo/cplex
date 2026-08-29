@@ -1279,6 +1279,12 @@
               <tbody id="historyRows"></tbody>
             </table>
           </div>
+          <div>
+            <h3>运行批次审计报告</h3>
+            <div id="auditReportPanel" class="diff-panel">
+              <p class="small">点击运行记录中的“报告”，查看该批次的数据版本、配置版本、模型版本、审批状态和模型结果证据链。</p>
+            </div>
+          </div>
         </div>
       </section>
     </div>
@@ -1498,6 +1504,7 @@
       setResultPanel("bars", "models");
       setResultPanel("scenarioRecommendation", "models");
       setResultPanel("historyRows", "models");
+      setResultPanel("auditReportPanel", "models");
       activateResultView(initialTarget);
       document.querySelectorAll("[data-result-view-button]").forEach((button) => {
         button.addEventListener("click", () => activateResultView(button.dataset.resultViewButton));
@@ -2207,6 +2214,9 @@
         latestRunId = data.run_record ? data.run_record.run_id : "";
         renderRunSteps(4, 4);
         await loadRunHistory();
+        if (saveHistory && latestRunId) {
+          await loadRunAuditReport(latestRunId, false);
+        }
         await sleep(450);
         if (sequence !== runSequence) return;
         renderRunSteps(-1, 5, saveHistory ? "完成" : "回放");
@@ -2754,6 +2764,7 @@
           <td>${h(row.difference.headline || "-")}</td>
           <td>
             <button type="button" data-replay-run="${h(row.run_id)}">回放</button>
+            <button type="button" data-report-run="${h(row.run_id)}">报告</button>
             <button type="button" data-submit-run="${h(row.run_id)}" ${can("submit_approval") && ["not_submitted", "rejected"].includes(row.approval ? row.approval.status : "not_submitted") ? "" : "disabled"}>提交</button>
             <button type="button" data-approve-run="${h(row.run_id)}" ${can("decide_approval") && row.approval && row.approval.status === "submitted" ? "" : "disabled"}>批准</button>
             <button type="button" data-reject-run="${h(row.run_id)}" ${can("decide_approval") && row.approval && row.approval.status === "submitted" ? "" : "disabled"}>驳回</button>
@@ -2762,6 +2773,9 @@
       )).join("");
       document.querySelectorAll("[data-replay-run]").forEach((button) => {
         button.addEventListener("click", () => replayRun(button.dataset.replayRun));
+      });
+      document.querySelectorAll("[data-report-run]").forEach((button) => {
+        button.addEventListener("click", () => loadRunAuditReport(button.dataset.reportRun, true));
       });
       document.querySelectorAll("[data-submit-run]").forEach((button) => {
         button.addEventListener("click", () => updateApproval("submit", button.dataset.submitRun));
@@ -2804,6 +2818,93 @@
         renderReadiness(latestCaseData);
       }
       await loadRunHistory();
+    }
+
+    async function loadRunAuditReport(runId, focusPanel = true) {
+      field("auditReportPanel").innerHTML = `<p class="small">审计报告加载中...</p>`;
+      const response = await fetch(`/api/platform/run-report/${encodeURIComponent(runId)}`);
+      const data = await response.json();
+      if (!response.ok) {
+        field("auditReportPanel").innerHTML = `<p class="small">报告加载失败：${h(data.message || "未知错误")}</p>`;
+        return;
+      }
+      renderRunAuditReport(data.report);
+      if (focusPanel) {
+        activateResultView("models");
+      }
+    }
+
+    function renderRunAuditReport(report) {
+      const summary = report.summary || {};
+      const approval = report.approval || {};
+      const sources = report.sources || {};
+      field("auditReportPanel").innerHTML = `
+        <p class="diff-headline">${h(report.audit_conclusion)}</p>
+        <div class="grid">
+          <div class="metric"><span class="label">运行批次</span><strong class="value">${h(report.evidence[0]?.value || report.run_id)}</strong></div>
+          <div class="metric"><span class="label">综合成本</span><strong class="value">${fmt(summary.total_cost)}</strong></div>
+          <div class="metric"><span class="label">总缺口</span><strong class="value">${fmt(summary.total_shortage)}</strong></div>
+          <div class="metric"><span class="label">审批状态</span><strong class="value">${h(approval.status_label || "-")}</strong></div>
+        </div>
+        <div>
+          <h3>版本证据链</h3>
+          <div class="rows">
+            ${(report.evidence || []).map((item) => `
+              <div class="row"><strong>${h(item.name)}</strong><span class="small">${h(item.meaning)}</span><span class="status">${h(item.value)}</span></div>
+            `).join("")}
+          </div>
+        </div>
+        <div>
+          <h3>数据来源</h3>
+          <div class="rows">
+            ${Object.entries(sources).map(([key, value]) => `
+              <div class="row"><strong>${h(key)}</strong><span class="small">${h(value)}</span><span class="status">Source</span></div>
+            `).join("")}
+          </div>
+        </div>
+        <div class="two-col">
+          <div>
+            <h3>场景参数快照</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>参数</th><th>值</th></tr></thead>
+                <tbody>
+                  ${(report.config_items || []).map((item) => `<tr><td><strong>${h(item.key)}</strong></td><td>${h(JSON.stringify(item.value))}</td></tr>`).join("")}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div>
+            <h3>模型结果快照</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>模型</th><th>状态</th><th>成本</th><th>缺口</th><th>结果字段</th></tr></thead>
+                <tbody>
+                  ${(report.model_results || []).map((item) => `
+                    <tr>
+                      <td><strong>${h(item.model_key)}</strong></td>
+                      <td>${h(item.status)}</td>
+                      <td>${fmt(item.cost)}</td>
+                      <td>${fmt(item.shortage)}</td>
+                      <td>${h((item.detail_keys || []).join(", "))}</td>
+                    </tr>
+                  `).join("")}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <strong>审批留痕</strong>
+          <span class="small">${h(approval.comment || "暂无审批意见")}</span>
+          <span class="status">${h(approval.actor || "system")} ${h(approval.created_at ? formatRunTime(approval.created_at) : "")}</span>
+        </div>
+        <div class="row">
+          <strong>下一动作</strong>
+          <span class="small">${h(report.next_action || "-")}</span>
+          <span class="status">${h(report.status || "-")}</span>
+        </div>
+      `;
     }
 
     async function replayRun(runId) {
