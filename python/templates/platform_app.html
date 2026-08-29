@@ -1064,6 +1064,13 @@
     const stateKey = "cplexPlatformPocState";
 
     const fmt = (value) => Number(value || 0).toLocaleString("zh-CN", { maximumFractionDigits: 2 });
+    const h = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    }[char]));
     const field = (id) => document.getElementById(id);
 
     function activateLayer() {
@@ -1082,8 +1089,8 @@
       loadSharedState();
       field("configSource").textContent = data.data_source;
       field("playbooks").innerHTML = data.playbooks.map((item) => (
-        `<button data-id="${item.id}" class="playbook ${item.id === selected ? "active" : ""}">
-          <strong>${item.name}</strong><span>${item.description}</span>
+        `<button data-id="${h(item.id)}" class="playbook ${item.id === selected ? "active" : ""}">
+          <strong>${h(item.name)}</strong><span>${h(item.description)}</span>
         </button>`
       )).join("");
       document.querySelectorAll("#playbooks button").forEach((button) => {
@@ -1138,10 +1145,10 @@
       }
       field("configAuditRows").innerHTML = rows.map((row) => `
         <tr>
-          <td>${new Date(row.created_at).toLocaleString("zh-CN")}</td>
-          <td><strong>${row.playbook_id}</strong></td>
-          <td>${row.actor}</td>
-          <td>${row.changed_fields.map((item) => `${item.field}: ${item.before} -> ${item.after}`).join("<br>")}</td>
+          <td>${h(new Date(row.created_at).toLocaleString("zh-CN"))}</td>
+          <td><strong>${h(row.playbook_id)}</strong></td>
+          <td>${h(row.actor)}</td>
+          <td>${row.changed_fields.map((item) => `${h(item.field)}: ${h(item.before)} -> ${h(item.after)}`).join("<br>")}</td>
         </tr>
       `).join("");
     }
@@ -1152,7 +1159,7 @@
       upstreamData = data.data;
       field("upstreamSource").textContent = data.data_source;
       field("upstreamSummary").innerHTML = upstreamRows(data).map(([name, value, meaning]) => (
-        `<div class="row"><strong>${name}</strong><span class="small">${meaning}</span><span class="status">${value}</span></div>`
+        `<div class="row"><strong>${h(name)}</strong><span class="small">${h(meaning)}</span><span class="status">${h(value)}</span></div>`
       )).join("");
       field("upstreamStatus").textContent = upstreamLoadStatus(data);
       renderUpstreamTables();
@@ -1201,13 +1208,13 @@
         <div class="metric ${Number(value) < 0 ? "warn" : "good"}">
           <span class="label">${label}</span>
           <strong class="value">${fmt(value)}</strong>
-          <span class="small">${meaning}</span>
+          <span class="small">${h(meaning)}</span>
         </div>
       `).join("");
       field("qualityChecks").innerHTML = data.checks.map((check) => `
         <div class="row">
-          <strong>${check.name}</strong>
-          <span class="small">${check.detail}<br>${check.action}</span>
+          <strong>${h(check.name)}</strong>
+          <span class="small">${h(check.detail)}<br>${h(check.action)}</span>
           <span class="status">${check.level === "pass" ? "通过" : "关注"}</span>
         </div>
       `).join("");
@@ -1230,15 +1237,15 @@
       ];
       field("sourceMetrics").innerHTML = metrics.map(([label, value, meaning, tone]) => `
         <div class="metric ${tone}">
-          <span class="label">${label}</span>
-          <strong class="value">${typeof value === "number" ? fmt(value) : value}</strong>
-          <span class="small">${meaning}</span>
+          <span class="label">${h(label)}</span>
+          <strong class="value">${typeof value === "number" ? fmt(value) : h(value)}</strong>
+          <span class="small">${h(meaning)}</span>
         </div>
       `).join("");
       field("sourceTableRows").innerHTML = (data.tables || []).map((table) => `
         <tr>
-          <td><strong>${table.name}</strong></td>
-          <td>${table.role}</td>
+          <td><strong>${h(table.name)}</strong></td>
+          <td>${h(table.role)}</td>
           <td>${fmt(table.rows)}</td>
         </tr>
       `).join("");
@@ -1261,19 +1268,19 @@
       ];
       field("scaleMetrics").innerHTML = metrics.map(([label, value, meaning, tone]) => `
         <div class="metric ${tone}">
-          <span class="label">${label}</span>
+          <span class="label">${h(label)}</span>
           <strong class="value">${fmt(value)}</strong>
-          <span class="small">${meaning}</span>
+          <span class="small">${h(meaning)}</span>
         </div>
       `).join("");
       field("scaleModelRows").innerHTML = data.models.map((model) => `
         <tr>
-          <td><strong>${model.name}</strong></td>
-          <td>${model.input_sets}</td>
+          <td><strong>${h(model.name)}</strong></td>
+          <td>${h(model.input_sets)}</td>
           <td>${fmt(model.source_rows)}</td>
           <td>${fmt(model.variables_estimate)}</td>
           <td>${fmt(model.constraints_estimate)}</td>
-          <td>${model.prepare_note}</td>
+          <td>${h(model.prepare_note)}</td>
         </tr>
       `).join("");
     }
@@ -1284,25 +1291,25 @@
       renderLineageDiagram(data);
       field("lineageNodeRows").innerHTML = data.nodes.map((node) => (
         `<div class="row">
-          <strong>${node.name}</strong>
-          <span class="small">${node.description}</span>
-          <span class="status">${node.source}</span>
+          <strong>${h(node.name)}</strong>
+          <span class="small">${h(node.description)}</span>
+          <span class="status">${h(node.source)}</span>
         </div>`
       )).join("");
       field("lineageTransformRows").innerHTML = data.transforms.map((row) => (
         `<tr>
-          <td><strong>${row.from}</strong></td>
-          <td>${row.config}</td>
-          <td>${row.to}</td>
-          <td>${row.rule}</td>
+          <td><strong>${h(row.from)}</strong></td>
+          <td>${h(row.config)}</td>
+          <td>${h(row.to)}</td>
+          <td>${h(row.rule)}</td>
         </tr>`
       )).join("");
       field("lineageFieldRows").innerHTML = data.field_map.map((row) => (
         `<tr>
-          <td><strong>${row.business_field}</strong></td>
-          <td>${row.upstream_path}</td>
-          <td>${row.model_input_path}</td>
-          <td>${row.used_by}</td>
+          <td><strong>${h(row.business_field)}</strong></td>
+          <td>${h(row.upstream_path)}</td>
+          <td>${h(row.model_input_path)}</td>
+          <td>${h(row.used_by)}</td>
         </tr>`
       )).join("");
     }
@@ -1313,29 +1320,29 @@
       field("constraintCards").innerHTML = data.models.map((model) => `
         <div class="explain-card">
           <div>
-            <h3>${model.name}</h3>
-            <p class="small">${model.business_question}</p>
+            <h3>${h(model.name)}</h3>
+            <p class="small">${h(model.business_question)}</p>
           </div>
           <div>
             <strong>决策变量</strong>
             <ul class="explain-list">
               ${model.variables.map((item) => `
-                <li><strong>${item.name}</strong><span class="small">${item.type}：${item.meaning}</span></li>
+                <li><strong>${h(item.name)}</strong><span class="small">${h(item.type)}：${h(item.meaning)}</span></li>
               `).join("")}
             </ul>
           </div>
           <div>
             <strong>目标函数</strong>
-            <p class="small">${model.objective}</p>
+            <p class="small">${h(model.objective)}</p>
           </div>
           <div>
             <strong>核心约束</strong>
             <ul class="explain-list">
               ${model.constraints.map((item) => `
                 <li>
-                  <strong>${item.name}</strong>
-                  <span class="formula">${item.formula}</span>
-                  <span class="small">${item.meaning}</span>
+                  <strong>${h(item.name)}</strong>
+                  <span class="formula">${h(item.formula)}</span>
+                  <span class="small">${h(item.meaning)}</span>
                 </li>
               `).join("")}
             </ul>
@@ -1343,7 +1350,7 @@
           <div>
             <strong>输出字段</strong>
             <div class="lineage-tags">
-              ${model.outputs.map((item) => `<span class="lineage-tag">${item}</span>`).join("")}
+              ${model.outputs.map((item) => `<span class="lineage-tag">${h(item)}</span>`).join("")}
             </div>
           </div>
         </div>
@@ -1354,11 +1361,11 @@
       const headings = ["求解模块", "上游业务表", "场景参数", "转换函数", "CPLEX 入参", "求解器", "输出结果"];
       field("lineageDiagram").innerHTML = `
         <div class="lineage-legend">
-          ${headings.map((heading) => `<span>${heading}</span>`).join("")}
+          ${headings.map((heading) => `<span>${h(heading)}</span>`).join("")}
         </div>
         ${data.model_flows.map((flow) => `
           <div class="lineage-flow">
-            <div class="lineage-model"><strong>${flow.model}</strong><span>实际运行链路</span></div>
+            <div class="lineage-model"><strong>${h(flow.model)}</strong><span>实际运行链路</span></div>
             ${nodeCard("上游数据", flow.upstream, "source")}
             ${nodeCard("配置覆盖", flow.config, "config")}
             ${nodeCard(flow.transform, ["生成 runtime payload"], "transform")}
@@ -1374,9 +1381,9 @@
       const values = Array.isArray(details) ? details : [details];
       return `
         <div class="lineage-node ${type}">
-          <strong>${title}</strong>
+          <strong>${h(title)}</strong>
           <div class="lineage-tags">
-            ${values.map((value) => `<span class="lineage-tag">${value}</span>`).join("")}
+            ${values.map((value) => `<span class="lineage-tag">${h(value)}</span>`).join("")}
           </div>
         </div>
       `;
@@ -1408,23 +1415,23 @@
       }
       field("marketRows").innerHTML = Object.entries(upstreamData.network.markets).map(([market, data]) => (
         `<tr>
-          <td><strong>${market}</strong></td>
-          <td><input data-upstream="market" data-name="${market}" data-field="demand" type="number" step="1" value="${data.demand}"></td>
-          <td><input data-upstream="market" data-name="${market}" data-field="max_delivery_days" type="number" step="1" value="${data.max_delivery_days}"></td>
+          <td><strong>${h(market)}</strong></td>
+          <td><input data-upstream="market" data-name="${h(market)}" data-field="demand" type="number" step="1" value="${h(data.demand)}"></td>
+          <td><input data-upstream="market" data-name="${h(market)}" data-field="max_delivery_days" type="number" step="1" value="${h(data.max_delivery_days)}"></td>
         </tr>`
       )).join("");
       field("warehouseRows").innerHTML = Object.entries(upstreamData.network.warehouses).map(([warehouse, data]) => (
         `<tr>
-          <td><strong>${warehouse}</strong></td>
-          <td><input data-upstream="warehouse" data-name="${warehouse}" data-field="capacity" type="number" step="1" value="${data.capacity}"></td>
-          <td><input data-upstream="warehouse" data-name="${warehouse}" data-field="fixed_cost" type="number" step="100" value="${data.fixed_cost}"></td>
-          <td><input data-upstream="warehouse" data-name="${warehouse}" data-field="handling_cost" type="number" step="0.05" value="${data.handling_cost}"></td>
+          <td><strong>${h(warehouse)}</strong></td>
+          <td><input data-upstream="warehouse" data-name="${h(warehouse)}" data-field="capacity" type="number" step="1" value="${h(data.capacity)}"></td>
+          <td><input data-upstream="warehouse" data-name="${h(warehouse)}" data-field="fixed_cost" type="number" step="100" value="${h(data.fixed_cost)}"></td>
+          <td><input data-upstream="warehouse" data-name="${h(warehouse)}" data-field="handling_cost" type="number" step="0.05" value="${h(data.handling_cost)}"></td>
         </tr>`
       )).join("");
       field("replenishmentRows").innerHTML = upstreamData.replenishment.weeks.map((week) => (
         `<tr>
-          <td><strong>${week}</strong></td>
-          <td><input data-upstream="replenishment_demand" data-name="${week}" type="number" step="1" value="${upstreamData.replenishment.demand[week]}"></td>
+          <td><strong>${h(week)}</strong></td>
+          <td><input data-upstream="replenishment_demand" data-name="${h(week)}" type="number" step="1" value="${h(upstreamData.replenishment.demand[week])}"></td>
         </tr>`
       )).join("");
       document.querySelectorAll("[data-upstream]").forEach((input) => {
@@ -1442,11 +1449,11 @@
       field("orderSampleStatus").textContent = `抽样 ${fmt(orders.length)} / 总量 ${fmt(total)}`;
       field("orderSampleRows").innerHTML = visible.map((order) => `
         <tr>
-          <td><strong>${order.order_id}</strong></td>
-          <td>${order.market}</td>
-          <td>${order.channel}</td>
+          <td><strong>${h(order.order_id)}</strong></td>
+          <td>${h(order.market)}</td>
+          <td>${h(order.channel)}</td>
           <td>${fmt(order.units)}</td>
-          <td>${order.priority}</td>
+          <td>${h(order.priority)}</td>
           <td>${fmt(order.requested_delivery_days)}</td>
           <td>${fmt(order.demand_share_bp)}</td>
         </tr>
@@ -1575,10 +1582,10 @@
         const changed = Number(baseValue) !== Number(value);
         return `
           <div class="impact-card ${changed ? "changed" : ""}">
-            <strong>${name}</strong>
-            <span class="small">影响模型：${model}</span>
-            <span class="small">影响约束：${constraint}</span>
-            <span class="status">${changed ? `${baseValue} -> ${value}` : "与基准一致"}</span>
+            <strong>${h(name)}</strong>
+            <span class="small">影响模型：${h(model)}</span>
+            <span class="small">影响约束：${h(constraint)}</span>
+            <span class="status">${changed ? `${h(baseValue)} -> ${h(value)}` : "与基准一致"}</span>
           </div>
         `;
       }).join("");
@@ -1644,8 +1651,8 @@
       field("decisionNote").textContent = summary.decision_note;
       field("shortageCard").className = `metric ${summary.total_shortage > 500 ? "bad" : summary.total_shortage > 0 ? "warn" : "good"}`;
       field("totalCard").className = `metric ${summary.approval_level === "管理层审批" ? "warn" : ""}`;
-      field("actions").innerHTML = summary.actions.map((item) => `<li>${item}</li>`).join("");
-      field("risks").innerHTML = summary.risks.map((item) => `<div class="item"><strong>${item}</strong></div>`).join("");
+      field("actions").innerHTML = summary.actions.map((item) => `<li>${h(item)}</li>`).join("");
+      field("risks").innerHTML = summary.risks.map((item) => `<div class="item"><strong>${h(item)}</strong></div>`).join("");
       latestConfig = data.config;
       latestModelInputs = data.model_inputs;
       renderLineage(data.model_inputs.lineage);
@@ -1663,7 +1670,7 @@
         ["场景配置", lineage.scenario_config_source, "方案参数和假设"],
         ["转换逻辑", lineage.transform, "模型运行前的数据加工"]
       ].map(([name, value, meaning]) => (
-        `<div class="row"><strong>${name}</strong><span class="small">${meaning}</span><span class="status">${value}</span></div>`
+        `<div class="row"><strong>${h(name)}</strong><span class="small">${h(meaning)}</span><span class="status">${h(value)}</span></div>`
       )).join("");
     }
 
@@ -1718,9 +1725,9 @@
       ];
       field("readinessRows").innerHTML = rows.map(([name, status, detail, done]) => `
         <div class="readiness-item ${done ? "done" : "warn"}">
-          <strong>${name}</strong>
-          <span class="status">${status}</span>
-          <span class="small">${detail}</span>
+          <strong>${h(name)}</strong>
+          <span class="status">${h(status)}</span>
+          <span class="small">${h(detail)}</span>
         </div>
       `).join("");
     }
@@ -1731,11 +1738,11 @@
         return;
       }
       field("differencePanel").innerHTML = `
-        <p class="diff-headline">${difference.headline}</p>
+        <p class="diff-headline">${h(difference.headline)}</p>
         <div class="diff-grid">
           ${difference.metrics.map((item) => `
             <div class="diff-card ${item.direction}">
-              <span class="label">${item.label}</span>
+              <span class="label">${h(item.label)}</span>
               <strong>${fmt(item.current)}</strong>
               <span>基准 ${fmt(item.baseline)} / 变化 ${formatDelta(item.delta)}</span>
             </div>
@@ -1744,13 +1751,13 @@
         <div>
           <h3>变化原因</h3>
           <ul class="actions">
-            ${difference.drivers.map((item) => `<li>${item}</li>`).join("")}
+            ${difference.drivers.map((item) => `<li>${h(item)}</li>`).join("")}
           </ul>
         </div>
         <div class="row">
           <strong>管理解读</strong>
-          <span class="small">${difference.management_readout}</span>
-          <span class="status">${difference.baseline}</span>
+          <span class="small">${h(difference.management_readout)}</span>
+          <span class="status">${h(difference.baseline)}</span>
         </div>
       `;
     }
@@ -1758,10 +1765,10 @@
     function renderExecutionPlan(plan) {
       field("executionRows").innerHTML = plan.map((row) => `
         <tr>
-          <td><strong>${row.owner}</strong></td>
-          <td><span class="status">${row.priority}</span></td>
-          <td>${row.trigger}</td>
-          <td>${row.action}</td>
+          <td><strong>${h(row.owner)}</strong></td>
+          <td><span class="status">${h(row.priority)}</span></td>
+          <td>${h(row.trigger)}</td>
+          <td>${h(row.action)}</td>
         </tr>
       `).join("");
     }
@@ -1783,10 +1790,10 @@
       const rows = modelInputRows(key, input);
       field("inputRows").innerHTML = rows.map(([name, value, meaning, change]) => (
         `<tr class="${change ? "changed-input" : ""}">
-          <td><strong>${name}</strong></td>
-          <td>${value}</td>
-          <td>${meaning}</td>
-          <td>${change ? `<span class="change-pill">${change}</span>` : "-"}</td>
+          <td><strong>${h(name)}</strong></td>
+          <td>${h(value)}</td>
+          <td>${h(meaning)}</td>
+          <td>${change ? `<span class="change-pill">${h(change)}</span>` : "-"}</td>
         </tr>`
       )).join("");
     }
@@ -1869,7 +1876,7 @@
         ["服务水平组合", data.service_mix.status, `成本 ${fmt(data.service_mix.total_cost)}`],
         ["人员排班", data.staffing.status, `模式 ${data.staffing.mode || "-"}，缺口 ${fmt(data.staffing.total_shortage)}`]
       ].map((row) => (
-        `<div class="row"><strong>${row[0]}</strong><span class="small">${row[2]}</span><span class="status">${row[1]}</span></div>`
+        `<div class="row"><strong>${h(row[0])}</strong><span class="small">${h(row[2])}</span><span class="status">${h(row[1])}</span></div>`
       )).join("");
     }
 
@@ -1881,31 +1888,31 @@
       field("compareHead").innerHTML = `
         <tr>
           <th>指标</th>
-          ${matrix.columns.map((column) => `<th>${column.name}</th>`).join("")}
+          ${matrix.columns.map((column) => `<th>${h(column.name)}</th>`).join("")}
         </tr>
       `;
       field("compareRows").innerHTML = matrix.rows.map((row) => (
         `<tr>
-          <td><strong>${row.metric}</strong></td>
-          ${row.values.map((value) => `<td>${formatMatrixValue(value)}</td>`).join("")}
+          <td><strong>${h(row.metric)}</strong></td>
+          ${row.values.map((value) => `<td>${h(formatMatrixValue(value))}</td>`).join("")}
         </tr>`
       )).join("");
     }
 
     function renderScenarioRecommendation(recommendation) {
       field("scenarioRecommendation").innerHTML = `
-        <p class="diff-headline">推荐方案：${recommendation.name}</p>
+        <p class="diff-headline">推荐方案：${h(recommendation.name)}</p>
         <div class="row">
           <strong>推荐逻辑</strong>
-          <span class="small">${recommendation.reason}</span>
-          <span class="status">${recommendation.playbook}</span>
+          <span class="small">${h(recommendation.reason)}</span>
+          <span class="status">${h(recommendation.playbook)}</span>
         </div>
         <div class="row">
           <strong>首要动作</strong>
-          <span class="small">${recommendation.recommended_action}</span>
+          <span class="small">${h(recommendation.recommended_action)}</span>
           <span class="status">Next</span>
         </div>
-        <p class="small">${recommendation.criteria}</p>
+        <p class="small">${h(recommendation.criteria)}</p>
       `;
     }
 
@@ -1930,13 +1937,13 @@
       }
       field("historyRows").innerHTML = rows.map((row) => (
         `<tr>
-          <td><strong>${formatRunTime(row.created_at)}</strong><div class="small">${row.run_id}</div></td>
-          <td>${row.playbook_name}</td>
+          <td><strong>${h(formatRunTime(row.created_at))}</strong><div class="small">${h(row.run_id)}</div></td>
+          <td>${h(row.playbook_name)}</td>
           <td>${fmt(row.summary.total_cost)}</td>
           <td>${fmt(row.summary.total_shortage)}</td>
-          <td>${row.summary.approval_level}</td>
-          <td>${row.difference.headline || "-"}</td>
-          <td><button type="button" data-replay-run="${row.run_id}">回放</button></td>
+          <td>${h(row.summary.approval_level)}</td>
+          <td>${h(row.difference.headline || "-")}</td>
+          <td><button type="button" data-replay-run="${h(row.run_id)}">回放</button></td>
         </tr>`
       )).join("");
       document.querySelectorAll("[data-replay-run]").forEach((button) => {
@@ -1996,7 +2003,7 @@
         return;
       }
       lastReportPath = data.report.path;
-      field("exportStatus").innerHTML = `已导出：<strong>${data.report.path}</strong>`;
+      field("exportStatus").innerHTML = `已导出：<strong>${h(data.report.path)}</strong>`;
       if (latestCaseData) {
         renderReadiness(latestCaseData);
       }

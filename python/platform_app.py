@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import tempfile
 import uuid
@@ -840,6 +841,17 @@ def validate_platform_data(data):
     return None
 
 
+def validate_number(value, path, minimum=None, exclusive_minimum=False):
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(float(value)):
+        return f"{path} must be a finite number"
+    if minimum is not None:
+        if exclusive_minimum and value <= minimum:
+            return f"{path} must be greater than {minimum}"
+        if not exclusive_minimum and value < minimum:
+            return f"{path} must be at least {minimum}"
+    return None
+
+
 def validate_upstream_data(data):
     if not isinstance(data, dict):
         return "data must be a JSON object"
@@ -861,13 +873,32 @@ def validate_upstream_data(data):
 
     for warehouse, values in network["warehouses"].items():
         for field in ("capacity", "fixed_cost", "handling_cost"):
-            if field not in values or not isinstance(values[field], (int, float)):
-                return f"network.warehouses.{warehouse}.{field} must be numeric"
+            if field not in values:
+                return f"network.warehouses.{warehouse}.{field} is required"
+            error = validate_number(values[field], f"network.warehouses.{warehouse}.{field}", minimum=0)
+            if error:
+                return error
 
     for market, values in network["markets"].items():
         for field in ("demand", "max_delivery_days"):
-            if field not in values or not isinstance(values[field], (int, float)):
-                return f"network.markets.{market}.{field} must be numeric"
+            if field not in values:
+                return f"network.markets.{market}.{field} is required"
+        error = validate_number(values["demand"], f"network.markets.{market}.demand", minimum=0)
+        if error:
+            return error
+        error = validate_number(values["max_delivery_days"], f"network.markets.{market}.max_delivery_days", minimum=0, exclusive_minimum=True)
+        if error:
+            return error
+
+    for warehouse, values in network["expansion_options"].items():
+        if warehouse not in network["warehouses"]:
+            return f"network.expansion_options references unknown warehouse: {warehouse}"
+        for field in ("max_extra_capacity", "unit_cost"):
+            if field not in values:
+                return f"network.expansion_options.{warehouse}.{field} is required"
+            error = validate_number(values[field], f"network.expansion_options.{warehouse}.{field}", minimum=0)
+            if error:
+                return error
 
     lane_pairs = set()
     for lane in network["lanes"]:
@@ -878,10 +909,12 @@ def validate_upstream_data(data):
             return f"network lane references unknown warehouse: {lane['warehouse']}"
         if lane["market"] not in network["markets"]:
             return f"network lane references unknown market: {lane['market']}"
-        if not isinstance(lane["last_mile_cost"], (int, float)):
-            return "network lane last_mile_cost must be numeric"
-        if not isinstance(lane["delivery_days"], (int, float)):
-            return "network lane delivery_days must be numeric"
+        error = validate_number(lane["last_mile_cost"], "network lane last_mile_cost", minimum=0)
+        if error:
+            return error
+        error = validate_number(lane["delivery_days"], "network lane delivery_days", minimum=0, exclusive_minimum=True)
+        if error:
+            return error
         lane_pairs.add((lane["warehouse"], lane["market"]))
 
     expected_lane_pairs = {
@@ -905,11 +938,56 @@ def validate_upstream_data(data):
     for week in replenishment["weeks"]:
         if week not in replenishment["demand"]:
             return f"replenishment.demand is missing week: {week}"
+        error = validate_number(replenishment["demand"][week], f"replenishment.demand.{week}", minimum=0)
+        if error:
+            return error
+    for lane, values in replenishment["lanes"].items():
+        for field in ("lead_time_weeks", "unit_cost", "weekly_capacity"):
+            if field not in values:
+                return f"replenishment.lanes.{lane}.{field} is required"
+            minimum = 0
+            exclusive = field == "lead_time_weeks"
+            error = validate_number(values[field], f"replenishment.lanes.{lane}.{field}", minimum=minimum, exclusive_minimum=exclusive)
+            if error:
+                return error
+    for field in ("initial_inventory", "target_ending_inventory", "holding_cost", "stockout_penalty"):
+        error = validate_number(replenishment[field], f"replenishment.{field}", minimum=0)
+        if error:
+            return error
 
     service_level = data["service_level"]
     for key in ("markets", "services"):
         if key not in service_level or not isinstance(service_level[key], dict) or not service_level[key]:
             return f"service_level.{key} must be a non-empty object"
+    for market, values in service_level["markets"].items():
+        for field in ("demand", "max_avg_delivery_days"):
+            if field not in values:
+                return f"service_level.markets.{market}.{field} is required"
+        error = validate_number(values["demand"], f"service_level.markets.{market}.demand", minimum=0)
+        if error:
+            return error
+        error = validate_number(values["max_avg_delivery_days"], f"service_level.markets.{market}.max_avg_delivery_days", minimum=0, exclusive_minimum=True)
+        if error:
+            return error
+    for service, values in service_level["services"].items():
+        for field in ("capacity", "fixed_cost", "unit_cost_by_market", "delivery_days_by_market"):
+            if field not in values:
+                return f"service_level.services.{service}.{field} is required"
+        for field in ("capacity", "fixed_cost"):
+            error = validate_number(values[field], f"service_level.services.{service}.{field}", minimum=0)
+            if error:
+                return error
+        for market in service_level["markets"]:
+            if market not in values["unit_cost_by_market"]:
+                return f"service_level.services.{service}.unit_cost_by_market is missing market: {market}"
+            if market not in values["delivery_days_by_market"]:
+                return f"service_level.services.{service}.delivery_days_by_market is missing market: {market}"
+            error = validate_number(values["unit_cost_by_market"][market], f"service_level.services.{service}.unit_cost_by_market.{market}", minimum=0)
+            if error:
+                return error
+            error = validate_number(values["delivery_days_by_market"][market], f"service_level.services.{service}.delivery_days_by_market.{market}", minimum=0, exclusive_minimum=True)
+            if error:
+                return error
 
     return None
 
