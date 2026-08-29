@@ -24,6 +24,23 @@ RUN_HISTORY_PATH = Path(__file__).resolve().parent / "reports" / "platform_runs.
 REPORTS_DIR = Path(__file__).resolve().parent / "reports"
 NETWORK_MODES = {"strict", "soft_capacity", "capacity_expansion"}
 STARROCKS_DEFAULT_LIMIT = 1000
+STARROCKS_SOURCE_TABLES = [
+    ("upstream_orders", "订单事实表"),
+    ("platform_playbooks", "场景方案配置"),
+    ("platform_assets", "平台资产导航"),
+    ("platform_capabilities", "平台能力说明"),
+    ("upstream_network_warehouses", "仓库能力"),
+    ("upstream_network_markets", "市场需求"),
+    ("upstream_network_lanes", "仓网线路"),
+    ("upstream_network_expansion_options", "扩容选项"),
+    ("upstream_replenishment_weeks", "补货周序列"),
+    ("upstream_replenishment_demand", "补货预测"),
+    ("upstream_replenishment_lanes", "补货渠道能力"),
+    ("upstream_replenishment_parameters", "补货全局参数"),
+    ("upstream_service_markets", "服务市场需求"),
+    ("upstream_service_providers", "服务商能力"),
+    ("upstream_service_provider_market_terms", "服务商市场条款"),
+]
 CONFIG_AUDIT_KEYS = ["demand_multiplier", "sla_extra_days", "air_capacity", "ocean_lead_time", "unfulfilled_penalty", "network_mode", "staff_peak", "soft_staffing"]
 
 
@@ -124,6 +141,12 @@ def load_starrocks_orders_into_upstream_data(data):
     metadata["source_systems"] = sorted(set(metadata.get("source_systems", [])) | {"StarRocks"})
     metadata["order_line_count"] = order_line_count
     metadata["order_sample_limit"] = limit
+    metadata["record_count"] = order_line_count
+    metadata["description"] = (
+        f"StarRocks 上游库表已接入 {format_number(order_line_count)} 条订单明细，"
+        f"页面抽样展示 {format_number(min(limit, order_line_count))} 条；"
+        "模型运行前使用聚合后的业务基础表生成 CPLEX 入参。"
+    )
     metadata["upstream_storage"] = f"starrocks://{config['host']}:{config['port']}/{config['database']}"
     return data
 
@@ -298,23 +321,7 @@ def build_upstream_source_status():
         }
 
     config = starrocks_config()
-    table_specs = [
-        (config["table"], "订单事实表"),
-        ("platform_playbooks", "场景方案配置"),
-        ("platform_assets", "平台资产导航"),
-        ("platform_capabilities", "平台能力说明"),
-        ("upstream_network_warehouses", "仓库能力"),
-        ("upstream_network_markets", "市场需求"),
-        ("upstream_network_lanes", "仓网线路"),
-        ("upstream_network_expansion_options", "扩容选项"),
-        ("upstream_replenishment_weeks", "补货周序列"),
-        ("upstream_replenishment_demand", "补货预测"),
-        ("upstream_replenishment_lanes", "补货渠道能力"),
-        ("upstream_replenishment_parameters", "补货全局参数"),
-        ("upstream_service_markets", "服务市场需求"),
-        ("upstream_service_providers", "服务商能力"),
-        ("upstream_service_provider_market_terms", "服务商市场条款"),
-    ]
+    table_specs = [(config["table"] if table == "upstream_orders" else table, role) for table, role in STARROCKS_SOURCE_TABLES]
     try:
         with starrocks_connection() as connection:
             with connection.cursor() as cursor:
@@ -517,10 +524,79 @@ def save_starrocks_upstream_data(data):
                     for warehouse, values in data["network"]["warehouses"].items()
                 ],
             )
+            cursor.execute("TRUNCATE TABLE upstream_network_lanes")
+            cursor.executemany(
+                "INSERT INTO upstream_network_lanes (warehouse, market, last_mile_cost, delivery_days) VALUES (%s, %s, %s, %s)",
+                [
+                    (lane["warehouse"], lane["market"], lane["last_mile_cost"], lane["delivery_days"])
+                    for lane in data["network"]["lanes"]
+                ],
+            )
+            cursor.execute("TRUNCATE TABLE upstream_network_expansion_options")
+            cursor.executemany(
+                "INSERT INTO upstream_network_expansion_options (warehouse, max_extra_capacity, unit_cost) VALUES (%s, %s, %s)",
+                [
+                    (warehouse, values["max_extra_capacity"], values["unit_cost"])
+                    for warehouse, values in data["network"]["expansion_options"].items()
+                ],
+            )
+            cursor.execute("TRUNCATE TABLE upstream_replenishment_weeks")
+            cursor.executemany(
+                "INSERT INTO upstream_replenishment_weeks (week_name, week_index) VALUES (%s, %s)",
+                [(week, index) for index, week in enumerate(data["replenishment"]["weeks"])],
+            )
             cursor.execute("TRUNCATE TABLE upstream_replenishment_demand")
             cursor.executemany(
                 "INSERT INTO upstream_replenishment_demand (week_name, demand) VALUES (%s, %s)",
                 list(data["replenishment"]["demand"].items()),
+            )
+            cursor.execute("TRUNCATE TABLE upstream_replenishment_lanes")
+            cursor.executemany(
+                "INSERT INTO upstream_replenishment_lanes (lane, lead_time_weeks, unit_cost, weekly_capacity) VALUES (%s, %s, %s, %s)",
+                [
+                    (lane, values["lead_time_weeks"], values["unit_cost"], values["weekly_capacity"])
+                    for lane, values in data["replenishment"]["lanes"].items()
+                ],
+            )
+            cursor.execute("TRUNCATE TABLE upstream_replenishment_parameters")
+            cursor.execute(
+                """
+                INSERT INTO upstream_replenishment_parameters
+                (parameter_id, initial_inventory, target_ending_inventory, holding_cost, stockout_penalty)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                (
+                    "default",
+                    data["replenishment"]["initial_inventory"],
+                    data["replenishment"]["target_ending_inventory"],
+                    data["replenishment"]["holding_cost"],
+                    data["replenishment"]["stockout_penalty"],
+                ),
+            )
+            cursor.execute("TRUNCATE TABLE upstream_service_markets")
+            cursor.executemany(
+                "INSERT INTO upstream_service_markets (market, demand, max_avg_delivery_days) VALUES (%s, %s, %s)",
+                [
+                    (market, values["demand"], values["max_avg_delivery_days"])
+                    for market, values in data["service_level"]["markets"].items()
+                ],
+            )
+            cursor.execute("TRUNCATE TABLE upstream_service_providers")
+            cursor.executemany(
+                "INSERT INTO upstream_service_providers (service, capacity, fixed_cost) VALUES (%s, %s, %s)",
+                [
+                    (service, values["capacity"], values["fixed_cost"])
+                    for service, values in data["service_level"]["services"].items()
+                ],
+            )
+            cursor.execute("TRUNCATE TABLE upstream_service_provider_market_terms")
+            cursor.executemany(
+                "INSERT INTO upstream_service_provider_market_terms (service, market, unit_cost, delivery_days) VALUES (%s, %s, %s, %s)",
+                [
+                    (service, market, values["unit_cost_by_market"][market], values["delivery_days_by_market"][market])
+                    for service, values in data["service_level"]["services"].items()
+                    for market in data["service_level"]["markets"]
+                ],
             )
         connection.commit()
 
@@ -864,13 +940,14 @@ def build_data_quality_metrics(data):
 
 
 def build_data_quality_checks(data, validation_error):
+    source_label = "StarRocks 上游库表" if starrocks_upstream_enabled() else "本地 JSON 样例数据"
     if validation_error:
         return [
             {
                 "name": "数据结构",
                 "level": "warn",
                 "detail": validation_error,
-                "action": "先修复 JSON 结构或必填字段，再运行模型。",
+                "action": f"先修复 {source_label} 的结构或必填字段，再运行模型。",
             }
         ]
 
@@ -882,22 +959,24 @@ def build_data_quality_checks(data, validation_error):
         {
             "name": "数据结构",
             "level": "pass",
-            "detail": "上游 JSON 已通过必填字段、类型和线路覆盖校验。",
+            "detail": f"{source_label} 已通过必填字段、类型和线路覆盖校验。",
             "action": "可以继续生成 CPLEX 模型入参。",
         },
         {
             "name": "仓网容量",
             "level": "pass" if metrics["capacity_buffer"] >= 0 else "warn",
-            "detail": f"仓库总容量 {metrics['total_warehouse_capacity']:g}，市场总需求 {metrics['total_market_demand']:g}，缓冲 {metrics['capacity_buffer']:g}。",
+            "detail": f"仓库总容量 {format_number(metrics['total_warehouse_capacity'])}，市场总需求 {format_number(metrics['total_market_demand'])}，缓冲 {format_number(metrics['capacity_buffer'])}。",
             "action": "缓冲为负时，建议启用扩容模式或提高缺口罚分。",
         },
     ]
     order_line_count = upstream_order_line_count(data)
+    sample_count = len(data.get("orders", []))
+    sample_note = f"页面抽样展示 {format_number(sample_count)} 条，" if sample_count and sample_count != order_line_count else ""
     checks.append(
         {
             "name": "订单明细规模",
             "level": "pass" if order_line_count >= 1000 else "warn",
-            "detail": f"当前接入 {order_line_count:g} 条上游订单明细，模型前会聚合到市场需求和服务需求。",
+            "detail": f"当前接入 {format_number(order_line_count)} 条上游订单明细，{sample_note}模型前会聚合到市场需求和服务需求。",
             "action": "用于观察数据接入吞吐；求解层继续使用聚合入参，避免把交易明细直接推给 MIP。",
         }
     )
@@ -927,7 +1006,7 @@ def build_data_quality_checks(data, validation_error):
         {
             "name": "补货供给能力",
             "level": "pass" if replenishment_capacity >= metrics["total_replenishment_demand"] else "warn",
-            "detail": f"计划期运输能力 {replenishment_capacity:g}，预测需求 {metrics['total_replenishment_demand']:g}。",
+            "detail": f"计划期运输能力 {format_number(replenishment_capacity)}，预测需求 {format_number(metrics['total_replenishment_demand'])}。",
             "action": "能力不足时，可提升空运容量、缩短海运提前期或接受缺货罚分。",
         }
     )
@@ -937,7 +1016,7 @@ def build_data_quality_checks(data, validation_error):
         {
             "name": "服务商容量",
             "level": "pass" if metrics["service_capacity"] >= service_demand else "warn",
-            "detail": f"服务商总能力 {metrics['service_capacity']:g}，服务订单需求 {service_demand:g}。",
+            "detail": f"服务商总能力 {format_number(metrics['service_capacity'])}，服务订单需求 {format_number(service_demand)}。",
             "action": "能力不足时，需引入服务商或降低市场承诺量。",
         }
     )
@@ -1197,6 +1276,12 @@ def get_upstream_data():
         {
             "status": "ok",
             "data_source": upstream_data_source_label(data),
+            "source_summary": {
+                "source_tables": len(STARROCKS_SOURCE_TABLES) if starrocks_upstream_enabled() else count_source_tables(data),
+                "business_groups": count_source_tables(data),
+                "order_lines": upstream_order_line_count(data),
+                "sample_rows": len(data.get("orders", [])),
+            },
             "data": data,
         }
     )
@@ -1290,10 +1375,10 @@ def get_lineage():
                     "rule": "服务商成本、容量和时效直接进入服务水平组合模型。",
                 },
                 {
-                    "from": "default staffing data",
+                    "from": "upstream.staffing",
                     "config": "staff_peak, soft_staffing",
                     "to": "model_inputs.staffing",
-                    "rule": "旺季场景提高周末人力需求；软约束场景允许缺口并计入罚分。",
+                    "rule": "上游排班基础数据提供员工、可用性、技能和每日需求；旺季场景提高周末人力需求，软约束场景允许缺口并计入罚分。",
                 },
             ],
             "model_flows": [
@@ -1326,7 +1411,7 @@ def get_lineage():
                 },
                 {
                     "model": "门店/仓内排班模型",
-                    "upstream": ["default_problem.employees", "default_problem.availability", "default_problem.skills", "default_problem.required_staff"],
+                    "upstream": lineage_paths["staffing"],
                     "config": ["staff_peak", "soft_staffing"],
                     "transform": "build_staffing_model_input",
                     "input": ["sets.employees", "sets.days", "required_staff", "availability", "skills"],
@@ -1343,7 +1428,7 @@ def get_lineage():
                 {"business_field": "补货预测", "upstream_path": lineage_paths["replenishment_demand"], "model_input_path": "replenishment.demand.*", "used_by": "库存平衡约束"},
                 {"business_field": "运输渠道能力", "upstream_path": lineage_paths["replenishment_lanes"], "model_input_path": "replenishment.lanes.*", "used_by": "补货容量约束和成本目标"},
                 {"business_field": "服务商能力", "upstream_path": lineage_paths["service_providers"], "model_input_path": "service_level.services.*.capacity", "used_by": "服务商容量约束"},
-                {"business_field": "排班需求", "upstream_path": "staffing scenario defaults", "model_input_path": "staffing.required_staff", "used_by": "每日人力覆盖约束"},
+                {"business_field": "排班需求", "upstream_path": lineage_paths["staffing_required"], "model_input_path": "staffing.required_staff", "used_by": "每日人力覆盖约束"},
             ],
         }
     )
@@ -1361,6 +1446,8 @@ def json_lineage_paths():
         "replenishment_lanes": "replenishment.lanes.*",
         "service_level": ["service_level.markets", "service_level.services"],
         "service_providers": "service_level.services.*.capacity",
+        "staffing": ["staffing.employees", "staffing.availability", "staffing.skills", "staffing.required_staff"],
+        "staffing_required": "staffing.required_staff",
     }
 
 
@@ -1392,6 +1479,13 @@ def starrocks_lineage_paths():
             prefix + "upstream_service_provider_market_terms",
         ],
         "service_providers": prefix + "upstream_service_providers.capacity",
+        "staffing": [
+            "embedded_upstream.staffing.employees",
+            "embedded_upstream.staffing.availability",
+            "embedded_upstream.staffing.skills",
+            "embedded_upstream.staffing.required_staff",
+        ],
+        "staffing_required": "embedded_upstream.staffing.required_staff",
     }
 
 
@@ -1480,7 +1574,8 @@ def update_upstream_data():
     data = payload.get("data")
     if starrocks_upstream_enabled() and isinstance(data, dict):
         validation_data = dict(data)
-        validation_data["orders"] = load_json_upstream_data().get("orders", [])
+        if not validation_data.get("orders"):
+            validation_data["orders"] = load_upstream_data().get("orders", [])
         validation_error = validate_upstream_data(validation_data)
         if validation_error:
             return jsonify({"status": "error", "message": validation_error}), 400
@@ -1488,7 +1583,7 @@ def update_upstream_data():
         return jsonify(
             {
                 "status": "ok",
-                "message": "StarRocks upstream data saved",
+                "message": "StarRocks 上游基础表已保存",
                 "data_source": upstream_data_source_label(data),
             }
         )

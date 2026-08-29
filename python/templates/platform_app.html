@@ -735,7 +735,7 @@
       <section>
         <div class="section-head"><h2>上游数据接入层</h2><span id="upstreamSource" class="pill">Source</span></div>
         <div class="content">
-          <p class="small">这一层模拟从 OMS、WMS、TMS、HR 同步来的原始业务数据，还没有进入优化模型。</p>
+          <p class="small">这一层接入 OMS、WMS、TMS、HR 口径的业务数据；当前 POC 使用 StarRocks 承载订单事实表和模型基础表。</p>
           <div id="upstreamSummary" class="rows"></div>
         </div>
       </section>
@@ -1112,10 +1112,11 @@
       }
     }
 
-    function saveSharedState() {
+    function saveSharedState(isDraft = true) {
       localStorage.setItem(stateKey, JSON.stringify({
         playbook: selected,
-        overrides: overrides()
+        overrides: overrides(),
+        draft: isDraft
       }));
     }
 
@@ -1166,7 +1167,7 @@
       const network = data.network || {};
       const replenishment = data.replenishment || {};
       const serviceLevel = data.service_level || {};
-      const tableCount = [
+      const groupCount = [
         data.orders,
         network.warehouses,
         network.markets,
@@ -1178,7 +1179,9 @@
         serviceLevel.markets,
         serviceLevel.services
       ].filter(Boolean).length;
-      return `已加载：${response.data_source}，上游表 ${fmt(tableCount)} 组，订单 ${fmt(total)} 条，页面抽样 ${fmt(sample)} 条`;
+      const tableCount = response.source_summary && response.source_summary.source_tables;
+      const tableText = tableCount ? `源表 ${fmt(tableCount)} 张` : `业务数据组 ${fmt(groupCount)} 组`;
+      return `已加载：${response.data_source}，${tableText}，订单 ${fmt(total)} 条，页面抽样 ${fmt(sample)} 条`;
     }
 
     async function loadDataQuality() {
@@ -1388,10 +1391,10 @@
       const sampleCount = data.orders ? data.orders.length : 0;
       const orderMeaning = sampleCount < Number(orderLineCount)
         ? `数据库真实订单量，当前页面抽样展示 ${fmt(sampleCount)} 条`
-        : "模拟上游交易明细，进入模型前聚合成需求参数";
+        : "上游交易明细，进入模型前聚合成需求参数";
       return [
         ["快照日期", data.metadata.snapshot_date, "上游数据同步日期"],
-        ["来源系统", data.metadata.source_systems.join(", "), "模拟 OMS/WMS/TMS/HR 同步"],
+        ["来源系统", data.metadata.source_systems.join(", "), "业务源系统口径"],
         ["订单明细", `${fmt(orderLineCount)} 条`, orderMeaning],
         ["仓网基础表", `${Object.keys(network.warehouses).length} 仓 / ${Object.keys(network.markets).length} 市场 / ${network.lanes.length} 线路`, "仓库容量、市场需求、线路成本和时效"],
         ["补货基础表", `${replenishment.weeks.length} 周 / ${Object.keys(replenishment.lanes).length} 渠道`, "周需求、库存、运输渠道和补货成本"],
@@ -1473,7 +1476,7 @@
       selected = id;
       document.querySelectorAll("#playbooks button").forEach((el) => el.classList.toggle("active", el.dataset.id === selected));
       applyDefaults();
-      saveSharedState();
+      saveSharedState(false);
     }
 
     function applyDefaults() {
@@ -1488,7 +1491,7 @@
     function applySavedOrDefaultValues() {
       applyDefaults();
       const saved = sharedState();
-      if (saved.overrides) {
+      if (saved.playbook === selected && saved.draft && saved.overrides) {
         field("demand").value = saved.overrides.demand_multiplier ?? field("demand").value;
         field("air").value = saved.overrides.air_capacity ?? field("air").value;
         field("penalty").value = saved.overrides.unfulfilled_penalty ?? field("penalty").value;
@@ -1583,7 +1586,7 @@
 
     async function run(saveHistory = true) {
       const sequence = ++runSequence;
-      saveSharedState();
+      saveSharedState(true);
       lastReportPath = "";
       field("exportStatus").textContent = "报告会导出到 python/reports 目录。";
       field("current").textContent = "求解中";
@@ -2017,7 +2020,7 @@
         return;
       }
       field("upstreamStatus").textContent = `已保存：${result.data_source}`;
-      await Promise.all([loadUpstreamData(), loadSourceStatus(), loadDataQuality(), loadScaleSnapshot(), run(), compare()]);
+      await Promise.all([loadUpstreamData(), loadSourceStatus(), loadDataQuality(), loadScaleSnapshot(), loadLineage()]);
     }
 
     async function saveConfigData() {
@@ -2042,9 +2045,9 @@
         return;
       }
       playbookDefaults[selected] = { ...playbookDefaults[selected], ...config };
-      saveSharedState();
+      saveSharedState(false);
       field("configStatus").textContent = `已保存到：${result.data_source}`;
-      await Promise.all([loadOverview(), loadDataLayer(), loadConfigAudit(), run(), compare(), loadLineage()]);
+      await Promise.all([loadOverview(), loadDataLayer(), loadConfigAudit(), compare(), loadLineage()]);
     }
 
     activateLayer();
