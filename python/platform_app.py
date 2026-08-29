@@ -2104,6 +2104,7 @@ def build_enterprise_readiness():
         "blockers": blockers,
         "domains": domains,
         "roadmap": build_enterprise_roadmap(score, blockers),
+        "investment_cases": build_investment_cases(score, history, approved_rows),
     }
 
 
@@ -2141,6 +2142,53 @@ def build_enterprise_roadmap(score, blockers):
             "owner": "CIO / 信息安全 / 算法治理",
             "exit_criteria": "模型变更可审批、可回滚、可审计，关键决策纳入治理委员会。",
             "readiness": "规划中",
+        },
+    ]
+
+
+def build_investment_cases(score, history, approved_rows):
+    audit_maturity = "高" if history else "中"
+    approval_maturity = "高" if approved_rows else "中"
+    return [
+        {
+            "priority": "P0",
+            "initiative": "真实系统回传闭环",
+            "investment": "2-3 人周",
+            "benefit": "把 OMS/WMS/TMS/HR 执行结果回灌到运行批次，支撑收益复盘和异常归因。",
+            "risk": "没有回传闭环时，模型建议只能证明可算，不能证明执行有效。",
+            "next_step": "先接 WMS 容量确认和 TMS 运力确认两个回传点。",
+        },
+        {
+            "priority": "P0",
+            "initiative": "质量规则产品化",
+            "investment": "1-2 人周",
+            "benefit": "把当前必填、容量、线路覆盖校验固化为每日数据质量门禁。",
+            "risk": "上游口径漂移会直接影响仓网和补货结果，且演示时很容易被追问。",
+            "next_step": "沉淀市场需求、仓库容量、服务商能力三类规则模板。",
+        },
+        {
+            "priority": "P1",
+            "initiative": "审批与 SSO 集成",
+            "investment": "2 人周",
+            "benefit": f"把当前 {approval_maturity} 成熟度审批链路接入企业身份体系，形成真实责任人和审计链。",
+            "risk": "继续使用页面角色选择会限制试点范围，无法满足企业审计要求。",
+            "next_step": "对接企业 SSO，映射计划员、审批人、数据管理员和只读角色。",
+        },
+        {
+            "priority": "P1",
+            "initiative": "运行审计与收益复盘",
+            "investment": "1-2 人周",
+            "benefit": f"基于当前 {audit_maturity} 成熟度运行记录，形成周度节省、缺口、审批耗时复盘。",
+            "risk": "没有收益复盘时，平台价值只能停留在单次演示。",
+            "next_step": "增加运行批次对比、审批时长和执行偏差的周报视图。",
+        },
+        {
+            "priority": "P2",
+            "initiative": "模型服务化与调度",
+            "investment": "3-4 人周",
+            "benefit": "把手工运行升级为定时批次、事件触发和灰度发布。",
+            "risk": "没有调度能力时，旺季高频重跑依赖人工，响应速度不足。",
+            "next_step": "先支持每日批次和异常告警触发重跑两种模式。",
         },
     ]
 

@@ -1482,6 +1482,26 @@
             </tbody>
           </table>
         </div>
+        <div>
+          <h3>投资优先级清单</h3>
+          <table>
+            <thead>
+              <tr><th>优先级</th><th>建设项</th><th>预估投入</th><th>收益假设</th><th>风险</th><th>下一步</th></tr>
+            </thead>
+            <tbody>
+              ${(data.investment_cases || []).map((row) => `
+                <tr>
+                  <td><span class="status">${h(row.priority)}</span></td>
+                  <td><strong>${h(row.initiative)}</strong></td>
+                  <td>${h(row.investment)}</td>
+                  <td>${h(row.benefit)}</td>
+                  <td>${h(row.risk)}</td>
+                  <td>${h(row.next_step)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
       `;
     }
 
