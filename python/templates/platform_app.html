@@ -86,7 +86,7 @@
       padding: 14px 0 16px;
       border-top: 1px solid var(--line);
       display: grid;
-      grid-template-columns: repeat(6, minmax(0, 1fr));
+      grid-template-columns: repeat(7, minmax(0, 1fr));
       gap: 10px;
     }
 
@@ -581,6 +581,32 @@
       font-weight: 700;
     }
 
+    .throughput-chart {
+      display: grid;
+      gap: 10px;
+    }
+
+    .throughput-row {
+      display: grid;
+      grid-template-columns: 120px minmax(0, 1fr) 160px;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .throughput-track {
+      height: 14px;
+      border-radius: 999px;
+      background: #e8eef5;
+      overflow: hidden;
+    }
+
+    .throughput-fill {
+      height: 100%;
+      min-width: 3px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #2463eb, #10b981);
+    }
+
     .readiness-grid {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -879,6 +905,7 @@
       }
       .subnav { position: static; grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .flow, .grid, .scale-metrics, .readiness-grid, .impact-grid, .run-steps, .handoff-grid, .gate-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .throughput-row { grid-template-columns: 1fr; }
       .model-explain-layout { grid-template-columns: 1fr; }
       .explain-grid { grid-template-columns: 1fr; }
       .diff-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -924,6 +951,7 @@
       <a class="flow-step" data-layer-link="results" href="/results"><strong>4. 求解结果</strong><span>KPI、风险与建议动作</span></a>
       <a class="flow-step" data-layer-link="lineage" href="/lineage"><strong>5. 数据血缘</strong><span>字段映射与转换规则</span></a>
       <a class="flow-step" data-layer-link="constraints" href="/constraints"><strong>6. 约束解释</strong><span>变量、目标与约束</span></a>
+      <a class="flow-step" data-layer-link="performance" href="/performance"><strong>7. 容量评估</strong><span>吞吐、耗时与压力</span></a>
     </nav>
   </header>
 
@@ -1373,6 +1401,41 @@
         </div>
       </section>
     </div>
+
+    <div class="page" data-layer="performance">
+      <section>
+        <div class="section-head"><h2>压力测试与容量评估</h2><span id="capacityStatus" class="pill">等待评估</span></div>
+        <div class="content">
+          <div class="button-row">
+            <button class="run" id="runCapacityAssessment" type="button">刷新容量评估</button>
+          </div>
+          <div id="capacitySummary" class="grid"></div>
+          <div>
+            <h3>端到端耗时</h3>
+            <div id="capacityTimings" class="scale-metrics"></div>
+          </div>
+          <div>
+            <h3>不同订单量吞吐曲线</h3>
+            <div id="throughputChart" class="throughput-chart"></div>
+          </div>
+          <div>
+            <h3>模型求解耗时</h3>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>模型</th><th>求解耗时 ms</th></tr>
+                </thead>
+                <tbody id="solveTimingRows"></tbody>
+              </table>
+            </div>
+          </div>
+          <div>
+            <h3>评估说明</h3>
+            <div id="capacityNotes" class="rows"></div>
+          </div>
+        </div>
+      </section>
+    </div>
   </main>
 
   <script>
@@ -1771,6 +1834,79 @@
           <span class="small">${h(item.action)}</span>
           <span class="status">${h(item.owner)}</span>
         </div>
+      `).join("");
+    }
+
+    async function loadCapacityAssessment() {
+      const status = field("capacityStatus");
+      if (!status) {
+        return;
+      }
+      status.textContent = "评估中";
+      status.style.background = "var(--soft-amber)";
+      status.style.color = "var(--amber)";
+      const startedAt = performance.now();
+      const response = await fetch("/api/platform/capacity-assessment");
+      const apiClientMs = Math.round(performance.now() - startedAt);
+      const data = await response.json();
+      if (!response.ok) {
+        status.textContent = "失败";
+        status.style.background = "var(--soft-red)";
+        status.style.color = "var(--red)";
+        field("capacityNotes").innerHTML = `<div class="row"><strong>评估失败</strong><span class="small">${h(data.message || "未知错误")}</span><span class="status">Error</span></div>`;
+        return;
+      }
+      status.textContent = data.status === "ok" ? "已完成" : "需关注";
+      status.style.background = data.status === "ok" ? "var(--soft-green)" : "var(--soft-amber)";
+      status.style.color = data.status === "ok" ? "var(--green)" : "var(--amber)";
+      renderCapacityAssessment(data, apiClientMs);
+    }
+
+    function renderCapacityAssessment(data, apiClientMs) {
+      const timings = data.timings_ms || {};
+      field("capacitySummary").innerHTML = [
+        ["上游订单量", data.order_total, data.source || "-", "primary"],
+        ["API 响应", timings.api_response, "服务端总耗时 ms", "good"],
+        ["浏览器等待", apiClientMs, "前端观测 ms", "good"],
+        ["评估时间", data.measured_at || "-", data.message || "-", "good"]
+      ].map(([label, value, meaning, tone]) => `
+        <div class="metric ${tone}">
+          <span class="label">${h(label)}</span>
+          <strong class="value">${h(typeof value === "number" ? fmt(value) : value)}</strong>
+          <span class="small">${h(meaning)}</span>
+        </div>
+      `).join("");
+      const timingRows = [
+        ["数据读取耗时", timings.data_read, "读取上游基础表和订单抽样"],
+        ["数据校验耗时", timings.data_validate, "结构、类型、引用和线路覆盖"],
+        ["入参生成耗时", timings.model_input_build, "生成四个 CPLEX 子模型入参"],
+        ["求解耗时", timings.model_solve, "四个模型串行求解"],
+        ["API 响应耗时", timings.api_response, "本次评估接口服务端总耗时"]
+      ];
+      field("capacityTimings").innerHTML = timingRows.map(([label, value, meaning]) => `
+        <div class="metric">
+          <span class="label">${h(label)}</span>
+          <strong class="value">${fmt(value)}</strong>
+          <span class="small">${h(meaning)}</span>
+        </div>
+      `).join("");
+      const curve = data.throughput_curve || [];
+      const maxThroughput = Math.max(...curve.map((row) => Number(row.rows_per_second || 0)), 1);
+      field("throughputChart").innerHTML = curve.map((row) => {
+        const width = Math.max(3, Math.round(Number(row.rows_per_second || 0) / maxThroughput * 100));
+        return `
+          <div class="throughput-row">
+            <strong>${fmt(row.rows)} 行</strong>
+            <div class="throughput-track"><div class="throughput-fill" style="width:${width}%"></div></div>
+            <span class="small">${fmt(row.elapsed_ms)} ms / ${fmt(row.rows_per_second)} 行秒</span>
+          </div>
+        `;
+      }).join("");
+      field("solveTimingRows").innerHTML = (data.solve_steps || []).map((row) => `
+        <tr><td><strong>${h(row.model)}</strong></td><td>${fmt(row.elapsed_ms)}</td></tr>
+      `).join("");
+      field("capacityNotes").innerHTML = (data.notes || []).map((note) => `
+        <div class="row"><strong>说明</strong><span class="small">${h(note)}</span><span class="status">Note</span></div>
       `).join("");
     }
 
@@ -3160,6 +3296,7 @@
     field("rejectRun").addEventListener("click", () => updateApproval("reject"));
     field("reloadUpstream").addEventListener("click", loadUpstreamData);
     field("saveUpstream").addEventListener("click", saveUpstreamData);
+    field("runCapacityAssessment").addEventListener("click", loadCapacityAssessment);
     field("showFirstOrders").addEventListener("click", () => {
       orderSampleLimit = 100;
       renderOrderSample();
@@ -3172,7 +3309,11 @@
     loadOverview().then(() => {
       applyRoleControls();
       const initialRun = can("run_model") ? run(false) : Promise.resolve();
-      return Promise.all([initialRun, compare(), loadDataLayer(), loadConfigAudit(), loadUpstreamData(), loadSourceStatus(), loadDataQuality(), loadDataQuarantine(), loadScaleSnapshot(), loadEnterpriseReadiness(), loadLineage(), loadRunHistory(), loadConstraintExplanations()]);
+      const commonLoads = [initialRun, compare(), loadDataLayer(), loadConfigAudit(), loadUpstreamData(), loadSourceStatus(), loadDataQuality(), loadDataQuarantine(), loadScaleSnapshot(), loadEnterpriseReadiness(), loadLineage(), loadRunHistory(), loadConstraintExplanations()];
+      if (activeLayer === "performance") {
+        commonLoads.push(loadCapacityAssessment());
+      }
+      return Promise.all(commonLoads);
     });
   </script>
 </body>

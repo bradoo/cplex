@@ -2088,6 +2088,110 @@ def build_platform_scale_snapshot():
     }
 
 
+def measure_starrocks_order_read(limit):
+    if not starrocks_upstream_enabled():
+        data = load_json_upstream_data()
+        started_at = perf_counter()
+        rows = (data.get("orders") or [])[:limit]
+        elapsed_ms = round((perf_counter() - started_at) * 1000, 2)
+        return {
+            "rows": len(rows),
+            "elapsed_ms": elapsed_ms,
+            "rows_per_second": round(len(rows) / max(elapsed_ms / 1000, 0.001), 2),
+            "source": "JSON 样例数据",
+        }
+    config = starrocks_config()
+    table = config["table"]
+    started_at = perf_counter()
+    with starrocks_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"""
+                SELECT order_id, market, channel, units, priority, requested_delivery_days, demand_share_bp
+                FROM `{table}`
+                ORDER BY order_id
+                LIMIT %s
+                """,
+                (limit,),
+            )
+            rows = cursor.fetchall()
+    elapsed_ms = round((perf_counter() - started_at) * 1000, 2)
+    return {
+        "rows": len(rows),
+        "elapsed_ms": elapsed_ms,
+        "rows_per_second": round(len(rows) / max(elapsed_ms / 1000, 0.001), 2),
+        "source": f"StarRocks.{table}",
+    }
+
+
+def build_capacity_assessment():
+    request_started_at = perf_counter()
+    load_started_at = perf_counter()
+    upstream_data = load_upstream_data()
+    load_ms = round((perf_counter() - load_started_at) * 1000, 2)
+
+    validate_started_at = perf_counter()
+    validation_error = validate_upstream_data(upstream_data)
+    validate_ms = round((perf_counter() - validate_started_at) * 1000, 2)
+
+    input_started_at = perf_counter()
+    baseline_config = dict(playbooks()["baseline"])
+    model_inputs = {} if validation_error else build_model_inputs(baseline_config)
+    input_ms = round((perf_counter() - input_started_at) * 1000, 2)
+
+    solve_started_at = perf_counter()
+    solve_steps = []
+    if validation_error:
+        total_solve_ms = 0
+    else:
+        step_started = perf_counter()
+        solve_platform_network_case(model_inputs["network"], baseline_config)
+        solve_steps.append({"model": "仓网选址与履约", "elapsed_ms": round((perf_counter() - step_started) * 1000, 2)})
+        step_started = perf_counter()
+        solve_platform_replenishment_case(model_inputs["replenishment"])
+        solve_steps.append({"model": "跨境补货", "elapsed_ms": round((perf_counter() - step_started) * 1000, 2)})
+        step_started = perf_counter()
+        solve_platform_service_level_case(model_inputs["service_level"])
+        solve_steps.append({"model": "服务水平组合", "elapsed_ms": round((perf_counter() - step_started) * 1000, 2)})
+        step_started = perf_counter()
+        solve_staffing_case(baseline_config)
+        solve_steps.append({"model": "门店/仓内排班", "elapsed_ms": round((perf_counter() - step_started) * 1000, 2)})
+        total_solve_ms = round((perf_counter() - solve_started_at) * 1000, 2)
+
+    order_total = upstream_order_line_count(upstream_data)
+    sample_points = [1000, 10000, 100000, order_total]
+    seen = set()
+    throughput_curve = []
+    for size in sample_points:
+        if not size or size in seen:
+            continue
+        seen.add(size)
+        throughput_curve.append(measure_starrocks_order_read(min(size, order_total)))
+
+    api_ms = round((perf_counter() - request_started_at) * 1000, 2)
+    return {
+        "status": "attention" if validation_error else "ok",
+        "message": validation_error or "容量评估完成，耗时为当前本地环境的即时观测值。",
+        "source": upstream_data_source_label(upstream_data),
+        "measured_at": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
+        "order_total": order_total,
+        "timings_ms": {
+            "data_read": load_ms,
+            "data_validate": validate_ms,
+            "model_input_build": input_ms,
+            "model_solve": total_solve_ms,
+            "api_response": api_ms,
+        },
+        "solve_steps": solve_steps,
+        "throughput_curve": throughput_curve,
+        "notes": [
+            "数据读取曲线使用订单事实表 LIMIT 样本读取耗时，不会修改上游数据。",
+            "模型求解耗时使用基准运营方案，订单明细先聚合为业务基础表后进入 CPLEX。",
+            "API 响应耗时包含本次容量评估接口内部的读取、校验、入参生成、求解和曲线采样。",
+        ],
+    }
+
+
 def count_source_tables(upstream_data):
     network = upstream_data.get("network", {})
     replenishment = upstream_data.get("replenishment", {})
@@ -2206,6 +2310,11 @@ def lineage_page():
 @app.get("/constraints")
 def constraints_page():
     return render_template("platform_app.html", active_layer="constraints")
+
+
+@app.get("/performance")
+def performance_page():
+    return render_template("platform_app.html", active_layer="performance")
 
 
 @app.get("/api/health")
@@ -2337,6 +2446,11 @@ def get_source_status():
 @app.get("/api/platform/scale-snapshot")
 def get_scale_snapshot():
     return jsonify(build_platform_scale_snapshot())
+
+
+@app.get("/api/platform/capacity-assessment")
+def get_capacity_assessment():
+    return jsonify(build_capacity_assessment())
 
 
 @app.get("/api/platform/enterprise-readiness")
