@@ -304,7 +304,11 @@ def load_starrocks_weather(cursor, fallback_weather=None):
     )
     rows = list(cursor.fetchall())
     if not rows:
-        return fallback_weather
+        return {
+            "snapshot_time": "",
+            "source": "StarRocks.upstream_weather_lane_impacts",
+            "lane_impacts": [],
+        }
     return {
         "snapshot_time": rows[0].get("snapshot_time") or fallback_weather.get("snapshot_time", ""),
         "source": "StarRocks.upstream_weather_lane_impacts",

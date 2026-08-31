@@ -100,6 +100,22 @@ def create_schema(args):
             )
             cursor.execute(
                 f"""
+                CREATE TABLE IF NOT EXISTS upstream_weather_lane_impacts (
+                  warehouse VARCHAR(64) NOT NULL,
+                  market VARCHAR(64) NOT NULL,
+                  risk_level VARCHAR(32) NOT NULL,
+                  delay_days INT NOT NULL,
+                  cost_multiplier DOUBLE NOT NULL,
+                  reason VARCHAR(512) NOT NULL,
+                  snapshot_time VARCHAR(64) NOT NULL
+                )
+                DUPLICATE KEY(warehouse, market)
+                DISTRIBUTED BY HASH(warehouse, market) BUCKETS 8
+                PROPERTIES ("replication_num" = "{args.replication_num}")
+                """
+            )
+            cursor.execute(
+                f"""
                 CREATE TABLE IF NOT EXISTS upstream_replenishment_weeks (
                   week_name VARCHAR(32) NOT NULL,
                   week_index INT NOT NULL
@@ -258,6 +274,7 @@ def load_dimension_tables(cursor, source_data):
         "upstream_network_markets",
         "upstream_network_lanes",
         "upstream_network_expansion_options",
+        "upstream_weather_lane_impacts",
         "upstream_replenishment_weeks",
         "upstream_replenishment_demand",
         "upstream_replenishment_lanes",
@@ -298,6 +315,28 @@ def load_dimension_tables(cursor, source_data):
             for warehouse, values in network["expansion_options"].items()
         ],
     )
+    weather = source_data.get("weather", {})
+    weather_rows = [
+        (
+            row["warehouse"],
+            row["market"],
+            row["risk_level"],
+            row["delay_days"],
+            row["cost_multiplier"],
+            row["reason"],
+            weather.get("snapshot_time", ""),
+        )
+        for row in weather.get("lane_impacts", [])
+    ]
+    if weather_rows:
+        cursor.executemany(
+            """
+            INSERT INTO upstream_weather_lane_impacts
+            (warehouse, market, risk_level, delay_days, cost_multiplier, reason, snapshot_time)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            weather_rows,
+        )
 
     replenishment = source_data["replenishment"]
     cursor.executemany(
@@ -358,6 +397,7 @@ def load_dimension_tables(cursor, source_data):
         "network_markets": len(network["markets"]),
         "network_lanes": len(network["lanes"]),
         "network_expansion_options": len(network["expansion_options"]),
+        "weather_lane_impacts": len(weather_rows),
         "replenishment_weeks": len(replenishment["weeks"]),
         "replenishment_lanes": len(replenishment["lanes"]),
         "service_markets": len(service_level["markets"]),
