@@ -1309,7 +1309,7 @@ def default_approval_state(approval_level):
 
 def approval_status_label(status):
     return {
-        "submitted": "待审批",
+        "submitted": "已提交",
         "approved": "已批准",
         "rejected": "已驳回",
         "auto_approved": "自动通过",

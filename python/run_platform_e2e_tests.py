@@ -303,7 +303,7 @@ class PlatformE2ERunner:
         expect(self.page.locator("#runSteps")).to_contain_text("完成", timeout=60_000)
         self.page.get_by_role("button", name="治理审批").click()
         self.page.locator("#submitApproval").click()
-        expect(self.page.locator("#approvalStatus")).to_contain_text("待审批", timeout=20_000)
+        expect(self.page.locator("#approvalStatus")).to_contain_text("已提交", timeout=20_000)
         self.page.locator("#approveRun").click()
         expect(self.page.locator("#approvalStatus")).to_contain_text("已批准", timeout=20_000)
         self.page.get_by_role("button", name="执行闭环").click()
@@ -365,7 +365,7 @@ class PlatformE2ERunner:
         expect(self.page.locator("#runSteps")).to_contain_text("完成", timeout=60_000)
         self.page.get_by_role("button", name="治理审批").click()
         self.page.locator("#submitApproval").click()
-        expect(self.page.locator("#approvalStatus")).to_contain_text("待审批", timeout=20_000)
+        expect(self.page.locator("#approvalStatus")).to_contain_text("已提交", timeout=20_000)
         self.page.locator("#rejectRun").click()
         expect(self.page.locator("#approvalStatus")).to_contain_text("已驳回", timeout=20_000)
         self.page.get_by_role("button", name="执行闭环").click()
@@ -378,14 +378,21 @@ class PlatformE2ERunner:
     def e2e06_history_replay_and_report(self, result):
         self.goto("/results")
         self.set_role("planner")
+        self.page.get_by_role("button", name="运行概览").click()
+        self.page.locator("#run").click()
+        expect(self.page.locator("#runSteps")).to_contain_text("完成", timeout=60_000)
         self.page.get_by_role("button", name="模型分析").click()
         expect(self.page.locator("#historyRows tr").first).to_be_visible(timeout=30_000)
         self.page.locator("[data-report-run]").first.click()
         expect(self.page.locator("#auditReportPanel")).to_contain_text("版本证据链", timeout=20_000)
+        expect(self.page.locator("#auditReportPanel")).to_contain_text("待提交", timeout=20_000)
+        self.page.locator("[data-audit-submit]").first.click()
+        expect(self.page.locator("#auditReportPanel")).to_contain_text("已提交", timeout=20_000)
         self.page.locator("[data-replay-run]").first.click()
         expect(self.page.locator("#exportStatus")).to_contain_text("已回放运行记录", timeout=60_000)
         result.evidence = {
             "history_rows": self.page.locator("#historyRows tr").count(),
+            "audit_status_after_submit": "已提交",
             "replay_status": self.page.locator("#exportStatus").inner_text(),
         }
 

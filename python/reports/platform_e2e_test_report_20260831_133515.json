@@ -1,0 +1,404 @@
+{
+  "generated_at": "2026-08-31T13:35:15",
+  "base_url": "http://127.0.0.1:56580",
+  "summary": {
+    "total": 16,
+    "passed": 16,
+    "failed": 0,
+    "errors": 0,
+    "pass_rate": 100.0,
+    "assertions": 15,
+    "feature_coverage": "25/25",
+    "feature_coverage_percent": 100.0
+  },
+  "feature_registry": {
+    "FLOW_NAV": "顶部流程导航与页面装载",
+    "UPSTREAM_SOURCE": "上游数据源状态",
+    "UPSTREAM_QUALITY": "数据质量校验",
+    "UPSTREAM_QUARANTINE": "异常数据隔离区",
+    "UPSTREAM_WEATHER": "天气风险因子",
+    "UPSTREAM_SCALE": "规模吞吐概览",
+    "UPSTREAM_ORDERS": "订单明细抽样",
+    "UPSTREAM_EDIT": "上游业务表编辑保存",
+    "CONFIG_PLAYBOOK": "三场景配置导航",
+    "CONFIG_SAVE_AUDIT": "场景配置保存与审计",
+    "INPUT_NAV": "四模型入参导航",
+    "INPUT_HIGHLIGHT": "模型入参变化高亮",
+    "RESULT_RUN_PIPELINE": "求解流水线",
+    "RESULT_COST_VISUAL": "成本结构可视化",
+    "RESULT_EXPLAIN": "经营价值与差异解释",
+    "RESULT_ENTERPRISE": "企业就绪面板",
+    "RESULT_GOVERNANCE": "治理审批",
+    "RESULT_EXECUTION": "执行发布闭环",
+    "RESULT_HISTORY": "运行历史回放与报告",
+    "LINEAGE": "数据血缘可视化与字段映射",
+    "CONSTRAINTS": "约束解释与代码实现",
+    "PERFORMANCE": "压力测试与容量评估",
+    "ROLE_PERMISSIONS": "角色权限隔离",
+    "REPORT_EXPORT": "演示报告导出",
+    "ACCURACY_FLOW": "上游数据到求解结果准确性链路"
+  },
+  "covered_features": [
+    "ACCURACY_FLOW",
+    "CONFIG_PLAYBOOK",
+    "CONFIG_SAVE_AUDIT",
+    "CONSTRAINTS",
+    "FLOW_NAV",
+    "INPUT_HIGHLIGHT",
+    "INPUT_NAV",
+    "LINEAGE",
+    "PERFORMANCE",
+    "REPORT_EXPORT",
+    "RESULT_COST_VISUAL",
+    "RESULT_ENTERPRISE",
+    "RESULT_EXECUTION",
+    "RESULT_EXPLAIN",
+    "RESULT_GOVERNANCE",
+    "RESULT_HISTORY",
+    "RESULT_RUN_PIPELINE",
+    "ROLE_PERMISSIONS",
+    "UPSTREAM_EDIT",
+    "UPSTREAM_ORDERS",
+    "UPSTREAM_QUALITY",
+    "UPSTREAM_QUARANTINE",
+    "UPSTREAM_SCALE",
+    "UPSTREAM_SOURCE",
+    "UPSTREAM_WEATHER"
+  ],
+  "uncovered_features": [],
+  "results": [
+    {
+      "case_id": "E2E01",
+      "name": "页面导航与订单明细抽样展示",
+      "status": "PASS",
+      "assertions": 3,
+      "failures": [],
+      "evidence": {
+        "order_status": "抽样 1,000 / 总量 1,000,000",
+        "rendered_rows": 1000,
+        "first_order": "ORD-0000001\tCanada\tmarketplace\t8\tstandard\t5\t44.44"
+      },
+      "features": [
+        "FLOW_NAV",
+        "UPSTREAM_ORDERS"
+      ],
+      "elapsed_ms": 3870.25
+    },
+    {
+      "case_id": "E2E02",
+      "name": "上游业务表页面编辑保存回读",
+      "status": "PASS",
+      "assertions": 1,
+      "failures": [],
+      "evidence": {
+        "original_demand": 1801.0,
+        "changed_demand": 1802.0,
+        "reloaded_demand": 1802.0
+      },
+      "features": [
+        "UPSTREAM_EDIT"
+      ],
+      "elapsed_ms": 11790.79
+    },
+    {
+      "case_id": "E2E03",
+      "name": "场景配置传递到模型入参并高亮",
+      "status": "PASS",
+      "assertions": 2,
+      "failures": [],
+      "evidence": {
+        "changed_rows": 3,
+        "input_excerpt": "model_name\tcross_border_ecommerce_network\t实际调用的仓网优化模型\t-\nwarehouses\t4\t候选仓库数量\t-\nmarkets\t5\t目标市场数量\t-\ntotal_demand\t20471\t进入模型的总订单需求\t需求倍率: 1 -> 1.15\ntotal_capacity\t36500\t候选仓库基础总容量\t-\nweather_impacted_lanes\t20\t受天气影响的线路数\t天气风险影响线路成本与时效\nweather_blocked_lanes\t3\t天气延误后不满足 SLA 的线路\t天气延误进入 SLA 可用性判断\nallowed_lanes\t8\t满足 SLA、允许分配的仓库-市场线路\t-\nblocked_lanes\t12\t因配送时效超过 SLA 被禁止的线路\t-"
+      },
+      "features": [
+        "CONFIG_PLAYBOOK",
+        "INPUT_HIGHLIGHT"
+      ],
+      "elapsed_ms": 9273.68
+    },
+    {
+      "case_id": "E2E04",
+      "name": "求解流水线进度与成本结构可视化",
+      "status": "PASS",
+      "assertions": 1,
+      "failures": [],
+      "evidence": {
+        "current": "求解中",
+        "total_cost": "327,591.26",
+        "cost_cards": 4
+      },
+      "features": [
+        "RESULT_RUN_PIPELINE",
+        "RESULT_COST_VISUAL",
+        "RESULT_EXPLAIN"
+      ],
+      "elapsed_ms": 5061.38
+    },
+    {
+      "case_id": "E2E05",
+      "name": "审批通过与执行发布闭环",
+      "status": "PASS",
+      "assertions": 0,
+      "failures": [],
+      "evidence": {
+        "approval_status": "当前运行记录：50e4b2e8，已批准，当前角色：管理员",
+        "publish_status": "已发布：EXEC-20260831-50e4b2e8-53a310，下游目标 4 个"
+      },
+      "features": [
+        "RESULT_GOVERNANCE",
+        "RESULT_EXECUTION"
+      ],
+      "elapsed_ms": 7740.42
+    },
+    {
+      "case_id": "E2E06",
+      "name": "运行历史报告与回放",
+      "status": "PASS",
+      "assertions": 0,
+      "failures": [],
+      "evidence": {
+        "history_rows": 20,
+        "audit_status_after_submit": "已提交",
+        "replay_status": "已回放运行记录 ec07b2d3，未新增运行记录。"
+      },
+      "features": [
+        "RESULT_HISTORY"
+      ],
+      "elapsed_ms": 10056.36
+    },
+    {
+      "case_id": "E2E07",
+      "name": "数据血缘与约束解释页面导航",
+      "status": "PASS",
+      "assertions": 0,
+      "failures": [],
+      "evidence": {
+        "lineage_flows": 4,
+        "constraint_models": 4
+      },
+      "features": [
+        "LINEAGE",
+        "CONSTRAINTS"
+      ],
+      "elapsed_ms": 7334.88
+    },
+    {
+      "case_id": "E2E08",
+      "name": "压力测试与容量评估页面",
+      "status": "PASS",
+      "assertions": 0,
+      "failures": [],
+      "evidence": {
+        "capacity_status": "已完成",
+        "throughput_rows": 4
+      },
+      "features": [
+        "PERFORMANCE"
+      ],
+      "elapsed_ms": 12331.23
+    },
+    {
+      "case_id": "E2E09",
+      "name": "上游数据二级页面覆盖",
+      "status": "PASS",
+      "assertions": 1,
+      "failures": [],
+      "evidence": {
+        "数据源": {
+          "status": "StarRocks",
+          "rows": 21
+        },
+        "质量校验": {
+          "status": "可运行",
+          "rows": 7
+        },
+        "异常隔离": {
+          "status": "需复核",
+          "rows": 4
+        },
+        "天气风险": {
+          "status": "20 条影响",
+          "rows": 20
+        },
+        "规模吞吐": {
+          "status": "可承载",
+          "rows": 4
+        }
+      },
+      "features": [
+        "UPSTREAM_SOURCE",
+        "UPSTREAM_QUALITY",
+        "UPSTREAM_QUARANTINE",
+        "UPSTREAM_WEATHER",
+        "UPSTREAM_SCALE"
+      ],
+      "elapsed_ms": 3845.61
+    },
+    {
+      "case_id": "E2E10",
+      "name": "场景配置保存审计与权限",
+      "status": "PASS",
+      "assertions": 1,
+      "failures": [],
+      "evidence": {
+        "playbook_count": 3,
+        "config_status": "已加载：starrocks://127.0.0.1:9030/cplex_poc.platform_playbooks",
+        "audit_first_row": "2026/8/31 13:03:19\tpeak\tplatform_ui\tunfulfilled_penalty: 80 -> 75",
+        "viewer_save_disabled": true
+      },
+      "features": [
+        "CONFIG_PLAYBOOK",
+        "CONFIG_SAVE_AUDIT",
+        "ROLE_PERMISSIONS"
+      ],
+      "elapsed_ms": 4528.95
+    },
+    {
+      "case_id": "E2E11",
+      "name": "四模型入参导航与重新生成",
+      "status": "PASS",
+      "assertions": 1,
+      "failures": [],
+      "evidence": {
+        "仓网选址与履约": "model_name\tcross_border_ecommerce_soft_capacity\t实际调用的仓网优化模型\t-\nwarehouses\t4\t候选仓库数量\t-\nmarkets\t5\t目标市场数量\t-\ntotal_demand\t22251\t进入模型的总订单需求\t需求倍率: 1 -> 1.25\ntotal_capacity\t36500\t候选仓库基础总容量\t-\nweather_impacted_lanes\t20\t受天气影响的线路数\t天气风险影响线路成本与时效\nweather_blocked_lanes\t3\t天气延误后不满足 SLA 的线路\t天气延误进入 SLA 可用性判断\nallowed_la",
+        "补货计划": "model_name\tcross_border_ecommerce_replenishment\t实际调用的补货优化模型\t-\nweeks\tW1, W2, W3, W4\t计划周期\t-\nlanes\tair, ocean\t可选补货运输方式\t-\ntotal_demand\t4900\t四周预测需求\t-\ninitial_inventory\t1200\t期初可用库存\t-\ntarget_ending_inventory\t800\t期末目标库存\t-\nair.weekly_capacity\t760\t空运每周可用运力\t空运容量: 900 -> 760\nocean.lead_time_weeks\t3\t海运提前期\t-\nstoc",
+        "服务水平组合": "model_name\tcross_border_ecommerce_service_level\t实际调用的服务水平组合模型\t-\nmarkets\t4\t需要满足平均时效的市场数量\t-\nservices\tcross_border_economy, cross_border_express, local_standard\t可选配送服务\t-\ntotal_demand\t16000\t服务组合模型订单需求\t-\ntotal_service_capacity\t23500\t服务商总处理能力\t-",
+        "人员排班": "model_name\tstaff_scheduling_soft\t实际调用的排班模型\t-\nemployees\tAlice, Bob, Carol, David\t可排班员工集合\t-\ndays\tMon, Tue, Wed, Thu, Fri, Sat, Sun\t排班周期\t-\ntotal_required_staff\t19\t总人班需求\t旺季排班开关影响人力需求\nmax_shifts_per_employee\t3\t每人最多班次数\t旺季排班开关影响人力需求\nsoft_constraints\ttrue\t是否允许缺口并用罚分兜底\t软约束开关影响缺口处理"
+      },
+      "features": [
+        "INPUT_NAV",
+        "INPUT_HIGHLIGHT",
+        "RESULT_RUN_PIPELINE"
+      ],
+      "elapsed_ms": 6986.33
+    },
+    {
+      "case_id": "E2E12",
+      "name": "结果页面板、三方案对比与报告导出",
+      "status": "PASS",
+      "assertions": 0,
+      "failures": [],
+      "evidence": {
+        "compare_rows": 10,
+        "export_status": "已导出：python/reports/platform_report_20260831_133437_peak.md",
+        "enterprise_excerpt": "\n        \n          演示可上线\n          无上线阻塞项\n          评分 100\n        \n        \n          \n            领域状态证据负责人下一步\n          \n          \n            \n              \n                数据接入\n                达标\n                StarRocks / 订单 1,000,000 行 / 源表 21 张\n                数据平台\n                保持 OMS"
+      },
+      "features": [
+        "RESULT_ENTERPRISE",
+        "RESULT_EXPLAIN",
+        "REPORT_EXPORT",
+        "RESULT_COST_VISUAL"
+      ],
+      "elapsed_ms": 5686.16
+    },
+    {
+      "case_id": "E2E13",
+      "name": "角色权限隔离页面校验",
+      "status": "PASS",
+      "assertions": 0,
+      "failures": [],
+      "evidence": {
+        "viewer_run_disabled": true,
+        "viewer_export_disabled": true,
+        "viewer_publish_disabled": true,
+        "viewer_upstream_save_disabled": true,
+        "data_admin_upstream_save_enabled": true
+      },
+      "features": [
+        "ROLE_PERMISSIONS"
+      ],
+      "elapsed_ms": 7605.45
+    },
+    {
+      "case_id": "E2E14",
+      "name": "审批驳回路径与发布拦截",
+      "status": "PASS",
+      "assertions": 0,
+      "failures": [],
+      "evidence": {
+        "approval_status": "当前运行记录：d27192e4，已驳回，当前角色：管理员",
+        "publish_disabled_after_reject": true
+      },
+      "features": [
+        "RESULT_GOVERNANCE",
+        "RESULT_EXECUTION",
+        "ROLE_PERMISSIONS"
+      ],
+      "elapsed_ms": 5877.26
+    },
+    {
+      "case_id": "E2E15",
+      "name": "血缘多视图与四模型约束覆盖",
+      "status": "PASS",
+      "assertions": 1,
+      "failures": [],
+      "evidence": {
+        "可视化流程": 4,
+        "节点总览": 5,
+        "转换规则": 6,
+        "字段映射": 10,
+        "constraint_1": "仓网选址与履约模型",
+        "constraint_2": "跨境补货模型",
+        "constraint_3": "服务水平组合模型",
+        "constraint_4": "门店/仓内排班模型"
+      },
+      "features": [
+        "LINEAGE",
+        "CONSTRAINTS"
+      ],
+      "elapsed_ms": 7853.66
+    },
+    {
+      "case_id": "E2E16",
+      "name": "上游到结果四步准确性链路",
+      "status": "PASS",
+      "assertions": 4,
+      "failures": [],
+      "evidence": {
+        "step_1_upstream": {
+          "market_demands": [
+            1801.0,
+            3600.0,
+            2400.0,
+            4800.0,
+            5200.0
+          ],
+          "upstream_total_demand": 17801.0,
+          "weather_lane_count": 20
+        },
+        "step_2_config": {
+          "playbook": "baseline",
+          "demand_multiplier": 1.12,
+          "air_capacity": 980,
+          "unfulfilled_penalty": 80,
+          "sla_extra_days": 1
+        },
+        "step_3_model_inputs": {
+          "expected_total_demand": 19937,
+          "actual_total_demand": 19937.0,
+          "actual_weather_lanes": 20.0
+        },
+        "step_4_result": {
+          "total_cost": 331775.66,
+          "cost_parts": [
+            163589.52,
+            37088.0,
+            1765.0,
+            129333.14
+          ],
+          "cost_parts_sum": 331775.66
+        }
+      },
+      "features": [
+        "FLOW_NAV",
+        "UPSTREAM_EDIT",
+        "CONFIG_PLAYBOOK",
+        "INPUT_HIGHLIGHT",
+        "RESULT_RUN_PIPELINE",
+        "RESULT_COST_VISUAL",
+        "ACCURACY_FLOW"
+      ],
+      "elapsed_ms": 15525.25
+    }
+  ]
+}
