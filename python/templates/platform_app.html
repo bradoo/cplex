@@ -3340,6 +3340,27 @@
       }
     }
 
+    async function publishExecution() {
+      if (!latestRunId) {
+        field("publishStatus").textContent = "请先运行并保存一条记录。";
+        return;
+      }
+      field("publishStatus").textContent = "执行包发布中...";
+      const response = await fetch("/api/platform/publish-execution", fetchOptions({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ run_id: latestRunId, actor: currentRole() })
+      }));
+      const data = await response.json();
+      if (!response.ok) {
+        field("publishStatus").textContent = `发布失败：${data.message || "未知错误"}`;
+        return;
+      }
+      const release = data.release || {};
+      const targets = release.targets ? release.targets.length : 0;
+      field("publishStatus").textContent = `已发布：${release.execution_batch_id || "-"}，下游目标 ${fmt(targets)} 个`;
+    }
+
     async function saveUpstreamData() {
       const data = upstreamData;
       if (!data) {
@@ -3401,6 +3422,7 @@
     field("submitApproval").addEventListener("click", () => updateApproval("submit"));
     field("approveRun").addEventListener("click", () => updateApproval("approve"));
     field("rejectRun").addEventListener("click", () => updateApproval("reject"));
+    field("publishExecution").addEventListener("click", publishExecution);
     field("reloadUpstream").addEventListener("click", loadUpstreamData);
     field("saveUpstream").addEventListener("click", saveUpstreamData);
     field("runCapacityAssessment").addEventListener("click", loadCapacityAssessment);

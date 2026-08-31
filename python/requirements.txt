@@ -2,3 +2,4 @@ docplex
 cplex
 flask
 pymysql
+playwright
