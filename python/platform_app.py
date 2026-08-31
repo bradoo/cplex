@@ -63,6 +63,7 @@ STARROCKS_SOURCE_TABLES = [
     ("upstream_network_markets", "市场需求"),
     ("upstream_network_lanes", "仓网线路"),
     ("upstream_network_expansion_options", "扩容选项"),
+    ("upstream_weather_lane_impacts", "天气线路风险"),
     ("upstream_replenishment_weeks", "补货周序列"),
     ("upstream_replenishment_demand", "补货预测"),
     ("upstream_replenishment_lanes", "补货渠道能力"),
@@ -180,6 +181,7 @@ def load_starrocks_orders_into_upstream_data(data):
     with starrocks_connection() as connection:
         with connection.cursor() as cursor:
             data["network"] = load_starrocks_network(cursor)
+            data["weather"] = load_starrocks_weather(cursor, data.get("weather", {}))
             data["replenishment"] = load_starrocks_replenishment(cursor)
             data["service_level"] = load_starrocks_service_level(cursor)
             cursor.execute(f"SELECT COUNT(*) AS order_line_count FROM `{table}`")
@@ -206,6 +208,25 @@ def load_starrocks_orders_into_upstream_data(data):
     )
     metadata["upstream_storage"] = f"starrocks://{config['host']}:{config['port']}/{config['database']}"
     return data
+
+
+def weather_lane_impacts(data):
+    weather = data.get("weather", {}) if isinstance(data, dict) else {}
+    impacts = weather.get("lane_impacts", [])
+    return impacts if isinstance(impacts, list) else []
+
+
+def weather_impact_lookup(weather):
+    impacts = weather.get("lane_impacts", []) if isinstance(weather, dict) else []
+    return {
+        (item.get("warehouse"), item.get("market")): item
+        for item in impacts
+        if item.get("warehouse") and item.get("market")
+    }
+
+
+def weather_risk_score(risk_level):
+    return {"low": 1, "medium": 2, "high": 3}.get(str(risk_level).lower(), 0)
 
 
 def load_starrocks_network(cursor):
@@ -249,6 +270,55 @@ def load_starrocks_network(cursor):
         "markets": markets,
         "lanes": lanes,
         "expansion_options": expansion_options,
+    }
+
+
+def ensure_starrocks_weather_table(cursor):
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS upstream_weather_lane_impacts (
+          warehouse VARCHAR(64) NOT NULL,
+          market VARCHAR(64) NOT NULL,
+          risk_level VARCHAR(32) NOT NULL,
+          delay_days INT NOT NULL,
+          cost_multiplier DOUBLE NOT NULL,
+          reason VARCHAR(512) NOT NULL,
+          snapshot_time VARCHAR(64) NOT NULL
+        )
+        DUPLICATE KEY(warehouse, market)
+        DISTRIBUTED BY HASH(warehouse, market) BUCKETS 8
+        PROPERTIES ("replication_num" = "1")
+        """
+    )
+
+
+def load_starrocks_weather(cursor, fallback_weather=None):
+    fallback_weather = fallback_weather or {}
+    ensure_starrocks_weather_table(cursor)
+    cursor.execute(
+        """
+        SELECT warehouse, market, risk_level, delay_days, cost_multiplier, reason, snapshot_time
+        FROM upstream_weather_lane_impacts
+        ORDER BY warehouse, market
+        """
+    )
+    rows = list(cursor.fetchall())
+    if not rows:
+        return fallback_weather
+    return {
+        "snapshot_time": rows[0].get("snapshot_time") or fallback_weather.get("snapshot_time", ""),
+        "source": "StarRocks.upstream_weather_lane_impacts",
+        "lane_impacts": [
+            {
+                "warehouse": row["warehouse"],
+                "market": row["market"],
+                "risk_level": row["risk_level"],
+                "delay_days": int(row["delay_days"]),
+                "cost_multiplier": float(row["cost_multiplier"]),
+                "reason": row["reason"],
+            }
+            for row in rows
+        ],
     }
 
 
@@ -566,6 +636,7 @@ def save_upstream_data(data):
 def save_starrocks_upstream_data(data):
     with starrocks_connection() as connection:
         with connection.cursor() as cursor:
+            ensure_starrocks_weather_table(cursor)
             cursor.execute("TRUNCATE TABLE upstream_network_markets")
             cursor.executemany(
                 "INSERT INTO upstream_network_markets (market, demand, max_delivery_days) VALUES (%s, %s, %s)",
@@ -598,6 +669,29 @@ def save_starrocks_upstream_data(data):
                     for warehouse, values in data["network"]["expansion_options"].items()
                 ],
             )
+            weather = data.get("weather", {})
+            cursor.execute("TRUNCATE TABLE upstream_weather_lane_impacts")
+            weather_rows = [
+                (
+                    item["warehouse"],
+                    item["market"],
+                    item["risk_level"],
+                    item["delay_days"],
+                    item["cost_multiplier"],
+                    item["reason"],
+                    weather.get("snapshot_time", ""),
+                )
+                for item in weather_lane_impacts(data)
+            ]
+            if weather_rows:
+                cursor.executemany(
+                    """
+                    INSERT INTO upstream_weather_lane_impacts
+                    (warehouse, market, risk_level, delay_days, cost_multiplier, reason, snapshot_time)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    weather_rows,
+                )
             cursor.execute("TRUNCATE TABLE upstream_replenishment_weeks")
             cursor.executemany(
                 "INSERT INTO upstream_replenishment_weeks (week_name, week_index) VALUES (%s, %s)",
@@ -1995,6 +2089,28 @@ def validate_upstream_data(data):
             if error:
                 return error
 
+    weather = data.get("weather", {})
+    if weather:
+        if not isinstance(weather, dict):
+            return "weather must be an object"
+        impacts = weather.get("lane_impacts", [])
+        if not isinstance(impacts, list):
+            return "weather.lane_impacts must be a list"
+        for item in impacts:
+            for field in ("warehouse", "market", "risk_level", "delay_days", "cost_multiplier", "reason"):
+                if field not in item:
+                    return f"weather.lane_impacts is missing field: {field}"
+            if item["warehouse"] not in network["warehouses"]:
+                return f"weather.lane_impacts references unknown warehouse: {item['warehouse']}"
+            if item["market"] not in network["markets"]:
+                return f"weather.lane_impacts references unknown market: {item['market']}"
+            error = validate_number(item["delay_days"], "weather.lane_impacts.delay_days", minimum=0)
+            if error:
+                return error
+            error = validate_number(item["cost_multiplier"], "weather.lane_impacts.cost_multiplier", minimum=0, exclusive_minimum=True)
+            if error:
+                return error
+
     return None
 
 
@@ -2020,6 +2136,8 @@ def build_data_quality_metrics(data):
         "total_replenishment_demand": total_replenishment_demand,
         "total_air_capacity": total_air_capacity,
         "service_capacity": total_service_capacity,
+        "weather_impacts": len(weather_lane_impacts(data)),
+        "high_weather_risks": sum(1 for item in weather_lane_impacts(data) if str(item.get("risk_level")).lower() == "high"),
     }
 
 
@@ -2104,6 +2222,20 @@ def build_data_quality_checks(data, validation_error):
             "action": "能力不足时，需引入服务商或降低市场承诺量。",
         }
     )
+    weather_impacts = weather_lane_impacts(data)
+    high_risks = [item for item in weather_impacts if str(item.get("risk_level")).lower() == "high"]
+    checks.append(
+        {
+            "name": "天气风险",
+            "level": "warn" if high_risks else "pass",
+            "detail": (
+                f"当前接入 {format_number(len(weather_impacts))} 条天气线路影响，其中高风险 {format_number(len(high_risks))} 条。"
+                if weather_impacts
+                else "当前未接入天气风险数据。"
+            ),
+            "action": "高风险天气会抬高线路时效和成本，建议查看模型入参中的 weather_* 字段。",
+        }
+    )
     return checks
 
 
@@ -2184,6 +2316,13 @@ def build_data_quarantine(data):
         market = markets.get(lane.get("market"))
         if market and isinstance(lane.get("delivery_days"), (int, float)) and lane["delivery_days"] > market.get("max_delivery_days", 0):
             add_issue("不可用线路", "warn", entity, "delivery_days", lane["delivery_days"], f"线路时效超过市场 SLA {market.get('max_delivery_days')} 天，模型会禁止或规避该线路。", "优化线路时效、放宽 SLA，或准备替代仓/承运商。")
+
+    for item in weather_lane_impacts(data):
+        entity = f"{item.get('warehouse', '?')}->{item.get('market', '?')}"
+        if str(item.get("risk_level")).lower() == "high":
+            add_issue("天气高风险", "warn", entity, "risk_level", item.get("risk_level"), item.get("reason", "天气风险可能影响履约。"), "提前切换备选仓或承运商，并提高 TMS 监控频率。")
+        if float(item.get("delay_days") or 0) >= 2:
+            add_issue("天气时效延误", "warn", entity, "delay_days", item.get("delay_days"), "天气导致线路时效增加，可能触发 SLA 不可用。", "在场景配置中放宽 SLA 或选择稳健服务方案。")
 
     return build_quarantine_response(data, issues)
 
@@ -2847,6 +2986,13 @@ def get_lineage():
                     "description": "保存管理假设，例如需求倍率、空运能力、缺口罚分、SLA 放宽和模型模式。",
                 },
                 {
+                    "id": "weather",
+                    "name": "天气风险层",
+                    "source": "WeatherOps risk feed / upstream.weather",
+                    "owner": "物流控制塔",
+                    "description": "保存线路级天气风险、预计延误天数和成本扰动，用于调整仓网线路可用性。",
+                },
+                {
                     "id": "inputs",
                     "name": "模型入参层",
                     "source": "runtime payload",
@@ -2870,9 +3016,15 @@ def get_lineage():
                 },
                 {
                     "from": "upstream.network.lanes",
-                    "config": "network_mode",
+                    "config": "network_mode, weather.lane_impacts",
                     "to": "model_inputs.network.lane_costs_and_sla",
-                    "rule": "把线路成本和配送天数展开成仓库-市场矩阵，并标记是否满足 SLA。",
+                    "rule": "把线路成本、配送天数和天气延误展开成仓库-市场矩阵，并标记是否满足 SLA。",
+                },
+                {
+                    "from": "upstream.weather.lane_impacts",
+                    "config": "weather_delay_days, weather_cost_multiplier",
+                    "to": "model_inputs.network.lane_costs_and_sla.*.weather_*",
+                    "rule": "天气延误增加配送天数，天气成本系数调整末端成本，进而影响线路可用性和目标函数。",
                 },
                 {
                     "from": "upstream.replenishment",
@@ -2899,7 +3051,7 @@ def get_lineage():
                     "upstream": lineage_paths["network"],
                     "config": ["demand_multiplier", "sla_extra_days", "network_mode", "unfulfilled_penalty"],
                     "transform": "build_network_model_input",
-                    "input": ["sets.warehouses", "sets.markets", "parameters", "lane_costs_and_sla"],
+                    "input": ["sets.warehouses", "sets.markets", "parameters", "lane_costs_and_sla", "weather_*"],
                     "solver": "solve_platform_network_case",
                     "result": ["open_warehouses", "shipments", "unfulfilled", "cost"],
                 },
@@ -2937,6 +3089,7 @@ def get_lineage():
                 {"business_field": "仓库容量", "upstream_path": lineage_paths["network_warehouses"], "model_input_path": "network.warehouses.*.capacity", "used_by": "仓库容量约束"},
                 {"business_field": "线路成本", "upstream_path": lineage_paths["network_lanes"], "model_input_path": "network.lane_costs_and_sla.*.last_mile_cost", "used_by": "仓网目标函数"},
                 {"business_field": "配送天数", "upstream_path": lineage_paths["network_lanes"], "model_input_path": "network.lane_costs_and_sla.*.allowed_by_sla", "used_by": "SLA 禁用线路约束"},
+                {"business_field": "天气风险", "upstream_path": "upstream.weather.lane_impacts", "model_input_path": "network.lane_costs_and_sla.*.weather_*", "used_by": "天气调整后的线路成本、配送天数和 SLA 判断"},
                 {"business_field": "补货预测", "upstream_path": lineage_paths["replenishment_demand"], "model_input_path": "replenishment.demand.*", "used_by": "库存平衡约束"},
                 {"business_field": "运输渠道能力", "upstream_path": lineage_paths["replenishment_lanes"], "model_input_path": "replenishment.lanes.*", "used_by": "补货容量约束和成本目标"},
                 {"business_field": "服务商能力", "upstream_path": lineage_paths["service_providers"], "model_input_path": "service_level.services.*.capacity", "used_by": "服务商容量约束"},
@@ -3632,7 +3785,7 @@ def public_config(config):
 
 def build_model_inputs(config):
     upstream_data = load_upstream_data()
-    network_input = build_network_model_input(config, upstream_data["network"])
+    network_input = build_network_model_input(config, upstream_data["network"], upstream_data.get("weather", {}))
     replenishment_input = build_replenishment_model_input(config, upstream_data["replenishment"])
     service_input = build_service_level_model_input(upstream_data["service_level"])
     staffing_input = build_staffing_model_input(config)
@@ -3641,6 +3794,7 @@ def build_model_inputs(config):
             "upstream_source": upstream_data_source_label(upstream_data),
             "scenario_config_source": platform_data_source_label(),
             "transform": "上游原始数据 + 当前方案参数 -> CPLEX 模型运行入参",
+            "weather_source": upstream_data.get("weather", {}).get("source", "未接入天气数据"),
         },
         "network": network_input,
         "replenishment": replenishment_input,
@@ -3649,7 +3803,7 @@ def build_model_inputs(config):
     }
 
 
-def build_network_model_input(config, upstream_network):
+def build_network_model_input(config, upstream_network, upstream_weather=None):
     warehouses = upstream_network["warehouses"]
     markets = {
         market: dict(values)
@@ -3659,6 +3813,7 @@ def build_network_model_input(config, upstream_network):
         (lane["warehouse"], lane["market"]): lane
         for lane in upstream_network["lanes"]
     }
+    weather_lookup = weather_impact_lookup(upstream_weather or {})
     effective_sla_extra_days = int(config["sla_extra_days"]) if config.get("network_mode") == "strict" else 0
     for market in markets:
         markets[market]["base_demand"] = markets[market]["demand"]
@@ -3682,9 +3837,15 @@ def build_network_model_input(config, upstream_network):
             {
                 "warehouse": warehouse,
                 "market": market,
-                "last_mile_cost": lane_lookup[warehouse, market]["last_mile_cost"],
-                "delivery_days": lane_lookup[warehouse, market]["delivery_days"],
-                "allowed_by_sla": lane_lookup[warehouse, market]["delivery_days"] <= markets[market]["max_delivery_days"],
+                "base_last_mile_cost": lane_lookup[warehouse, market]["last_mile_cost"],
+                "base_delivery_days": lane_lookup[warehouse, market]["delivery_days"],
+                "last_mile_cost": round(lane_lookup[warehouse, market]["last_mile_cost"] * float(weather_lookup.get((warehouse, market), {}).get("cost_multiplier", 1)), 2),
+                "delivery_days": lane_lookup[warehouse, market]["delivery_days"] + int(weather_lookup.get((warehouse, market), {}).get("delay_days", 0)),
+                "weather_delay_days": int(weather_lookup.get((warehouse, market), {}).get("delay_days", 0)),
+                "weather_cost_multiplier": float(weather_lookup.get((warehouse, market), {}).get("cost_multiplier", 1)),
+                "weather_risk_level": weather_lookup.get((warehouse, market), {}).get("risk_level", "none"),
+                "weather_reason": weather_lookup.get((warehouse, market), {}).get("reason", ""),
+                "allowed_by_sla": lane_lookup[warehouse, market]["delivery_days"] + int(weather_lookup.get((warehouse, market), {}).get("delay_days", 0)) <= markets[market]["max_delivery_days"],
             }
             for warehouse in warehouses
             for market in markets
@@ -3805,6 +3966,19 @@ def solve_platform_network_case(input_data, config):
         (lane["warehouse"], lane["market"]): lane
         for lane in input_data["lane_costs_and_sla"]
     }
+    weather_impacted_lanes = [
+        {
+            "warehouse": lane["warehouse"],
+            "market": lane["market"],
+            "risk_level": lane.get("weather_risk_level", "none"),
+            "delay_days": lane.get("weather_delay_days", 0),
+            "cost_multiplier": lane.get("weather_cost_multiplier", 1),
+            "reason": lane.get("weather_reason", ""),
+            "allowed_by_sla": lane.get("allowed_by_sla", True),
+        }
+        for lane in input_data.get("lane_costs_and_sla", [])
+        if lane.get("weather_risk_level") not in ("", "none", None)
+    ]
     network_mode = config.get("network_mode", "strict")
     allow_unfulfilled = network_mode in {"soft_capacity", "capacity_expansion"}
     expansion_options = input_data.get("expansion_options", {})
@@ -3883,7 +4057,11 @@ def solve_platform_network_case(input_data, config):
 
     solution = model.solve(log_output=False)
     if solution is None:
-        return {"status": "infeasible", "message": "No feasible network found from upstream data."}
+        return {
+            "status": "infeasible",
+            "message": "No feasible network found from upstream data.",
+            "weather_impacted_lanes": weather_impacted_lanes,
+        }
 
     opened_warehouses = []
     capacity_plan = []
@@ -3923,6 +4101,7 @@ def solve_platform_network_case(input_data, config):
         "opened_warehouses": opened_warehouses,
         "capacity_plan": capacity_plan,
         "fulfillment_plan": fulfillment_plan,
+        "weather_impacted_lanes": weather_impacted_lanes,
         "fixed_cost": fixed_cost.solution_value,
         "variable_cost": variable_cost.solution_value,
         "expansion_cost": expansion_cost.solution_value if extra_capacity else 0,
@@ -4078,6 +4257,9 @@ def build_management_summary(network, replenishment, service_mix, staffing, conf
         risks.append(f"补货缺货 {replenishment['total_stockout']:g} 件")
     if staffing.get("total_shortage", 0):
         risks.append(f"排班缺口 {staffing['total_shortage']:g} 人班")
+    high_weather = [lane for lane in network.get("weather_impacted_lanes", []) if str(lane.get("risk_level")).lower() == "high"]
+    if high_weather:
+        risks.append(f"天气高风险线路 {len(high_weather)} 条，需关注 SLA 和承运商确认。")
     if not risks:
         risks.append("核心约束均满足")
 
@@ -4219,6 +4401,8 @@ def build_operating_monitor(summary, network, replenishment, service_mix, staffi
     replenishment_units = sum(float(row.get("units") or 0) for row in replenishment.get("orders", []))
     service_orders = sum(float(row.get("orders") or 0) for row in service_mix.get("used_services", []))
     staffing_shortage = float(staffing.get("total_shortage") or 0)
+    weather_lanes = network.get("weather_impacted_lanes", [])
+    high_weather_lanes = [lane for lane in weather_lanes if str(lane.get("risk_level")).lower() == "high"]
     shortage = float(summary.get("total_shortage") or 0)
     cost = float(summary.get("total_cost") or 0)
     demand_multiplier = float(config.get("demand_multiplier") or 1)
@@ -4258,6 +4442,13 @@ def build_operating_monitor(summary, network, replenishment, service_mix, staffi
             "threshold": "缺口 > 0 或临时人力到岗率 < 98%",
             "state": "告警" if staffing_shortage else "正常",
             "action": "启用加班池、外包客服或降低非关键工单 SLA。",
+        },
+        {
+            "name": "天气线路风险",
+            "planned": f"{len(weather_lanes)} 条影响 / {len(high_weather_lanes)} 条高风险",
+            "threshold": "任一核心线路高风险或预计延误 >= 2 天",
+            "state": "高关注" if high_weather_lanes else "关注" if weather_lanes else "正常",
+            "action": "切换备选仓或承运商，必要时触发稳健服务方案重跑。",
         },
         {
             "name": "成本偏差",
@@ -4378,6 +4569,8 @@ def build_result_explainability(config, summary, network, replenishment, service
     network_shortage = float(network.get("total_unfulfilled") or 0)
     stockout = float(replenishment.get("total_stockout") or 0)
     staffing_shortage = float(staffing.get("total_shortage") or 0)
+    weather_lanes = network.get("weather_impacted_lanes", [])
+    high_weather_lanes = [lane for lane in weather_lanes if str(lane.get("risk_level")).lower() == "high"]
     cost_items = [
         ("仓网成本", float(summary.get("network_cost") or 0), "仓库固定成本、处理成本、末端配送和缺口/扩容成本"),
         ("补货成本", float(summary.get("replenishment_cost") or 0), "空运/海运运输、库存持有和缺货罚分"),
@@ -4427,6 +4620,19 @@ def build_result_explainability(config, summary, network, replenishment, service
             "lever": "增加临时工、放宽最大班次数或调整周末可用性。",
         },
     ]
+    if weather_lanes:
+        bottlenecks.append(
+            {
+                "model": "天气风险因子",
+                "signal": f"{len(weather_lanes)} 条线路受天气影响",
+                "why": (
+                    f"{len(high_weather_lanes)} 条高风险线路可能改变 SLA 可用性和末端成本。"
+                    if high_weather_lanes
+                    else "天气因子已进入线路时效和成本，但当前未出现高风险线路。"
+                ),
+                "lever": "切换备选仓、备选承运商，或在场景配置中评估 SLA 放宽。",
+            }
+        )
     sensitivity = [
         {
             "lever": "需求倍率",

@@ -56,6 +56,19 @@ PRIMARY KEY(warehouse)
 DISTRIBUTED BY HASH(warehouse) BUCKETS 4
 PROPERTIES ("replication_num" = "1");
 
+CREATE TABLE IF NOT EXISTS upstream_weather_lane_impacts (
+  warehouse VARCHAR(64) NOT NULL,
+  market VARCHAR(64) NOT NULL,
+  risk_level VARCHAR(32) NOT NULL,
+  delay_days INT NOT NULL,
+  cost_multiplier DOUBLE NOT NULL,
+  reason VARCHAR(512) NOT NULL,
+  snapshot_time VARCHAR(64) NOT NULL
+)
+DUPLICATE KEY(warehouse, market)
+DISTRIBUTED BY HASH(warehouse, market) BUCKETS 8
+PROPERTIES ("replication_num" = "1");
+
 CREATE TABLE IF NOT EXISTS upstream_replenishment_weeks (
   week_name VARCHAR(32) NOT NULL,
   week_index INT NOT NULL
