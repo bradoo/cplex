@@ -51,6 +51,7 @@ FEATURE_REGISTRY = {
     "PERFORMANCE": "压力测试与容量评估",
     "ROLE_PERMISSIONS": "角色权限隔离",
     "REPORT_EXPORT": "演示报告导出",
+    "ACCURACY_FLOW": "上游数据到求解结果准确性链路",
 }
 
 
@@ -153,6 +154,18 @@ class PlatformE2ERunner:
     def wait_loaded(self):
         expect(self.page.locator("body")).to_be_visible()
         self.page.wait_for_load_state("networkidle")
+
+    def parse_number(self, text):
+        cleaned = "".join(char for char in str(text) if char.isdigit() or char in ".-")
+        return float(cleaned) if cleaned not in ("", "-", ".", "-.") else 0.0
+
+    def model_input_table(self):
+        rows = {}
+        for index in range(self.page.locator("#inputRows tr").count()):
+            cells = self.page.locator("#inputRows tr").nth(index).locator("td")
+            if cells.count() >= 2:
+                rows[cells.nth(0).inner_text().strip()] = cells.nth(1).inner_text().strip()
+        return rows
 
     def e2e01_navigation_and_order_sample(self, result):
         self.goto("/upstream")
@@ -416,6 +429,91 @@ class PlatformE2ERunner:
         result.evidence = evidence
         self.assert_true(result, model_count >= 4, "约束解释没有覆盖四个模型")
 
+    def e2e16_accuracy_flow_upstream_to_result(self, result):
+        demand_multiplier = 1.12
+        self.goto("/upstream")
+        self.set_role("planner")
+        self.page.get_by_role("button", name="业务表编辑").click()
+        expect(self.page.locator('[data-upstream="market"][data-field="demand"]').first).to_be_visible(timeout=20_000)
+        market_demands = [
+            float(value)
+            for value in self.page.locator('[data-upstream="market"][data-field="demand"]').evaluate_all(
+                "(nodes) => nodes.map((node) => node.value)"
+            )
+        ]
+        upstream_total_demand = sum(market_demands)
+        weather_lane_count = self.page.locator("#weatherEditRows tr").count()
+
+        self.goto("/config")
+        self.set_role("planner")
+        self.page.locator('#playbooks button[data-id="baseline"]').click()
+        self.page.locator("#demand").fill(str(demand_multiplier))
+        self.page.locator("#air").fill("980")
+        self.page.locator("#penalty").fill("80")
+        self.page.locator("#sla").fill("1")
+        self.page.locator("#runFromConfig").click()
+        expect(self.page.locator("#runSteps")).to_contain_text("完成", timeout=60_000)
+
+        self.goto("/inputs")
+        self.page.locator('[data-model-input="network"]').click()
+        expect(self.page.locator("#inputRows tr").first).to_be_visible(timeout=20_000)
+        network_inputs = self.model_input_table()
+        actual_total_demand = self.parse_number(network_inputs.get("total_demand", "0"))
+        actual_weather_lanes = self.parse_number(network_inputs.get("weather_impacted_lanes", "0"))
+        expected_total_demand = round(upstream_total_demand * demand_multiplier)
+        self.assert_true(
+            result,
+            abs(actual_total_demand - expected_total_demand) <= 1,
+            f"模型入参总需求 {actual_total_demand} 与上游需求乘以场景倍率 {expected_total_demand} 不一致",
+        )
+        self.assert_true(
+            result,
+            actual_weather_lanes == weather_lane_count,
+            f"模型入参天气线路数 {actual_weather_lanes} 与上游天气线路数 {weather_lane_count} 不一致",
+        )
+
+        self.goto("/results")
+        self.page.get_by_role("button", name="运行概览").click()
+        expect(self.page.locator("#totalCost")).not_to_have_text("-", timeout=20_000)
+        total_cost = self.parse_number(self.page.locator("#totalCost").inner_text())
+        self.page.get_by_role("button", name="模型分析").click()
+        expect(self.page.locator(".cost-card").first).to_be_visible(timeout=20_000)
+        cost_parts = [
+            self.parse_number(value)
+            for value in self.page.locator(".cost-card strong").evaluate_all("(nodes) => nodes.map((node) => node.textContent)")
+        ]
+        cost_parts_sum = round(sum(cost_parts), 2)
+        self.assert_true(
+            result,
+            abs(total_cost - cost_parts_sum) <= 0.05,
+            f"综合成本 {total_cost} 与成本结构合计 {cost_parts_sum} 不一致",
+        )
+        self.assert_true(result, total_cost > 0, "求解结果综合成本没有生成有效数值")
+        result.evidence = {
+            "step_1_upstream": {
+                "market_demands": market_demands,
+                "upstream_total_demand": upstream_total_demand,
+                "weather_lane_count": weather_lane_count,
+            },
+            "step_2_config": {
+                "playbook": "baseline",
+                "demand_multiplier": demand_multiplier,
+                "air_capacity": 980,
+                "unfulfilled_penalty": 80,
+                "sla_extra_days": 1,
+            },
+            "step_3_model_inputs": {
+                "expected_total_demand": expected_total_demand,
+                "actual_total_demand": actual_total_demand,
+                "actual_weather_lanes": actual_weather_lanes,
+            },
+            "step_4_result": {
+                "total_cost": total_cost,
+                "cost_parts": cost_parts,
+                "cost_parts_sum": cost_parts_sum,
+            },
+        }
+
     def e2e08_capacity_assessment_page(self, result):
         self.goto("/performance")
         expect(self.page.locator("#capacityStatus")).to_contain_text("已完成", timeout=45_000)
@@ -442,6 +540,7 @@ class PlatformE2ERunner:
         self.run_case("E2E13", "角色权限隔离页面校验", self.e2e13_role_permission_gates, ["ROLE_PERMISSIONS"])
         self.run_case("E2E14", "审批驳回路径与发布拦截", self.e2e14_approval_reject_path, ["RESULT_GOVERNANCE", "RESULT_EXECUTION", "ROLE_PERMISSIONS"])
         self.run_case("E2E15", "血缘多视图与四模型约束覆盖", self.e2e15_lineage_all_views_and_all_constraints, ["LINEAGE", "CONSTRAINTS"])
+        self.run_case("E2E16", "上游到结果四步准确性链路", self.e2e16_accuracy_flow_upstream_to_result, ["FLOW_NAV", "UPSTREAM_EDIT", "CONFIG_PLAYBOOK", "INPUT_HIGHLIGHT", "RESULT_RUN_PIPELINE", "RESULT_COST_VISUAL", "ACCURACY_FLOW"])
         return self.results
 
 

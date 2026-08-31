@@ -4243,6 +4243,8 @@ def build_management_summary(network, replenishment, service_mix, staffing, conf
     network_cost = float(network.get("total_cost") or 0)
     replenishment_cost = float(replenishment.get("total_cost") or 0)
     staffing_cost = float(staffing.get("total_cost") or 0)
+    service_cost = float(service_mix.get("total_cost") or 0)
+    total_cost = network_cost + replenishment_cost + staffing_cost + service_cost
     total_shortage = float(network.get("total_unfulfilled") or 0) + float(
         replenishment.get("total_stockout") or 0
     ) + float(staffing.get("total_shortage") or 0)
@@ -4276,23 +4278,23 @@ def build_management_summary(network, replenishment, service_mix, staffing, conf
         risks.append("核心约束均满足")
 
     approval_level = "自动执行"
-    if network_cost + replenishment_cost > 15000 or total_shortage > 0:
+    if total_cost > 15000 or total_shortage > 0:
         approval_level = "人工确认"
     if config["demand_multiplier"] >= 1.25 and total_shortage > 100:
         approval_level = "管理层审批"
 
     return {
-        "total_cost": round(network_cost + replenishment_cost + staffing_cost, 2),
+        "total_cost": round(total_cost, 2),
         "network_cost": round(network_cost, 2),
         "replenishment_cost": round(replenishment_cost, 2),
         "staffing_cost": round(staffing_cost, 2),
         "total_shortage": round(total_shortage, 2),
-        "service_cost": round(float(service_mix.get("total_cost") or 0), 2),
+        "service_cost": round(service_cost, 2),
         "approval_level": approval_level,
         "actions": actions,
         "risks": risks,
         "execution_plan": build_execution_plan(network, replenishment, staffing, approval_level),
-        "decision_note": decision_note(approval_level, total_shortage, network_cost + replenishment_cost),
+        "decision_note": decision_note(approval_level, total_shortage, total_cost),
         "message": "这不是单个模型 demo，而是把仓网、补货、服务和排班接到同一个决策入口。",
     }
 
