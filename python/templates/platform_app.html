@@ -1628,10 +1628,6 @@
 
     function initializeResultsSubnavigation(initialTarget) {
       const resultTarget = ["summary", "governance"].includes(initialTarget) ? initialTarget : "summary";
-      const runSection = field("run")?.closest("section");
-      if (runSection) {
-        runSection.dataset.resultView = "summary";
-      }
       setResultPanel("totalCard", "summary");
       setResultPanel("executiveBriefPanel", "summary");
       setResultPanel("businessValuePanel", "summary");
@@ -2925,22 +2921,26 @@
 
     function renderReadiness(data) {
       const modelSections = Object.keys(data.model_inputs || {}).filter((key) => key !== "lineage");
-      const allSolved = [data.network, data.replenishment, data.service_mix, data.staffing].every((item) => item.status === "optimal");
+      const modelResults = [data.network, data.replenishment, data.service_mix, data.staffing].filter(Boolean);
+      const allSolved = modelResults.length > 0 && modelResults.every((item) => item.status === "optimal");
       const historySaved = Boolean(data.run_record);
       const versions = data.run_record && data.run_record.versions ? data.run_record.versions : {};
       const approval = data.run_record && data.run_record.approval ? data.run_record.approval : null;
       const reportReady = Boolean(lastReportPath);
-      const executionReady = Boolean(data.summary.execution_plan && data.summary.execution_plan.length);
+      const summary = data.summary || {};
+      const lineage = data.model_inputs && data.model_inputs.lineage ? data.model_inputs.lineage : {};
+      const executionPlan = summary.execution_plan || [];
+      const executionReady = Boolean(executionPlan.length);
       const rows = [
         ["运行批次", versions.run_batch_id ? "已生成" : "未生成", versions.run_batch_id || "等待保存运行记录", Boolean(versions.run_batch_id)],
-        ["上游数据", "已接入", data.model_inputs.lineage.upstream_source, true],
+        ["上游数据", lineage.upstream_source ? "已接入" : "待加载", lineage.upstream_source || "当前记录未包含上游来源明细", Boolean(lineage.upstream_source)],
         ["上游版本", versions.upstream_version ? "已锁定" : "未锁定", versions.upstream_version || "运行后生成版本指纹", Boolean(versions.upstream_version)],
         ["配置版本", versions.config_version ? "已锁定" : "未锁定", versions.config_version || "运行后生成版本指纹", Boolean(versions.config_version)],
         ["模型版本", versions.model_version ? "已锁定" : "未锁定", versions.model_version || "运行后记录代码版本", Boolean(versions.model_version)],
         ["模型入参", `${modelSections.length} 个模型`, modelSections.join(", "), modelSections.length >= 4],
-        ["CPLEX 求解", allSolved ? "已完成" : "需检查", allSolved ? "四个模型均 optimal" : "至少一个模型非 optimal", allSolved],
+        ["CPLEX 求解", allSolved ? "已完成" : "待回放", allSolved ? "四个模型均 optimal" : "当前记录未包含完整模型状态", allSolved],
         ["差异解释", data.difference ? "已生成" : "未生成", data.difference ? data.difference.headline : "-", Boolean(data.difference)],
-        ["执行计划", executionReady ? "已生成" : "未生成", executionReady ? `${data.summary.execution_plan.length} 条执行动作` : "等待求解结果", executionReady],
+        ["执行计划", executionReady ? "已生成" : "未生成", executionReady ? `${executionPlan.length} 条执行动作` : "等待求解结果", executionReady],
         ["运行记录", historySaved ? "已保存" : "未保存", historySaved ? data.run_record.run_id : "自动加载或回放不会写历史", historySaved],
         ["审批流转", approval ? approval.status_label : "待运行", approval ? (approval.comment || "等待下一步操作") : "运行并保存后可提交审批", Boolean(approval)],
         ["演示报告", reportReady ? "已导出" : "未导出", reportReady ? lastReportPath : "点击导出演示报告生成 Markdown", reportReady]
@@ -3305,7 +3305,7 @@
       }
       renderRunAuditReport(data.report);
       if (focusPanel) {
-        activateResultView("models");
+        activateResultView("governance");
       }
     }
 

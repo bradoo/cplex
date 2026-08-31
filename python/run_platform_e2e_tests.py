@@ -29,31 +29,20 @@ SERVER_ENV = {
 }
 FEATURE_REGISTRY = {
     "AUTH_LOGIN": "用户登录与退出",
-    "FLOW_NAV": "顶部流程导航与页面装载",
-    "UPSTREAM_SOURCE": "上游数据源状态",
-    "UPSTREAM_QUALITY": "数据质量校验",
-    "UPSTREAM_QUARANTINE": "异常数据隔离区",
-    "UPSTREAM_WEATHER": "天气风险因子",
-    "UPSTREAM_SCALE": "规模吞吐概览",
-    "UPSTREAM_ORDERS": "订单明细抽样",
-    "UPSTREAM_EDIT": "上游业务表编辑保存",
+    "FLOW_NAV": "简化后的四步主导航与页面装载",
+    "TECH_PAGES_HIDDEN": "入参、血缘、约束技术页从常规角色入口隐藏",
+    "UPSTREAM_SUMMARY": "数据概览",
+    "UPSTREAM_QUALITY": "质量状态",
+    "UPSTREAM_EDIT": "业务数据编辑保存",
     "CONFIG_PLAYBOOK": "三场景配置导航",
-    "CONFIG_SAVE_AUDIT": "场景配置保存与审计",
-    "INPUT_NAV": "四模型入参导航",
-    "INPUT_HIGHLIGHT": "模型入参变化高亮",
+    "CONFIG_RUN": "场景配置后运行",
     "RESULT_RUN_PIPELINE": "求解流水线",
-    "RESULT_COST_VISUAL": "成本结构可视化",
-    "RESULT_EXPLAIN": "经营价值与差异解释",
-    "RESULT_ENTERPRISE": "企业就绪面板",
-    "RESULT_GOVERNANCE": "治理审批",
-    "RESULT_EXECUTION": "执行发布闭环",
-    "RESULT_HISTORY": "运行历史回放与报告",
-    "LINEAGE": "数据血缘可视化与字段映射",
-    "CONSTRAINTS": "约束解释与代码实现",
-    "PERFORMANCE": "压力测试与容量评估",
+    "RESULT_DECISION": "决策总览",
+    "RESULT_GOVERNANCE": "审批放行",
+    "RESULT_QUICK_RELEASE": "快速放行",
+    "RESULT_REPORT_EXPORT": "报告导出",
+    "GOVERNANCE_PERFORMANCE": "治理与容量评估",
     "ROLE_PERMISSIONS": "角色权限隔离",
-    "REPORT_EXPORT": "演示报告导出",
-    "ACCURACY_FLOW": "上游数据到求解结果准确性链路",
 }
 
 
@@ -597,23 +586,157 @@ class PlatformE2ERunner:
             "throughput_rows": self.page.locator("#throughputChart .throughput-row").count(),
         }
 
+    def e2e01_simplified_navigation_and_hidden_tech_pages(self, result):
+        self.set_role("admin", "/upstream")
+        self.wait_loaded()
+        nav_labels = self.page.locator("[data-layer-link]").evaluate_all(
+            "(nodes) => nodes.map((node) => node.innerText.replace(/\\s+/g, ' ').trim())"
+        )
+        hidden_links = {
+            key: self.page.locator(f'[data-layer-link="{key}"]').count()
+            for key in ["inputs", "lineage", "constraints"]
+        }
+        self.assert_true(result, len(nav_labels) == 4, f"主导航不是 4 个入口：{nav_labels}")
+        self.assert_true(result, all(count == 0 for count in hidden_links.values()), f"技术页入口仍可见：{hidden_links}")
+        for path in ["/inputs", "/lineage", "/constraints"]:
+            self.goto(path)
+            self.page.wait_for_load_state("domcontentloaded")
+            self.assert_true(result, self.page.url.endswith("/upstream"), f"{path} 没有重定向到可用页面：{self.page.url}")
+        result.evidence = {"nav_labels": nav_labels, "hidden_links": hidden_links}
+
+    def e2e02_data_workspace_is_compact_and_editable(self, result):
+        self.set_role("data_admin", "/upstream")
+        tabs = self.page.locator('[data-subview-button="upstream"]').evaluate_all(
+            "(nodes) => nodes.map((node) => node.innerText.trim())"
+        )
+        self.assert_true(result, tabs == ["数据概览", "质量状态", "业务数据"], f"数据页入口不符合新版设计：{tabs}")
+        expect(self.page.locator("#sourceMetrics .metric").first).to_be_visible(timeout=20_000)
+        self.page.get_by_role("button", name="质量状态").click()
+        expect(self.page.locator("#qualityChecks .row").first).to_be_visible(timeout=20_000)
+        self.page.get_by_role("button", name="业务数据").click()
+        market_input = self.page.locator('[data-upstream="market"][data-field="demand"]').first
+        expect(market_input).to_be_visible(timeout=20_000)
+        original = float(market_input.input_value())
+        changed = original + 1
+        market_input.fill(str(changed))
+        self.page.locator("#saveUpstream").click()
+        expect(self.page.locator("#upstreamStatus")).not_to_contain_text("保存中", timeout=30_000)
+        self.page.reload(wait_until="networkidle")
+        self.page.get_by_role("button", name="业务数据").click()
+        reloaded = float(self.page.locator('[data-upstream="market"][data-field="demand"]').first.input_value())
+        self.assert_true(result, reloaded == changed, "业务数据保存后刷新未回读到修改值")
+        self.page.locator('[data-upstream="market"][data-field="demand"]').first.fill(str(original))
+        self.page.locator("#saveUpstream").click()
+        expect(self.page.locator("#upstreamStatus")).not_to_contain_text("保存中", timeout=30_000)
+        result.evidence = {"tabs": tabs, "original_demand": original, "changed_demand": changed, "reloaded_demand": reloaded}
+
+    def e2e03_config_run_and_decision_summary(self, result):
+        self.set_role("planner", "/config")
+        playbook_buttons = self.page.locator("#playbooks button")
+        expect(playbook_buttons.first).to_be_visible(timeout=20_000)
+        playbook_count = playbook_buttons.count()
+        self.set_config_field("demand", "1.15")
+        self.set_config_field("air", "980")
+        self.page.locator("#runFromConfig").click()
+        expect(self.page.locator("#runSteps")).to_contain_text("完成", timeout=60_000)
+        self.goto("/results")
+        result_tabs = self.page.locator("[data-result-view-button]").evaluate_all(
+            "(nodes) => nodes.map((node) => node.innerText.trim())"
+        )
+        self.assert_true(result, result_tabs == ["决策总览", "审批放行"], f"决策页页签不符合新版设计：{result_tabs}")
+        expect(self.page.locator("#totalCost")).not_to_have_text("-", timeout=20_000)
+        expect(self.page.locator("#executiveBriefPanel")).to_be_visible(timeout=20_000)
+        expect(self.page.locator("#businessValuePanel")).to_be_visible(timeout=20_000)
+        result.evidence = {
+            "playbook_count": playbook_count,
+            "result_tabs": result_tabs,
+            "total_cost": self.page.locator("#totalCost").inner_text(),
+            "brief_excerpt": self.page.locator("#executiveBriefPanel").inner_text()[:300],
+        }
+        self.assert_true(result, playbook_count >= 3, "场景配置少于三种方案")
+
+    def e2e04_quick_release_stays_visible_in_governance(self, result):
+        self.set_role("admin", "/results")
+        payload = self.click_saved_run_and_wait()
+        run_id = payload.get("run_record", {}).get("run_id", "")
+        self.page.get_by_role("button", name="审批放行").click()
+        expect(self.page.locator("#quickRelease")).to_be_visible(timeout=20_000)
+        expect(self.page.locator("#approvalWorkflow")).to_be_visible(timeout=20_000)
+        self.page.locator("#quickRelease").click()
+        expect(self.page.locator("#approvalStatus")).to_contain_text("已批准", timeout=30_000)
+        expect(self.page.locator("#publishStatus")).not_to_contain_text("发布失败", timeout=30_000)
+        result.evidence = {
+            "run_id": run_id,
+            "approval_status": self.page.locator("#approvalStatus").inner_text(),
+            "publish_status": self.page.locator("#publishStatus").inner_text(),
+        }
+
+    def e2e05_report_export_and_history_audit(self, result):
+        self.set_role("planner", "/results")
+        self.click_saved_run_and_wait()
+        self.page.locator("#exportReport").click()
+        expect(self.page.locator("#exportStatus")).to_contain_text("已导出", timeout=30_000)
+        self.page.get_by_role("button", name="审批放行").click()
+        expect(self.page.locator("#historyRows tr").first).to_be_visible(timeout=30_000)
+        report_button = self.page.locator("[data-report-run]").first
+        run_id = report_button.get_attribute("data-report-run") or ""
+        report_button.click()
+        expect(self.page.locator("#auditReportPanel")).to_contain_text("版本证据链", timeout=20_000)
+        self.assert_true(result, self.page.locator("#quickRelease").is_visible(), "查看审计报告后快速放行按钮不可见")
+        result.evidence = {
+            "run_id": run_id,
+            "export_status": self.page.locator("#exportStatus").inner_text(),
+            "audit_excerpt": self.page.locator("#auditReportPanel").inner_text()[:300],
+        }
+
+    def e2e06_role_permissions_match_simplified_pages(self, result):
+        self.set_role("viewer", "/results")
+        expect(self.page.locator("#run")).to_be_disabled()
+        expect(self.page.locator("#exportReport")).to_be_disabled()
+        expect(self.page.locator("#quickRelease")).to_be_disabled()
+        self.set_role("viewer", "/config")
+        self.assert_true(result, self.page.url.endswith("/upstream"), f"viewer 不应进入配置页：{self.page.url}")
+        self.set_role("approver", "/upstream")
+        self.assert_true(result, self.page.url.endswith("/results"), f"approver 应被收敛到决策页：{self.page.url}")
+        self.set_role("data_admin", "/upstream")
+        self.page.get_by_role("button", name="业务数据").click()
+        expect(self.page.locator("#saveUpstream")).to_be_enabled()
+        result.evidence = {
+            "viewer_run_disabled": True,
+            "viewer_config_redirect": "/upstream",
+            "approver_upstream_redirect": "/results",
+            "data_admin_upstream_save_enabled": True,
+        }
+
+    def e2e07_governance_capacity_page(self, result):
+        self.set_role("viewer", "/performance")
+        expect(self.page.locator("#capacityStatus")).to_contain_text("已完成", timeout=45_000)
+        expect(self.page.locator("#capacitySummary")).to_contain_text("上游订单量")
+        expect(self.page.locator("#throughputChart .throughput-row").first).to_be_visible()
+        result.evidence = {
+            "capacity_status": self.page.locator("#capacityStatus").inner_text(),
+            "throughput_rows": self.page.locator("#throughputChart .throughput-row").count(),
+        }
+
+    def e2e08_no_console_errors_on_primary_workflow(self, result):
+        self.set_role("admin", "/results")
+        self.click_saved_run_and_wait()
+        self.page.get_by_role("button", name="审批放行").click()
+        self.page.locator("#quickRelease").click()
+        expect(self.page.locator("#approvalStatus")).not_to_contain_text("失败", timeout=30_000)
+        self.page.wait_for_timeout(1000)
+        self.assert_true(result, not self.console_errors, f"主流程出现 console error：{self.console_errors}")
+        result.evidence = {"console_errors": list(self.console_errors), "approval_status": self.page.locator("#approvalStatus").inner_text()}
+
     def run_all(self):
-        self.run_case("E2E01", "页面导航与订单明细抽样展示", self.e2e01_navigation_and_order_sample, ["FLOW_NAV", "UPSTREAM_ORDERS"])
-        self.run_case("E2E02", "上游业务表页面编辑保存回读", self.e2e02_upstream_edit_save_roundtrip, ["UPSTREAM_EDIT"])
-        self.run_case("E2E03", "场景配置传递到模型入参并高亮", self.e2e03_config_to_model_inputs_highlight, ["CONFIG_PLAYBOOK", "INPUT_HIGHLIGHT"])
-        self.run_case("E2E04", "求解流水线进度与成本结构可视化", self.e2e04_results_pipeline_and_visuals, ["RESULT_RUN_PIPELINE", "RESULT_COST_VISUAL", "RESULT_EXPLAIN"])
-        self.run_case("E2E05", "审批通过与执行发布闭环", self.e2e05_approval_and_publish_flow, ["RESULT_GOVERNANCE", "RESULT_EXECUTION"])
-        self.run_case("E2E06", "运行历史报告与回放", self.e2e06_history_replay_and_report, ["RESULT_HISTORY"])
-        self.run_case("E2E07", "数据血缘与约束解释页面导航", self.e2e07_lineage_and_constraints_navigation, ["LINEAGE", "CONSTRAINTS"])
-        self.run_case("E2E08", "压力测试与容量评估页面", self.e2e08_capacity_assessment_page, ["PERFORMANCE"])
-        self.run_case("E2E09", "上游数据二级页面覆盖", self.e2e09_upstream_source_quality_quarantine_weather_scale, ["UPSTREAM_SOURCE", "UPSTREAM_QUALITY", "UPSTREAM_QUARANTINE", "UPSTREAM_WEATHER", "UPSTREAM_SCALE"])
-        self.run_case("E2E10", "场景配置保存审计与权限", self.e2e10_config_playbooks_save_audit_and_permissions, ["CONFIG_PLAYBOOK", "CONFIG_SAVE_AUDIT", "ROLE_PERMISSIONS"])
-        self.run_case("E2E11", "四模型入参导航与重新生成", self.e2e11_model_input_tabs_and_regeneration, ["INPUT_NAV", "INPUT_HIGHLIGHT", "RESULT_RUN_PIPELINE"])
-        self.run_case("E2E12", "结果页面板、三方案对比与报告导出", self.e2e12_results_subviews_compare_enterprise_export, ["RESULT_ENTERPRISE", "RESULT_EXPLAIN", "REPORT_EXPORT", "RESULT_COST_VISUAL"])
-        self.run_case("E2E13", "角色权限隔离页面校验", self.e2e13_role_permission_gates, ["AUTH_LOGIN", "ROLE_PERMISSIONS"])
-        self.run_case("E2E14", "审批驳回路径与发布拦截", self.e2e14_approval_reject_path, ["RESULT_GOVERNANCE", "RESULT_EXECUTION", "ROLE_PERMISSIONS"])
-        self.run_case("E2E15", "血缘多视图与四模型约束覆盖", self.e2e15_lineage_all_views_and_all_constraints, ["LINEAGE", "CONSTRAINTS"])
-        self.run_case("E2E16", "上游到结果四步准确性链路", self.e2e16_accuracy_flow_upstream_to_result, ["FLOW_NAV", "UPSTREAM_EDIT", "CONFIG_PLAYBOOK", "INPUT_HIGHLIGHT", "RESULT_RUN_PIPELINE", "RESULT_COST_VISUAL", "ACCURACY_FLOW"])
+        self.run_case("E2E01", "简化主导航与技术页隐藏", self.e2e01_simplified_navigation_and_hidden_tech_pages, ["AUTH_LOGIN", "FLOW_NAV", "TECH_PAGES_HIDDEN"])
+        self.run_case("E2E02", "数据工作台三入口与业务数据保存", self.e2e02_data_workspace_is_compact_and_editable, ["UPSTREAM_SUMMARY", "UPSTREAM_QUALITY", "UPSTREAM_EDIT"])
+        self.run_case("E2E03", "配置运行进入决策总览", self.e2e03_config_run_and_decision_summary, ["CONFIG_PLAYBOOK", "CONFIG_RUN", "RESULT_RUN_PIPELINE", "RESULT_DECISION"])
+        self.run_case("E2E04", "审批放行页快速放行", self.e2e04_quick_release_stays_visible_in_governance, ["RESULT_GOVERNANCE", "RESULT_QUICK_RELEASE"])
+        self.run_case("E2E05", "报告导出与运行审计", self.e2e05_report_export_and_history_audit, ["RESULT_REPORT_EXPORT", "RESULT_GOVERNANCE"])
+        self.run_case("E2E06", "简化角色权限隔离", self.e2e06_role_permissions_match_simplified_pages, ["ROLE_PERMISSIONS", "TECH_PAGES_HIDDEN"])
+        self.run_case("E2E07", "治理容量评估", self.e2e07_governance_capacity_page, ["GOVERNANCE_PERFORMANCE"])
+        self.run_case("E2E08", "主流程无控制台错误", self.e2e08_no_console_errors_on_primary_workflow, ["RESULT_RUN_PIPELINE", "RESULT_QUICK_RELEASE"])
         return self.results
 
 
