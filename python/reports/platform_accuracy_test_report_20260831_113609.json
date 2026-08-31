@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-31T11:19:13",
+  "generated_at": "2026-08-31T11:36:09",
   "source_document": "/Users/bradwoo/cplex/docs/platform_accuracy_test_cases.md",
   "environment": {
     "platform_source": "starrocks",
@@ -7,12 +7,12 @@
     "platform_url": "http://127.0.0.1:5053"
   },
   "summary": {
-    "total_cases": 17,
-    "passed": 17,
+    "total_cases": 24,
+    "passed": 24,
     "failed": 0,
     "errors": 0,
-    "assertions": 83,
-    "test_case_coverage": "17/17",
+    "assertions": 118,
+    "test_case_coverage": "24/24",
     "test_case_coverage_percent": 100.0,
     "pass_rate_percent": 100.0
   },
@@ -33,7 +33,14 @@
     "TC14",
     "TC15",
     "TC16",
-    "TC17"
+    "TC17",
+    "TC18",
+    "TC19",
+    "TC20",
+    "TC21",
+    "TC22",
+    "TC23",
+    "TC24"
   ],
   "results": [
     {
@@ -41,7 +48,7 @@
       "name": "数据源健康检查",
       "status": "PASS",
       "assertions": 6,
-      "elapsed_ms": 269.49,
+      "elapsed_ms": 246.26,
       "failures": [],
       "evidence": {
         "http_status": 200,
@@ -63,7 +70,7 @@
       "name": "天气数据接入准确性",
       "status": "PASS",
       "assertions": 4,
-      "elapsed_ms": 176.49,
+      "elapsed_ms": 179.12,
       "failures": [],
       "evidence": {
         "http_status": 200,
@@ -95,7 +102,7 @@
       "name": "天气因子进入模型入参",
       "status": "PASS",
       "assertions": 4,
-      "elapsed_ms": 1247.61,
+      "elapsed_ms": 1635.26,
       "failures": [],
       "evidence": {
         "http_status": 200,
@@ -109,7 +116,7 @@
       "name": "天气成本转换准确性",
       "status": "PASS",
       "assertions": 2,
-      "elapsed_ms": 760.92,
+      "elapsed_ms": 1337.02,
       "failures": [],
       "evidence": {
         "checked_lanes": 20,
@@ -134,7 +141,7 @@
       "name": "禁用线路不被求解结果使用",
       "status": "PASS",
       "assertions": 1,
-      "elapsed_ms": 1012.89,
+      "elapsed_ms": 1229.34,
       "failures": [],
       "evidence": {
         "checked_playbooks": [
@@ -166,7 +173,7 @@
       "name": "服务水平模型需求平衡",
       "status": "PASS",
       "assertions": 1,
-      "elapsed_ms": 0.02,
+      "elapsed_ms": 0.01,
       "failures": [],
       "evidence": {
         "checked_markets": 4,
@@ -178,7 +185,7 @@
       "name": "天气 A/B 价值验证",
       "status": "PASS",
       "assertions": 3,
-      "elapsed_ms": 1288.54,
+      "elapsed_ms": 1413.93,
       "failures": [],
       "evidence": {
         "with_weather_cost": 193480.0,
@@ -194,7 +201,7 @@
       "name": "极端天气手动注入验证",
       "status": "PASS",
       "assertions": 5,
-      "elapsed_ms": 1405.06,
+      "elapsed_ms": 1329.58,
       "failures": [],
       "evidence": {
         "target_found": true,
@@ -219,7 +226,7 @@
       "name": "页面与只读 API 路由覆盖",
       "status": "PASS",
       "assertions": 22,
-      "elapsed_ms": 20801.25,
+      "elapsed_ms": 20218.82,
       "failures": [],
       "evidence": {
         "checked_routes": 22,
@@ -254,7 +261,7 @@
       "name": "权限与输入校验错误覆盖",
       "status": "PASS",
       "assertions": 7,
-      "elapsed_ms": 151.38,
+      "elapsed_ms": 184.75,
       "failures": [],
       "evidence": {
         "checks": [
@@ -294,7 +301,7 @@
       "name": "场景配置保存审计与恢复",
       "status": "PASS",
       "assertions": 4,
-      "elapsed_ms": 2744.64,
+      "elapsed_ms": 1556.8,
       "failures": [],
       "evidence": {
         "audit_rows": 2,
@@ -306,17 +313,17 @@
       "name": "运行历史审批发布报告闭环",
       "status": "PASS",
       "assertions": 10,
-      "elapsed_ms": 4136.04,
+      "elapsed_ms": 3677.89,
       "failures": [],
       "evidence": {
-        "run_id": "225a35c1",
+        "run_id": "c1c087e1",
         "approved_status": "approved",
         "publish_status": 200,
         "publish_body": {
           "status": "ok"
         },
         "publish_targets": 4,
-        "export_path": "/Users/bradwoo/cplex/python/reports/platform_report_20260831_111913_resilient.md"
+        "export_path": "/Users/bradwoo/cplex/python/reports/platform_report_20260831_113606_resilient.md"
       }
     },
     {
@@ -324,7 +331,7 @@
       "name": "校验与异常隔离边界覆盖",
       "status": "PASS",
       "assertions": 4,
-      "elapsed_ms": 111.74,
+      "elapsed_ms": 114.81,
       "failures": [],
       "evidence": {
         "validation_error": "weather.lane_impacts references unknown warehouse: NO_WAREHOUSE",
@@ -350,7 +357,7 @@
       "name": "JSON 模式分支覆盖",
       "status": "PASS",
       "assertions": 5,
-      "elapsed_ms": 295.62,
+      "elapsed_ms": 192.26,
       "failures": [],
       "evidence": {
         "source": "python/data/platform_upstream_data.json",
@@ -364,7 +371,7 @@
       "name": "天气装载脚本纯函数覆盖",
       "status": "PASS",
       "assertions": 3,
-      "elapsed_ms": 6.86,
+      "elapsed_ms": 6.11,
       "failures": [],
       "evidence": {
         "markets": [
@@ -374,6 +381,140 @@
           "US East",
           "US West"
         ]
+      }
+    },
+    {
+      "case_id": "TC18",
+      "name": "天气装载脚本 mock 覆盖",
+      "status": "PASS",
+      "assertions": 4,
+      "elapsed_ms": 0.07,
+      "failures": [],
+      "evidence": {
+        "generated_rows": 2,
+        "forecast_markets": [
+          "EU",
+          "US West"
+        ]
+      }
+    },
+    {
+      "case_id": "TC19",
+      "name": "StarRocks 上游装载脚本 mock 覆盖",
+      "status": "PASS",
+      "assertions": 5,
+      "elapsed_ms": 1.4,
+      "failures": [],
+      "evidence": {
+        "dimension_counts": {
+          "network_warehouses": 1,
+          "network_markets": 1,
+          "network_lanes": 1,
+          "network_expansion_options": 1,
+          "weather_lane_impacts": 1,
+          "replenishment_weeks": 1,
+          "replenishment_lanes": 1,
+          "service_markets": 1,
+          "service_providers": 1,
+          "service_provider_market_terms": 1
+        },
+        "platform_counts": {
+          "playbooks": 1,
+          "assets": 1,
+          "capabilities": 1
+        },
+        "inserted": {
+          "upstream_network_warehouses": 1,
+          "upstream_network_markets": 1,
+          "upstream_network_lanes": 1,
+          "upstream_network_expansion_options": 1,
+          "upstream_weather_lane_impacts": 1,
+          "upstream_replenishment_weeks": 1,
+          "upstream_replenishment_demand": 1,
+          "upstream_replenishment_lanes": 1,
+          "upstream_service_markets": 1,
+          "upstream_service_providers": 1,
+          "upstream_service_provider_market_terms": 1,
+          "platform_playbooks": 1,
+          "platform_assets": 1,
+          "platform_capabilities": 1
+        }
+      }
+    },
+    {
+      "case_id": "TC20",
+      "name": "StarRocks 上游基础表保存回读",
+      "status": "PASS",
+      "assertions": 3,
+      "elapsed_ms": 2642.72,
+      "failures": [],
+      "evidence": {
+        "before_weather": 20,
+        "after_weather": 20,
+        "network_lanes": 20
+      }
+    },
+    {
+      "case_id": "TC21",
+      "name": "装载脚本建表与天气写库 mock 覆盖",
+      "status": "PASS",
+      "assertions": 4,
+      "elapsed_ms": 0.52,
+      "failures": [],
+      "evidence": {
+        "schema_commands": 18,
+        "weather_loaded": 2
+      }
+    },
+    {
+      "case_id": "TC22",
+      "name": "数据校验错误矩阵覆盖",
+      "status": "PASS",
+      "assertions": 12,
+      "elapsed_ms": 172.2,
+      "failures": [],
+      "evidence": {
+        "validated_errors": {
+          "missing_network": "upstream data is missing required key: network",
+          "missing_warehouse_capacity": "network.warehouses.Los Angeles 3PL.capacity is required",
+          "bad_market_sla": "network.markets.US West.max_delivery_days must be greater than 0",
+          "bad_expansion_ref": "network.expansion_options references unknown warehouse: NO_WAREHOUSE",
+          "missing_lane_pair": "network.lanes is missing warehouse-market pair: Shenzhen Direct Ship -> US West",
+          "missing_replenishment_week": "replenishment.demand is missing week: W999",
+          "missing_service_market_cost": "service_level.services.local_standard.unit_cost_by_market is missing market: US West",
+          "bad_weather_multiplier": "weather.lane_impacts.cost_multiplier must be greater than 0"
+        }
+      }
+    },
+    {
+      "case_id": "TC23",
+      "name": "上游订单装载流程 mock 覆盖",
+      "status": "PASS",
+      "assertions": 4,
+      "elapsed_ms": 0.32,
+      "failures": [],
+      "evidence": {
+        "loaded_order_lines": 3,
+        "commands": 35,
+        "insert_batches": 14
+      }
+    },
+    {
+      "case_id": "TC24",
+      "name": "CLI main 与连接参数 mock 覆盖",
+      "status": "PASS",
+      "assertions": 3,
+      "elapsed_ms": 1.5,
+      "failures": [],
+      "evidence": {
+        "weather": {
+          "forecast_days": 2,
+          "truncate": false
+        },
+        "upstream": {
+          "orders": 7,
+          "skip_orders": true
+        }
       }
     }
   ]

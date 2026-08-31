@@ -1334,7 +1334,15 @@ def load_starrocks_approval_states(cursor, run_ids):
         SELECT run_id, created_at, action, status, actor, comment
         FROM platform_run_approvals
         WHERE run_id IN ({placeholders})
-        ORDER BY created_at ASC, approval_id ASC
+        ORDER BY
+          created_at ASC,
+          CASE action
+            WHEN 'submit' THEN 1
+            WHEN 'reject' THEN 2
+            WHEN 'approve' THEN 3
+            ELSE 4
+          END ASC,
+          approval_id ASC
         """,
         run_ids,
     )

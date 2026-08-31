@@ -3,10 +3,13 @@ import os
 import sys
 import time
 import traceback
+from contextlib import redirect_stdout
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime
+from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
 
 os.environ.setdefault("PLATFORM_UPSTREAM_SOURCE", "starrocks")
@@ -530,6 +533,444 @@ class PlatformAccuracyRunner:
         self.assert_true(result, load_starrocks_weather.classify_weather_risk(high)[:3] == ("high", 2, 1.18), "高风险天气分级错误")
         result.evidence = {"markets": sorted(load_starrocks_weather.MARKET_COORDINATES)}
 
+    def tc18_weather_loader_with_mocks(self, result):
+        import load_starrocks_weather
+
+        class FakeCursor:
+            def __init__(self):
+                self.executed = []
+                self.inserted = []
+
+            def execute(self, sql, params=None):
+                self.executed.append(sql)
+
+            def fetchall(self):
+                return [
+                    {"warehouse": "Los Angeles 3PL", "market": "US West"},
+                    {"warehouse": "Rotterdam EU Hub", "market": "EU"},
+                    {"warehouse": "Ghost Warehouse", "market": "Unknown"},
+                ]
+
+            def executemany(self, sql, rows):
+                self.executed.append(sql)
+                self.inserted.extend(rows)
+
+        cursor = FakeCursor()
+        args = type("Args", (), {"forecast_days": 3, "timeout": 5})()
+        original_coordinates = load_starrocks_weather.MARKET_COORDINATES
+        original_fetch = load_starrocks_weather.fetch_market_weather
+        try:
+            load_starrocks_weather.MARKET_COORDINATES = {
+                "US West": {"latitude": 1, "longitude": 2, "label": "Los Angeles"},
+                "EU": {"latitude": 3, "longitude": 4, "label": "Amsterdam"},
+            }
+            load_starrocks_weather.fetch_market_weather = lambda market, coordinates, forecast_days, timeout: {
+                "market": market,
+                "location": coordinates["label"],
+                "max_precipitation": 30 if market == "EU" else 0,
+                "max_rain": 30 if market == "EU" else 0,
+                "max_snowfall": 0,
+                "max_wind": 10,
+                "max_temperature": 20,
+            }
+            rows, forecasts, snapshot = load_starrocks_weather.build_weather_rows(args, cursor)
+        finally:
+            load_starrocks_weather.MARKET_COORDINATES = original_coordinates
+            load_starrocks_weather.fetch_market_weather = original_fetch
+        self.assert_true(result, len(rows) == 2, "天气脚本没有按有效市场生成线路行")
+        self.assert_true(result, any(row[1] == "EU" and row[2] == "medium" for row in rows), "EU 天气风险没有按 mock 降水转换")
+        self.assert_true(result, "US West" in forecasts and "EU" in forecasts, "天气 forecast 缓存缺少市场")
+        self.assert_true(result, bool(snapshot), "天气快照时间为空")
+        result.evidence = {"generated_rows": len(rows), "forecast_markets": sorted(forecasts)}
+
+    def tc19_upstream_loader_with_mocks(self, result):
+        import load_starrocks_upstream
+
+        class FakeCursor:
+            def __init__(self):
+                self.commands = []
+                self.inserted = {}
+
+            def execute(self, sql, params=None):
+                self.commands.append(sql)
+
+            def executemany(self, sql, rows):
+                table = sql.split("INSERT INTO ", 1)[1].split()[0]
+                self.inserted.setdefault(table, 0)
+                self.inserted[table] += len(list(rows))
+
+        cursor = FakeCursor()
+        source_data = {
+            "network": {
+                "warehouses": {"W1": {"capacity": 10, "fixed_cost": 1, "handling_cost": 0.5}},
+                "markets": {"M1": {"demand": 5, "max_delivery_days": 3}},
+                "lanes": [{"warehouse": "W1", "market": "M1", "last_mile_cost": 2, "delivery_days": 2}],
+                "expansion_options": {"W1": {"max_extra_capacity": 3, "unit_cost": 4}},
+            },
+            "weather": {
+                "snapshot_time": "2026-08-31T00:00:00+00:00",
+                "lane_impacts": [{"warehouse": "W1", "market": "M1", "risk_level": "low", "delay_days": 0, "cost_multiplier": 1.02, "reason": "test"}],
+            },
+            "replenishment": {
+                "weeks": ["W1"],
+                "demand": {"W1": 8},
+                "lanes": {"air": {"lead_time_weeks": 1, "unit_cost": 3, "weekly_capacity": 9}},
+                "initial_inventory": 1,
+                "target_ending_inventory": 1,
+                "holding_cost": 0.1,
+                "stockout_penalty": 10,
+            },
+            "service_level": {
+                "markets": {"M1": {"demand": 5, "max_avg_delivery_days": 3}},
+                "services": {"S1": {"capacity": 10, "fixed_cost": 1, "unit_cost_by_market": {"M1": 2}, "delivery_days_by_market": {"M1": 2}}},
+            },
+        }
+        platform_data = {
+            "playbooks": {
+                "baseline": {
+                    "name": "基准",
+                    "description": "test",
+                    "demand_multiplier": 1,
+                    "sla_extra_days": 0,
+                    "air_capacity": 1,
+                    "ocean_lead_time": 2,
+                    "unfulfilled_penalty": 10,
+                    "network_mode": "strict",
+                    "staff_peak": False,
+                    "soft_staffing": False,
+                }
+            },
+            "assets": [{"name": "A", "area": "B"}],
+            "capabilities": ["C"],
+        }
+        dimension_counts = load_starrocks_upstream.load_dimension_tables(cursor, source_data)
+        platform_counts = load_starrocks_upstream.load_platform_tables(cursor, platform_data)
+        batches = list(load_starrocks_upstream.batched([1, 2, 3, 4, 5], 2))
+        self.assert_true(result, dimension_counts["weather_lane_impacts"] == 1, "维表装载未统计天气行")
+        self.assert_true(result, dimension_counts["network_lanes"] == 1, "维表装载未统计线路")
+        self.assert_true(result, platform_counts["playbooks"] == 1, "平台配置装载未统计 playbook")
+        self.assert_true(result, batches == [[1, 2], [3, 4], [5]], "批处理切片错误")
+        self.assert_true(result, cursor.inserted.get("upstream_weather_lane_impacts", 0) == 1, "天气行没有写入 fake cursor")
+        result.evidence = {"dimension_counts": dimension_counts, "platform_counts": platform_counts, "inserted": cursor.inserted}
+
+    def tc20_starrocks_upstream_save_roundtrip(self, result):
+        data = platform_app.load_upstream_data()
+        before_weather = self.starrocks_count("upstream_weather_lane_impacts")
+        platform_app.save_starrocks_upstream_data(data)
+        after_weather = self.starrocks_count("upstream_weather_lane_impacts")
+        reloaded = platform_app.load_upstream_data()
+        self.assert_true(result, after_weather == len(data.get("weather", {}).get("lane_impacts", [])), "保存后天气表行数不一致")
+        self.assert_true(result, reloaded.get("weather", {}).get("source") == "StarRocks.upstream_weather_lane_impacts", "保存后天气来源错误")
+        self.assert_true(result, len(reloaded.get("network", {}).get("lanes", [])) == len(data["network"]["lanes"]), "保存后网络线路数量变化")
+        result.evidence = {"before_weather": before_weather, "after_weather": after_weather, "network_lanes": len(reloaded["network"]["lanes"])}
+
+    def tc21_loader_schema_and_weather_load_mocks(self, result):
+        import load_starrocks_upstream
+        import load_starrocks_weather
+
+        class FakeCursor:
+            def __init__(self):
+                self.commands = []
+                self.inserted = []
+                self.rows = [
+                    {"warehouse": "W1", "market": "US West"},
+                    {"warehouse": "W1", "market": "EU"},
+                ]
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def execute(self, sql, params=None):
+                self.commands.append(sql)
+
+            def executemany(self, sql, rows):
+                self.commands.append(sql)
+                self.inserted.extend(list(rows))
+
+            def fetchall(self):
+                return self.rows
+
+        class FakeConnection:
+            def __init__(self, cursor):
+                self.cursor_obj = cursor
+                self.committed = False
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def cursor(self):
+                return self.cursor_obj
+
+            def commit(self):
+                self.committed = True
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return json.dumps(
+                    {
+                        "daily": {
+                            "precipitation_sum": [0, 12],
+                            "rain_sum": [0, 12],
+                            "snowfall_sum": [0, 0],
+                            "wind_speed_10m_max": [10, 20],
+                            "temperature_2m_max": [21, 23],
+                        }
+                    }
+                ).encode("utf-8")
+
+        schema_cursor = FakeCursor()
+        schema_args = type("Args", (), {"database": "db", "table": "orders", "buckets": 2, "replication_num": "1"})()
+        original_upstream_connect = load_starrocks_upstream.connect
+        original_weather_connect = load_starrocks_weather.connect
+        original_urlopen = load_starrocks_weather.urlopen
+        try:
+            load_starrocks_upstream.connect = lambda args, database=None: FakeConnection(schema_cursor)
+            load_starrocks_upstream.create_schema(schema_args)
+
+            weather_cursor = FakeCursor()
+            load_starrocks_weather.connect = lambda args: FakeConnection(weather_cursor)
+            load_starrocks_weather.urlopen = lambda url, timeout: FakeResponse()
+            weather_args = type(
+                "Args",
+                (),
+                {
+                    "host": "x",
+                    "port": 1,
+                    "user": "u",
+                    "password": "",
+                    "database": "db",
+                    "forecast_days": 2,
+                    "timeout": 1,
+                    "replication_num": "1",
+                    "truncate": True,
+                },
+            )()
+            loaded = load_starrocks_weather.load_weather(weather_args)
+            fetched = load_starrocks_weather.fetch_market_weather("US West", {"latitude": 1, "longitude": 2, "label": "X"}, 2, 1)
+        finally:
+            load_starrocks_upstream.connect = original_upstream_connect
+            load_starrocks_weather.connect = original_weather_connect
+            load_starrocks_weather.urlopen = original_urlopen
+        self.assert_true(result, len(schema_cursor.commands) >= 10, "上游装载建表 SQL 覆盖不足")
+        self.assert_true(result, loaded["inserted_rows"] == 2, "mock 天气装载行数错误")
+        self.assert_true(result, len(weather_cursor.inserted) == 2, "mock 天气写库没有执行")
+        self.assert_true(result, fetched["max_precipitation"] == 12, "mock Open-Meteo 解析错误")
+        result.evidence = {"schema_commands": len(schema_cursor.commands), "weather_loaded": loaded["inserted_rows"]}
+
+    def tc22_validation_error_matrix(self, result):
+        data = platform_app.load_upstream_data()
+        mutations = []
+
+        bad = deepcopy(data)
+        bad.pop("network")
+        mutations.append(("missing_network", bad))
+
+        bad = deepcopy(data)
+        bad["network"]["warehouses"]["Los Angeles 3PL"].pop("capacity")
+        mutations.append(("missing_warehouse_capacity", bad))
+
+        bad = deepcopy(data)
+        bad["network"]["markets"]["US West"]["max_delivery_days"] = 0
+        mutations.append(("bad_market_sla", bad))
+
+        bad = deepcopy(data)
+        bad["network"]["expansion_options"]["NO_WAREHOUSE"] = {"max_extra_capacity": 1, "unit_cost": 1}
+        mutations.append(("bad_expansion_ref", bad))
+
+        bad = deepcopy(data)
+        bad["network"]["lanes"] = bad["network"]["lanes"][:-1]
+        mutations.append(("missing_lane_pair", bad))
+
+        bad = deepcopy(data)
+        bad["replenishment"]["weeks"].append("W999")
+        mutations.append(("missing_replenishment_week", bad))
+
+        bad = deepcopy(data)
+        bad["service_level"]["services"]["local_standard"]["unit_cost_by_market"].pop("US West", None)
+        mutations.append(("missing_service_market_cost", bad))
+
+        bad = deepcopy(data)
+        bad["weather"]["lane_impacts"][0]["cost_multiplier"] = 0
+        mutations.append(("bad_weather_multiplier", bad))
+
+        errors = {name: platform_app.validate_upstream_data(payload) for name, payload in mutations}
+        for name, error in errors.items():
+            self.assert_true(result, bool(error), f"{name} 未触发校验错误")
+        self.assert_true(result, platform_app.validate_platform_data(None) is not None, "非对象平台配置未报错")
+        self.assert_true(result, platform_app.validate_platform_data({"playbooks": {"": {}}, "assets": [], "capabilities": []}) is not None, "空 playbook id 未报错")
+        self.assert_true(result, platform_app.weather_risk_score("high") == 3 and platform_app.weather_risk_score("x") == 0, "天气风险分值错误")
+        self.assert_true(result, platform_app.markdown_cell("a|b") == "a\\|b", "Markdown 单元格转义错误")
+        result.evidence = {"validated_errors": errors}
+
+    def tc23_upstream_load_orders_mock_flow(self, result):
+        import load_starrocks_upstream
+
+        class FakePath:
+            def __init__(self, payload):
+                self.payload = payload
+
+            def read_text(self, encoding="utf-8"):
+                return json.dumps(self.payload, ensure_ascii=False)
+
+        class FakeCursor:
+            def __init__(self):
+                self.commands = []
+                self.inserts = []
+                self.last_select = ""
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def execute(self, sql, params=None):
+                self.commands.append(sql)
+                self.last_select = sql
+
+            def executemany(self, sql, rows):
+                self.commands.append(sql)
+                self.inserts.extend(list(rows))
+
+            def fetchone(self):
+                return {"order_line_count": 3}
+
+            def fetchall(self):
+                if "GROUP BY market" in self.last_select:
+                    return [{"market": "M1", "order_lines": 3, "units": 6}]
+                return []
+
+        class FakeConnection:
+            def __init__(self, cursor):
+                self.cursor_obj = cursor
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def cursor(self):
+                return self.cursor_obj
+
+        source_data = {
+            "orders": [{"order_id": "seed"}],
+            "network": {
+                "warehouses": {"W1": {"capacity": 10, "fixed_cost": 1, "handling_cost": 0.5}},
+                "markets": {"M1": {"demand": 5, "max_delivery_days": 3}},
+                "lanes": [{"warehouse": "W1", "market": "M1", "last_mile_cost": 2, "delivery_days": 2}],
+                "expansion_options": {"W1": {"max_extra_capacity": 3, "unit_cost": 4}},
+            },
+            "weather": {"snapshot_time": "t", "lane_impacts": []},
+            "replenishment": {
+                "weeks": ["W1"],
+                "demand": {"W1": 8},
+                "lanes": {"air": {"lead_time_weeks": 1, "unit_cost": 3, "weekly_capacity": 9}},
+                "initial_inventory": 1,
+                "target_ending_inventory": 1,
+                "holding_cost": 0.1,
+                "stockout_penalty": 10,
+            },
+            "service_level": {
+                "markets": {"M1": {"demand": 5, "max_avg_delivery_days": 3}},
+                "services": {"S1": {"capacity": 10, "fixed_cost": 1, "unit_cost_by_market": {"M1": 2}, "delivery_days_by_market": {"M1": 2}}},
+            },
+        }
+        platform_data = {
+            "playbooks": {
+                "baseline": {
+                    "name": "基准",
+                    "description": "test",
+                    "demand_multiplier": 1,
+                    "sla_extra_days": 0,
+                    "air_capacity": 1,
+                    "ocean_lead_time": 2,
+                    "unfulfilled_penalty": 10,
+                    "network_mode": "strict",
+                    "staff_peak": False,
+                    "soft_staffing": False,
+                }
+            },
+            "assets": [],
+            "capabilities": [],
+        }
+        cursor = FakeCursor()
+        args = type(
+            "Args",
+            (),
+            {
+                "database": "db",
+                "table": "orders",
+                "orders": 3,
+                "batch_size": 2,
+                "buckets": 2,
+                "replication_num": "1",
+                "truncate": True,
+                "skip_orders": False,
+                "progress": 2,
+            },
+        )()
+        original_data_path = load_starrocks_upstream.DATA_PATH
+        original_platform_path = load_starrocks_upstream.PLATFORM_DATA_PATH
+        original_connect = load_starrocks_upstream.connect
+        original_create_schema = load_starrocks_upstream.create_schema
+        original_build_orders = load_starrocks_upstream.build_orders
+        try:
+            load_starrocks_upstream.DATA_PATH = FakePath(source_data)
+            load_starrocks_upstream.PLATFORM_DATA_PATH = FakePath(platform_data)
+            load_starrocks_upstream.connect = lambda args, database=None: FakeConnection(cursor)
+            load_starrocks_upstream.create_schema = lambda args: cursor.execute("CREATE_SCHEMA")
+            load_starrocks_upstream.build_orders = lambda seeds, total: [
+                {"order_id": f"O{i}", "market": "M1", "channel": "web", "units": i, "priority": "normal", "requested_delivery_days": 3, "demand_share_bp": 100}
+                for i in range(1, total + 1)
+            ]
+            with redirect_stdout(StringIO()):
+                loaded = load_starrocks_upstream.load_orders(args)
+        finally:
+            load_starrocks_upstream.DATA_PATH = original_data_path
+            load_starrocks_upstream.PLATFORM_DATA_PATH = original_platform_path
+            load_starrocks_upstream.connect = original_connect
+            load_starrocks_upstream.create_schema = original_create_schema
+            load_starrocks_upstream.build_orders = original_build_orders
+        self.assert_true(result, loaded["loaded_order_lines"] == 3, "mock 订单装载计数错误")
+        self.assert_true(result, loaded["target_order_lines"] == 3, "目标订单量错误")
+        self.assert_true(result, loaded["market_rows"][0]["units"] == 6, "市场聚合结果错误")
+        self.assert_true(result, any("TRUNCATE TABLE `orders`" in sql for sql in cursor.commands), "订单表 truncate 未执行")
+        result.evidence = {"loaded_order_lines": loaded["loaded_order_lines"], "commands": len(cursor.commands), "insert_batches": len(cursor.inserts)}
+
+    def tc24_cli_main_and_connect_mocks(self, result):
+        import load_starrocks_upstream
+        import load_starrocks_weather
+
+        calls = {}
+        with redirect_stdout(StringIO()):
+            with patch.object(sys, "argv", ["load_starrocks_weather.py", "--forecast-days", "2", "--no-truncate"]):
+                with patch.object(load_starrocks_weather, "load_weather", lambda args: calls.setdefault("weather", {"forecast_days": args.forecast_days, "truncate": args.truncate})):
+                    load_starrocks_weather.main()
+            with patch.object(sys, "argv", ["load_starrocks_upstream.py", "--orders", "7", "--skip-orders"]):
+                with patch.object(load_starrocks_upstream, "load_orders", lambda args: calls.setdefault("upstream", {"orders": args.orders, "skip_orders": args.skip_orders})):
+                    load_starrocks_upstream.main()
+        with patch.object(load_starrocks_weather.pymysql, "connect", lambda **kwargs: kwargs):
+            weather_conn = load_starrocks_weather.connect(type("Args", (), {"host": "h", "port": 1, "user": "u", "password": "p", "database": "d"})())
+        with patch.object(load_starrocks_upstream.pymysql, "connect", lambda **kwargs: kwargs):
+            upstream_conn = load_starrocks_upstream.connect(type("Args", (), {"host": "h", "port": 2, "user": "u", "password": "p"})(), "d2")
+        self.assert_true(result, calls["weather"] == {"forecast_days": 2, "truncate": False}, "天气 CLI 参数解析错误")
+        self.assert_true(result, calls["upstream"] == {"orders": 7, "skip_orders": True}, "上游 CLI 参数解析错误")
+        self.assert_true(result, weather_conn["database"] == "d" and upstream_conn["database"] == "d2", "connect 参数传递错误")
+        result.evidence = calls
+
     def run(self):
         self.run_case("TC01", "数据源健康检查", self.tc01_source_health)
         self.run_case("TC02", "天气数据接入准确性", self.tc02_weather_upstream)
@@ -548,6 +989,13 @@ class PlatformAccuracyRunner:
         self.run_case("TC15", "校验与异常隔离边界覆盖", self.tc15_validation_and_quarantine_edges)
         self.run_case("TC16", "JSON 模式分支覆盖", self.tc16_json_mode_branches)
         self.run_case("TC17", "天气装载脚本纯函数覆盖", self.tc17_weather_loader_pure_functions)
+        self.run_case("TC18", "天气装载脚本 mock 覆盖", self.tc18_weather_loader_with_mocks)
+        self.run_case("TC19", "StarRocks 上游装载脚本 mock 覆盖", self.tc19_upstream_loader_with_mocks)
+        self.run_case("TC20", "StarRocks 上游基础表保存回读", self.tc20_starrocks_upstream_save_roundtrip)
+        self.run_case("TC21", "装载脚本建表与天气写库 mock 覆盖", self.tc21_loader_schema_and_weather_load_mocks)
+        self.run_case("TC22", "数据校验错误矩阵覆盖", self.tc22_validation_error_matrix)
+        self.run_case("TC23", "上游订单装载流程 mock 覆盖", self.tc23_upstream_load_orders_mock_flow)
+        self.run_case("TC24", "CLI main 与连接参数 mock 覆盖", self.tc24_cli_main_and_connect_mocks)
         return self.results
 
 
@@ -635,7 +1083,7 @@ def render_markdown_report(payload):
             "",
             "## 覆盖说明",
             "",
-            "- TC01-TC17 全部自动化执行，测试用例覆盖率为 100%。",
+            f"- {payload['summary']['test_case_coverage']} 个测试用例全部自动化执行，测试用例覆盖率为 {payload['summary']['test_case_coverage_percent']}%。",
             "- 本报告统计业务测试用例覆盖率和断言结果；代码行覆盖率由 `coverage.py` 单独生成。",
         ]
     )
