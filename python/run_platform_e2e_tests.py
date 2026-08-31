@@ -341,22 +341,42 @@ class PlatformE2ERunner:
         self.assert_true(result, self.page.locator(".cost-card").count() >= 4, "成本结构卡片不足")
 
     def e2e05_approval_and_publish_flow(self, result):
-        self.set_role("admin", "/results")
+        self.set_role("planner", "/results")
         self.wait_for_result_preview()
         self.page.get_by_role("button", name="运行概览").click()
         self.set_config_field("demand", "1.3")
         self.click_saved_run_and_wait()
         self.page.get_by_role("button", name="治理审批").click()
         expect(self.page.locator("#approvalStatus")).to_contain_text("待提交", timeout=20_000)
+        run_id = self.page.evaluate("latestRunId")
         self.page.locator("#submitApproval").click()
         expect(self.page.locator("#approvalStatus")).to_contain_text("已提交", timeout=20_000)
+
+        self.set_role("approver", "/results")
+        self.page.get_by_role("button", name="治理审批").click()
+        expect(self.page.locator("#approvalStatus")).to_contain_text(run_id, timeout=20_000)
+        expect(self.page.locator("#approvalStatus")).to_contain_text("已提交", timeout=20_000)
+        expect(self.page.locator("#totalCost")).not_to_have_text("0", timeout=20_000)
         self.page.locator("#approveRun").click()
         expect(self.page.locator("#approvalStatus")).to_contain_text("已批准", timeout=20_000)
+
+        self.set_role("admin", "/results")
+        self.page.evaluate(
+            """(runId) => {
+                latestRunId = runId;
+                const row = runHistoryRows.find((item) => item.run_id === runId);
+                if (row) {
+                  latestCaseData = { run_record: row, execution_handoff: null, operating_monitor: null };
+                }
+            }""",
+            run_id,
+        )
         self.page.get_by_role("button", name="执行闭环").click()
         expect(self.page.locator("#publishExecution")).to_be_enabled(timeout=20_000)
         self.page.locator("#publishExecution").click()
         expect(self.page.locator("#publishStatus")).to_contain_text("已发布", timeout=20_000)
         result.evidence = {
+            "run_id": run_id,
             "approval_status": self.page.locator("#approvalStatus").inner_text(),
             "publish_status": self.page.locator("#publishStatus").inner_text(),
         }
@@ -404,7 +424,7 @@ class PlatformE2ERunner:
         self.wait_for_result_preview()
         self.page.get_by_role("button", name="运行概览").click()
         self.set_config_field("demand", "1.3")
-        self.click_run_and_wait()
+        self.click_saved_run_and_wait()
         self.page.get_by_role("button", name="治理审批").click()
         run_id = self.page.evaluate("latestRunId")
         expect(self.page.locator("#approvalStatus")).to_contain_text("待提交", timeout=20_000)

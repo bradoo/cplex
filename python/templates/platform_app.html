@@ -2596,11 +2596,16 @@
     }
 
     function renderExecutionHandoff(handoff, approval) {
+      const approvalStatus = approval ? approval.status : "not_submitted";
+      const canPublish = Boolean(latestRunId) && can("publish_execution") && ["approved", "auto_approved"].includes(approvalStatus);
+      field("publishExecution").disabled = !canPublish;
+      field("publishStatus").textContent = canPublish
+        ? `当前运行记录 ${latestRunId} 已放行，可发布执行包。`
+        : "审批通过或自动通过后，可生成执行批次并写入下游策略表。";
       if (!handoff) {
         field("handoffPanel").innerHTML = `<p class="small">当前接口暂未返回执行交接信息。</p>`;
         return;
       }
-      const approvalStatus = approval ? approval.status : "not_submitted";
       const releaseState = approvalStatus === "approved" || approvalStatus === "auto_approved"
         ? "已放行，可进入下游执行"
         : approvalStatus === "rejected"
@@ -2611,11 +2616,6 @@
         : approvalStatus === "rejected"
           ? "当前运行记录不可执行，请回到场景配置或上游数据层调整。"
           : handoff.release_note;
-      const canPublish = Boolean(latestRunId) && can("publish_execution") && ["approved", "auto_approved"].includes(approvalStatus);
-      field("publishExecution").disabled = !canPublish;
-      field("publishStatus").textContent = canPublish
-        ? `当前运行记录 ${latestRunId} 已放行，可发布执行包。`
-        : "审批通过或自动通过后，可生成执行批次并写入下游策略表。";
       field("handoffPanel").innerHTML = `
         <div class="row">
           <strong>执行状态</strong>
@@ -3162,6 +3162,40 @@
       document.querySelectorAll("[data-reject-run]").forEach((button) => {
         button.addEventListener("click", () => updateApproval("reject", button.dataset.rejectRun));
       });
+      hydrateApprovalWorkbench(rows);
+    }
+
+    function hydrateApprovalWorkbench(rows) {
+      if ((!can("decide_approval") && !can("publish_execution")) || latestRunId || !rows.length) {
+        return;
+      }
+      const pending = rows.find((row) => row.approval && row.approval.status === "submitted");
+      const approved = rows.find((row) => row.approval && ["approved", "auto_approved"].includes(row.approval.status));
+      const reviewable = can("decide_approval")
+        ? (pending || rows.find((row) => row.approval && ["not_submitted", "rejected"].includes(row.approval.status)) || rows[0])
+        : (approved || pending || rows[0]);
+      if (!reviewable) {
+        return;
+      }
+      latestRunId = reviewable.run_id;
+      latestCaseData = {
+        playbook_name: reviewable.playbook_name,
+        run_record: reviewable,
+        execution_handoff: null,
+        operating_monitor: null
+      };
+      field("current").textContent = reviewable.playbook_name || "-";
+      field("inputPlaybook").textContent = reviewable.playbook_name || "-";
+      field("totalCost").textContent = fmt(reviewable.summary && reviewable.summary.total_cost);
+      field("networkCost").textContent = fmt(reviewable.summary && reviewable.summary.network_cost);
+      field("replenishmentCost").textContent = fmt(reviewable.summary && reviewable.summary.replenishment_cost);
+      field("shortage").textContent = fmt(reviewable.summary && reviewable.summary.total_shortage);
+      field("approval").textContent = `审批分层：${reviewable.summary ? reviewable.summary.approval_level : "-"}`;
+      field("decisionNote").textContent = reviewable.difference && reviewable.difference.management_readout
+        ? reviewable.difference.management_readout
+        : "审批人可基于运行批次、成本、缺口和审计报告完成批准或驳回。";
+      renderApprovalWorkflow(reviewable.approval, reviewable);
+      renderExecutionHandoff(null, reviewable.approval);
     }
 
     async function updateApproval(action, runId = latestRunId) {
