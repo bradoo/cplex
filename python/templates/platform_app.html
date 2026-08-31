@@ -922,7 +922,7 @@
     }
   </style>
 </head>
-<body data-active-layer="{{ active_layer }}">
+<body data-active-layer="{{ active_layer }}" data-role="{{ user.role }}" data-role-label="{{ user.role_label }}">
   <header>
     <div class="wrap top">
       <div>
@@ -930,28 +930,35 @@
         <p class="subtitle">从上游业务数据到 CPLEX 模型入参，再到求解结果和管理动作。</p>
       </div>
       <div class="health">
+        <span class="pill">用户：{{ user.name }}</span>
+        <span class="pill">角色：{{ user.role_label }}</span>
         <span class="pill">数据层：OMS / WMS / TMS / HR</span>
         <span class="pill">模型层：DOcplex / CPLEX</span>
-        <span class="pill">决策层：KPI / 审批 / 行动</span>
-        <label class="pill" for="roleSelect">角色
-          <select id="roleSelect">
-            <option value="planner">计划员</option>
-            <option value="approver">审批人</option>
-            <option value="data_admin">数据管理员</option>
-            <option value="viewer">只读查看</option>
-            <option value="admin">管理员</option>
-          </select>
-        </label>
+        <a class="pill" href="/logout">退出</a>
       </div>
     </div>
     <nav class="wrap flow" aria-label="平台流程导航">
+      {% if "upstream" in allowed_layers %}
       <a class="flow-step" data-layer-link="upstream" href="/upstream"><strong>1. 上游数据</strong><span>业务原始数据接入</span></a>
+      {% endif %}
+      {% if "config" in allowed_layers %}
       <a class="flow-step" data-layer-link="config" href="/config"><strong>2. 场景配置</strong><span>方案参数与假设</span></a>
+      {% endif %}
+      {% if "inputs" in allowed_layers %}
       <a class="flow-step" data-layer-link="inputs" href="/inputs"><strong>3. 模型入参</strong><span>转换后的 CPLEX 数据</span></a>
+      {% endif %}
+      {% if "results" in allowed_layers %}
       <a class="flow-step" data-layer-link="results" href="/results"><strong>4. 求解结果</strong><span>KPI、风险与建议动作</span></a>
+      {% endif %}
+      {% if "lineage" in allowed_layers %}
       <a class="flow-step" data-layer-link="lineage" href="/lineage"><strong>5. 数据血缘</strong><span>字段映射与转换规则</span></a>
+      {% endif %}
+      {% if "constraints" in allowed_layers %}
       <a class="flow-step" data-layer-link="constraints" href="/constraints"><strong>6. 约束解释</strong><span>变量、目标与约束</span></a>
+      {% endif %}
+      {% if "performance" in allowed_layers %}
       <a class="flow-step" data-layer-link="performance" href="/performance"><strong>7. 容量评估</strong><span>吞吐、耗时与压力</span></a>
+      {% endif %}
     </nav>
   </header>
 
@@ -1478,7 +1485,6 @@
     let selectedConstraintModel = "";
     const activeLayer = document.body.dataset.activeLayer || "upstream";
     const stateKey = "cplexPlatformPocState";
-    const roleKey = "cplexPlatformPocRole";
     const subnavKey = "cplexPlatformPocSubnav";
     const rolePermissions = {
       viewer: ["view"],
@@ -1499,7 +1505,11 @@
     const field = (id) => document.getElementById(id);
 
     function currentRole() {
-      return field("roleSelect").value || "planner";
+      return document.body.dataset.role || "viewer";
+    }
+
+    function currentRoleLabel() {
+      return document.body.dataset.roleLabel || currentRole();
     }
 
     function can(permission) {
@@ -1535,15 +1545,6 @@
     }
 
     function initializeRole() {
-      const savedRole = localStorage.getItem(roleKey) || "planner";
-      if (rolePermissions[savedRole]) {
-        field("roleSelect").value = savedRole;
-      }
-      field("roleSelect").addEventListener("change", () => {
-        localStorage.setItem(roleKey, currentRole());
-        applyRoleControls();
-        loadRunHistory();
-      });
       applyRoleControls();
     }
 
@@ -2590,7 +2591,7 @@
       field("approveRun").disabled = !canDecide;
       field("rejectRun").disabled = !canDecide;
       field("approvalStatus").textContent = runRecord
-        ? `当前运行记录：${runRecord.run_id}，${status.status_label || "待提交"}，当前角色：${field("roleSelect").selectedOptions[0].textContent}`
+        ? `当前运行记录：${runRecord.run_id}，${status.status_label || "待提交"}，当前角色：${currentRoleLabel()}`
         : "运行并保存记录后可发起审批。";
     }
 
@@ -3459,7 +3460,10 @@
     loadOverview().then(() => {
       applyRoleControls();
       const initialRun = can("run_model") ? run(false) : Promise.resolve();
-      const commonLoads = [initialRun, compare(), loadDataLayer(), loadConfigAudit(), loadUpstreamData(), loadSourceStatus(), loadDataQuality(), loadDataQuarantine(), loadScaleSnapshot(), loadEnterpriseReadiness(), loadLineage(), loadRunHistory(), loadConstraintExplanations()];
+      const commonLoads = [initialRun, loadUpstreamData(), loadSourceStatus(), loadDataQuality(), loadDataQuarantine(), loadScaleSnapshot(), loadLineage(), loadRunHistory(), loadConstraintExplanations()];
+      if (can("edit_config") || can("run_model")) {
+        commonLoads.push(compare(), loadDataLayer(), loadConfigAudit(), loadEnterpriseReadiness());
+      }
       if (activeLayer === "performance") {
         commonLoads.push(loadCapacityAssessment());
       }

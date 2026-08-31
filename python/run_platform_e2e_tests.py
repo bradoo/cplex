@@ -5,6 +5,7 @@ import sys
 import time
 import traceback
 import urllib.error
+import urllib.parse
 import urllib.request
 from contextlib import closing
 from dataclasses import dataclass, field
@@ -27,6 +28,7 @@ SERVER_ENV = {
     "STARROCKS_DATABASE": os.environ.get("STARROCKS_DATABASE", "cplex_poc"),
 }
 FEATURE_REGISTRY = {
+    "AUTH_LOGIN": "用户登录与退出",
     "FLOW_NAV": "顶部流程导航与页面装载",
     "UPSTREAM_SOURCE": "上游数据源状态",
     "UPSTREAM_QUALITY": "数据质量校验",
@@ -145,11 +147,26 @@ class PlatformE2ERunner:
             self.failed_responses.append({"status": response.status, "url": response.url})
 
     def goto(self, path):
-        self.page.goto(f"{BASE_URL}{path}", wait_until="networkidle")
+        self.page.goto(f"{BASE_URL}{path}", wait_until="domcontentloaded")
 
-    def set_role(self, role):
-        self.page.locator("#roleSelect").select_option(role)
-        expect(self.page.locator("#roleSelect")).to_have_value(role)
+    def set_role(self, role, target_path="/"):
+        current_url = self.page.url
+        intended_path = target_path
+        if current_url.startswith(BASE_URL):
+            intended_path = target_path or current_url[len(BASE_URL):] or "/"
+        parsed = urllib.parse.urlparse(intended_path)
+        if parsed.path == "/login":
+            query = urllib.parse.parse_qs(parsed.query)
+            intended_path = query.get("next", ["/"])[0]
+        self.page.goto(f"{BASE_URL}/login?next={urllib.parse.quote(intended_path)}", wait_until="domcontentloaded")
+        self.page.evaluate("localStorage.clear()")
+        self.page.locator("#username").select_option(role)
+        self.page.locator("#password").fill("demo")
+        self.page.get_by_role("button", name="登录平台").click()
+        self.page.wait_for_load_state("domcontentloaded")
+        expect(self.page.locator("body")).to_have_attribute("data-role", role)
+        self.goto(intended_path)
+        expect(self.page.locator("body")).to_have_attribute("data-role", role)
 
     def wait_loaded(self):
         expect(self.page.locator("body")).to_be_visible()
@@ -167,8 +184,43 @@ class PlatformE2ERunner:
                 rows[cells.nth(0).inner_text().strip()] = cells.nth(1).inner_text().strip()
         return rows
 
+    def click_run_and_wait(self):
+        expect(self.page.locator("#run")).to_be_enabled(timeout=60_000)
+        with self.page.expect_response(lambda response: "/api/platform/run" in response.url and response.request.method == "POST", timeout=60_000) as response_info:
+            self.page.locator("#run").click()
+        response = response_info.value
+        payload = response.json()
+        expect(self.page.locator("#runSteps")).to_contain_text("完成", timeout=60_000)
+        expect(self.page.locator("#run")).to_be_enabled(timeout=60_000)
+        run_id = payload.get("run_record", {}).get("run_id")
+        if run_id:
+            expect(self.page.locator("#approvalStatus")).to_contain_text(run_id, timeout=20_000)
+        return payload
+
+    def click_saved_run_and_wait(self):
+        payload = self.click_run_and_wait()
+        if payload.get("run_record"):
+            return payload
+        return self.click_run_and_wait()
+
+    def wait_for_result_preview(self):
+        expect(self.page.locator("#run")).to_be_enabled(timeout=60_000)
+
+    def set_config_field(self, field_id, value):
+        self.page.evaluate(
+            """([fieldId, fieldValue]) => {
+                const input = document.getElementById(fieldId);
+                input.value = fieldValue;
+                input.dispatchEvent(new Event("input", { bubbles: true }));
+                input.dispatchEvent(new Event("change", { bubbles: true }));
+                if (typeof saveSharedState === "function") saveSharedState(true);
+                if (typeof renderParameterImpact === "function") renderParameterImpact();
+            }""",
+            [field_id, str(value)],
+        )
+
     def e2e01_navigation_and_order_sample(self, result):
-        self.goto("/upstream")
+        self.set_role("viewer", "/upstream")
         self.wait_loaded()
         self.page.get_by_role("button", name="订单明细").click()
         expect(self.page.locator("#orderSampleRows tr").first).to_be_visible()
@@ -182,7 +234,7 @@ class PlatformE2ERunner:
         self.assert_true(result, row_count > 0, "点击显示全部抽样后仍没有订单行")
 
     def e2e09_upstream_source_quality_quarantine_weather_scale(self, result):
-        self.goto("/upstream")
+        self.set_role("viewer", "/upstream")
         checks = [
             ("数据源", "#sourceStatus", "#sourceTableRows tr"),
             ("质量校验", "#qualityStatus", "#qualityChecks .row"),
@@ -203,8 +255,7 @@ class PlatformE2ERunner:
         self.assert_true(result, all(item["rows"] > 0 for item in evidence.values()), "上游二级页面存在空内容")
 
     def e2e02_upstream_edit_save_roundtrip(self, result):
-        self.goto("/upstream")
-        self.set_role("data_admin")
+        self.set_role("data_admin", "/upstream")
         self.page.get_by_role("button", name="业务表编辑").click()
         market_input = self.page.locator('[data-upstream="market"][data-field="demand"]').first
         expect(market_input).to_be_visible()
@@ -223,10 +274,9 @@ class PlatformE2ERunner:
         result.evidence = {"original_demand": original, "changed_demand": changed, "reloaded_demand": reloaded}
 
     def e2e03_config_to_model_inputs_highlight(self, result):
-        self.goto("/config")
-        self.set_role("planner")
-        self.page.locator("#demand").fill("1.15")
-        self.page.locator("#air").fill("980")
+        self.set_role("planner", "/config")
+        self.set_config_field("demand", "1.15")
+        self.set_config_field("air", "980")
         self.page.locator("#runFromConfig").click()
         expect(self.page.locator("#current")).not_to_have_text("求解中", timeout=45_000)
         self.goto("/inputs")
@@ -238,10 +288,9 @@ class PlatformE2ERunner:
         self.assert_true(result, "需求倍率" in body_text or "空运容量" in body_text, "模型入参没有显示场景参数变化来源")
 
     def e2e10_config_playbooks_save_audit_and_permissions(self, result):
-        self.goto("/config")
-        self.set_role("viewer")
+        self.set_role("viewer", "/config")
         expect(self.page.locator("#saveConfig")).to_be_disabled()
-        self.set_role("planner")
+        self.set_role("planner", "/config")
         playbook_buttons = self.page.locator("#playbooks button")
         expect(playbook_buttons.first).to_be_visible(timeout=20_000)
         playbook_count = playbook_buttons.count()
@@ -259,8 +308,7 @@ class PlatformE2ERunner:
         self.assert_true(result, playbook_count >= 3, "场景配置少于三种方案")
 
     def e2e11_model_input_tabs_and_regeneration(self, result):
-        self.goto("/inputs")
-        self.set_role("planner")
+        self.set_role("planner", "/inputs")
         self.page.locator("#runFromInputs").click()
         expect(self.page.locator("#inputPlaybook")).not_to_have_text("生成中", timeout=60_000)
         evidence = {}
@@ -277,12 +325,9 @@ class PlatformE2ERunner:
         self.assert_true(result, len(evidence) == 4, "四个模型入参导航没有全部覆盖")
 
     def e2e04_results_pipeline_and_visuals(self, result):
-        self.goto("/results")
-        self.set_role("planner")
+        self.set_role("planner", "/results")
         self.page.get_by_role("button", name="运行概览").click()
-        self.page.locator("#run").click()
-        expect(self.page.locator('[data-run-step="solve"]')).to_contain_text("进行中", timeout=20_000)
-        expect(self.page.locator("#runSteps")).to_contain_text("完成", timeout=60_000)
+        self.click_saved_run_and_wait()
         expect(self.page.locator("#totalCost")).not_to_have_text("0", timeout=20_000)
         self.page.get_by_role("button", name="模型分析").click()
         expect(self.page.locator(".cost-card").first).to_be_visible()
@@ -296,12 +341,13 @@ class PlatformE2ERunner:
         self.assert_true(result, self.page.locator(".cost-card").count() >= 4, "成本结构卡片不足")
 
     def e2e05_approval_and_publish_flow(self, result):
-        self.goto("/results")
-        self.set_role("admin")
+        self.set_role("admin", "/results")
+        self.wait_for_result_preview()
         self.page.get_by_role("button", name="运行概览").click()
-        self.page.locator("#run").click()
-        expect(self.page.locator("#runSteps")).to_contain_text("完成", timeout=60_000)
+        self.set_config_field("demand", "1.3")
+        self.click_saved_run_and_wait()
         self.page.get_by_role("button", name="治理审批").click()
+        expect(self.page.locator("#approvalStatus")).to_contain_text("待提交", timeout=20_000)
         self.page.locator("#submitApproval").click()
         expect(self.page.locator("#approvalStatus")).to_contain_text("已提交", timeout=20_000)
         self.page.locator("#approveRun").click()
@@ -316,11 +362,9 @@ class PlatformE2ERunner:
         }
 
     def e2e12_results_subviews_compare_enterprise_export(self, result):
-        self.goto("/results")
-        self.set_role("planner")
+        self.set_role("planner", "/results")
         self.page.get_by_role("button", name="运行概览").click()
-        self.page.locator("#run").click()
-        expect(self.page.locator("#runSteps")).to_contain_text("完成", timeout=60_000)
+        self.click_run_and_wait()
         self.page.locator("#compare").click()
         self.page.get_by_role("button", name="企业就绪").click()
         expect(self.page.locator("#enterpriseReadinessPanel")).to_be_visible(timeout=20_000)
@@ -339,15 +383,13 @@ class PlatformE2ERunner:
         }
 
     def e2e13_role_permission_gates(self, result):
-        self.goto("/results")
-        self.set_role("viewer")
+        self.set_role("viewer", "/results")
         for selector in ["#run", "#exportReport", "#publishExecution"]:
             expect(self.page.locator(selector)).to_be_disabled()
-        self.goto("/upstream")
-        self.set_role("viewer")
+        self.set_role("viewer", "/upstream")
         self.page.get_by_role("button", name="业务表编辑").click()
         expect(self.page.locator("#saveUpstream")).to_be_disabled()
-        self.set_role("data_admin")
+        self.set_role("data_admin", "/upstream")
         expect(self.page.locator("#saveUpstream")).to_be_enabled()
         result.evidence = {
             "viewer_run_disabled": True,
@@ -358,12 +400,14 @@ class PlatformE2ERunner:
         }
 
     def e2e14_approval_reject_path(self, result):
-        self.goto("/results")
-        self.set_role("admin")
+        self.set_role("admin", "/results")
+        self.wait_for_result_preview()
         self.page.get_by_role("button", name="运行概览").click()
-        self.page.locator("#run").click()
-        expect(self.page.locator("#runSteps")).to_contain_text("完成", timeout=60_000)
+        self.set_config_field("demand", "1.3")
+        self.click_run_and_wait()
         self.page.get_by_role("button", name="治理审批").click()
+        run_id = self.page.evaluate("latestRunId")
+        expect(self.page.locator("#approvalStatus")).to_contain_text("待提交", timeout=20_000)
         self.page.locator("#submitApproval").click()
         expect(self.page.locator("#approvalStatus")).to_contain_text("已提交", timeout=20_000)
         self.page.locator("#rejectRun").click()
@@ -371,33 +415,37 @@ class PlatformE2ERunner:
         self.page.get_by_role("button", name="执行闭环").click()
         expect(self.page.locator("#publishExecution")).to_be_disabled(timeout=20_000)
         result.evidence = {
+            "run_id": run_id,
             "approval_status": self.page.locator("#approvalStatus").inner_text(),
             "publish_disabled_after_reject": True,
         }
 
     def e2e06_history_replay_and_report(self, result):
-        self.goto("/results")
-        self.set_role("planner")
+        self.set_role("planner", "/results")
         self.page.get_by_role("button", name="运行概览").click()
         self.page.locator("#run").click()
         expect(self.page.locator("#runSteps")).to_contain_text("完成", timeout=60_000)
         self.page.get_by_role("button", name="模型分析").click()
         expect(self.page.locator("#historyRows tr").first).to_be_visible(timeout=30_000)
-        self.page.locator("[data-report-run]").first.click()
+        submit_button = self.page.locator("[data-submit-run]:not([disabled])").first
+        expect(submit_button).to_be_visible(timeout=20_000)
+        run_id = submit_button.get_attribute("data-submit-run") or ""
+        self.page.locator(f'[data-report-run="{run_id}"]').click()
         expect(self.page.locator("#auditReportPanel")).to_contain_text("版本证据链", timeout=20_000)
         expect(self.page.locator("#auditReportPanel")).to_contain_text("待提交", timeout=20_000)
         self.page.locator("[data-audit-submit]").first.click()
         expect(self.page.locator("#auditReportPanel")).to_contain_text("已提交", timeout=20_000)
-        self.page.locator("[data-replay-run]").first.click()
+        self.page.locator(f'[data-replay-run="{run_id}"]').click()
         expect(self.page.locator("#exportStatus")).to_contain_text("已回放运行记录", timeout=60_000)
         result.evidence = {
             "history_rows": self.page.locator("#historyRows tr").count(),
+            "run_id": run_id,
             "audit_status_after_submit": "已提交",
             "replay_status": self.page.locator("#exportStatus").inner_text(),
         }
 
     def e2e07_lineage_and_constraints_navigation(self, result):
-        self.goto("/lineage")
+        self.set_role("viewer", "/lineage")
         expect(self.page.locator("#lineageDiagram .lineage-flow").first).to_be_visible(timeout=20_000)
         self.page.get_by_role("button", name="字段映射").click()
         expect(self.page.locator("#lineageFieldRows tr").first).to_be_visible()
@@ -412,7 +460,7 @@ class PlatformE2ERunner:
         }
 
     def e2e15_lineage_all_views_and_all_constraints(self, result):
-        self.goto("/lineage")
+        self.set_role("viewer", "/lineage")
         evidence = {}
         for key, name, selector in [
             ("flow", "可视化流程", "#lineageDiagram .lineage-flow"),
@@ -438,8 +486,7 @@ class PlatformE2ERunner:
 
     def e2e16_accuracy_flow_upstream_to_result(self, result):
         demand_multiplier = 1.12
-        self.goto("/upstream")
-        self.set_role("planner")
+        self.set_role("planner", "/upstream")
         self.page.get_by_role("button", name="业务表编辑").click()
         expect(self.page.locator('[data-upstream="market"][data-field="demand"]').first).to_be_visible(timeout=20_000)
         market_demands = [
@@ -452,7 +499,6 @@ class PlatformE2ERunner:
         weather_lane_count = self.page.locator("#weatherEditRows tr").count()
 
         self.goto("/config")
-        self.set_role("planner")
         self.page.locator('#playbooks button[data-id="baseline"]').click()
         self.page.locator("#demand").fill(str(demand_multiplier))
         self.page.locator("#air").fill("980")
@@ -522,7 +568,7 @@ class PlatformE2ERunner:
         }
 
     def e2e08_capacity_assessment_page(self, result):
-        self.goto("/performance")
+        self.set_role("viewer", "/performance")
         expect(self.page.locator("#capacityStatus")).to_contain_text("已完成", timeout=45_000)
         expect(self.page.locator("#capacitySummary")).to_contain_text("上游订单量")
         expect(self.page.locator("#throughputChart .throughput-row").first).to_be_visible()
@@ -544,7 +590,7 @@ class PlatformE2ERunner:
         self.run_case("E2E10", "场景配置保存审计与权限", self.e2e10_config_playbooks_save_audit_and_permissions, ["CONFIG_PLAYBOOK", "CONFIG_SAVE_AUDIT", "ROLE_PERMISSIONS"])
         self.run_case("E2E11", "四模型入参导航与重新生成", self.e2e11_model_input_tabs_and_regeneration, ["INPUT_NAV", "INPUT_HIGHLIGHT", "RESULT_RUN_PIPELINE"])
         self.run_case("E2E12", "结果页面板、三方案对比与报告导出", self.e2e12_results_subviews_compare_enterprise_export, ["RESULT_ENTERPRISE", "RESULT_EXPLAIN", "REPORT_EXPORT", "RESULT_COST_VISUAL"])
-        self.run_case("E2E13", "角色权限隔离页面校验", self.e2e13_role_permission_gates, ["ROLE_PERMISSIONS"])
+        self.run_case("E2E13", "角色权限隔离页面校验", self.e2e13_role_permission_gates, ["AUTH_LOGIN", "ROLE_PERMISSIONS"])
         self.run_case("E2E14", "审批驳回路径与发布拦截", self.e2e14_approval_reject_path, ["RESULT_GOVERNANCE", "RESULT_EXECUTION", "ROLE_PERMISSIONS"])
         self.run_case("E2E15", "血缘多视图与四模型约束覆盖", self.e2e15_lineage_all_views_and_all_constraints, ["LINEAGE", "CONSTRAINTS"])
         self.run_case("E2E16", "上游到结果四步准确性链路", self.e2e16_accuracy_flow_upstream_to_result, ["FLOW_NAV", "UPSTREAM_EDIT", "CONFIG_PLAYBOOK", "INPUT_HIGHLIGHT", "RESULT_RUN_PIPELINE", "RESULT_COST_VISUAL", "ACCURACY_FLOW"])

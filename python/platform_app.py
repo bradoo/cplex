@@ -10,7 +10,7 @@ from pathlib import Path
 from time import perf_counter
 
 from docplex.mp.model import Model
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 
 from cross_border_ecommerce_replenishment_demo import solve_replenishment_plan
 from scheduling_solver import (
@@ -21,6 +21,7 @@ from scheduling_solver import (
 
 
 app = Flask(__name__)
+app.secret_key = os.getenv("PLATFORM_SECRET_KEY", "cplex-platform-demo-secret")
 DATA_PATH = Path(__file__).resolve().parent / "data" / "platform_poc_data.json"
 UPSTREAM_DATA_PATH = Path(__file__).resolve().parent / "data" / "platform_upstream_data.json"
 RUN_HISTORY_PATH = Path(__file__).resolve().parent / "reports" / "platform_runs.jsonl"
@@ -42,6 +43,20 @@ ROLE_LABELS = {
     "planner": "计划员",
     "approver": "审批人",
     "admin": "管理员",
+}
+DEMO_USERS = {
+    "viewer": {"password": "demo", "name": "只读查看", "role": "viewer"},
+    "data_admin": {"password": "demo", "name": "数据管理员", "role": "data_admin"},
+    "planner": {"password": "demo", "name": "计划员", "role": "planner"},
+    "approver": {"password": "demo", "name": "审批人", "role": "approver"},
+    "admin": {"password": "demo", "name": "管理员", "role": "admin"},
+}
+ROLE_LAYERS = {
+    "viewer": ["upstream", "inputs", "results", "lineage", "constraints", "performance"],
+    "data_admin": ["upstream", "lineage", "performance"],
+    "planner": ["upstream", "config", "inputs", "results", "lineage", "constraints", "performance"],
+    "approver": ["results", "lineage", "constraints"],
+    "admin": ["upstream", "config", "inputs", "results", "lineage", "constraints", "performance"],
 }
 APPROVAL_TRANSITIONS = {
     "not_submitted": {"submit": "submitted"},
@@ -101,8 +116,50 @@ def starrocks_upstream_enabled():
 
 
 def current_role():
-    role = request.headers.get("X-Platform-Role") or request.args.get("role") or "viewer"
+    role = session.get("role") or request.headers.get("X-Platform-Role") or request.args.get("role") or "viewer"
     return role if role in ROLE_PERMISSIONS else "viewer"
+
+
+def current_user():
+    username = session.get("username")
+    if not username:
+        return None
+    user = DEMO_USERS.get(username)
+    if not user:
+        return None
+    return {
+        "username": username,
+        "name": user["name"],
+        "role": user["role"],
+        "role_label": ROLE_LABELS[user["role"]],
+        "permissions": sorted(ROLE_PERMISSIONS[user["role"]]),
+        "layers": ROLE_LAYERS[user["role"]],
+    }
+
+
+def login_required():
+    if current_user():
+        return None
+    if request.path.startswith("/api/"):
+        return jsonify({"status": "error", "message": "Login required"}), 401
+    return redirect(url_for("login_page", next=request.path))
+
+
+def render_platform_page(active_layer):
+    guard = login_required()
+    if guard:
+        return guard
+    user = current_user()
+    allowed_layers = ROLE_LAYERS[user["role"]]
+    if active_layer not in allowed_layers:
+        return redirect(url_for(f"{allowed_layers[0]}_page"))
+    return render_template(
+        "platform_app.html",
+        active_layer=active_layer,
+        user=user,
+        allowed_layers=allowed_layers,
+        role_permissions={role: sorted(permissions) for role, permissions in ROLE_PERMISSIONS.items()},
+    )
 
 
 def has_permission(permission, role=None):
@@ -2634,47 +2691,78 @@ def build_model_scale_rows(model_inputs, config):
 
 @app.get("/")
 def index():
-    return render_template("platform_app.html", active_layer="upstream")
+    if not current_user():
+        return redirect(url_for("login_page"))
+    return redirect(url_for(f"{ROLE_LAYERS[current_role()][0]}_page"))
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login_page():
+    if request.method == "POST":
+        username = str(request.form.get("username") or "").strip()
+        password = str(request.form.get("password") or "").strip()
+        user = DEMO_USERS.get(username)
+        if user and password == user["password"]:
+            session["username"] = username
+            session["role"] = user["role"]
+            next_path = request.args.get("next") or url_for(f"{ROLE_LAYERS[user['role']][0]}_page")
+            return redirect(next_path)
+        return render_template("platform_login.html", users=DEMO_USERS, error="用户名或密码不正确。")
+    return render_template("platform_login.html", users=DEMO_USERS, error="")
+
+
+@app.get("/logout")
+def logout_page():
+    session.clear()
+    return redirect(url_for("login_page"))
 
 
 @app.get("/upstream")
 def upstream_page():
-    return render_template("platform_app.html", active_layer="upstream")
+    return render_platform_page("upstream")
 
 
 @app.get("/config")
 def config_page():
-    return render_template("platform_app.html", active_layer="config")
+    return render_platform_page("config")
 
 
 @app.get("/inputs")
 def inputs_page():
-    return render_template("platform_app.html", active_layer="inputs")
+    return render_platform_page("inputs")
 
 
 @app.get("/results")
 def results_page():
-    return render_template("platform_app.html", active_layer="results")
+    return render_platform_page("results")
 
 
 @app.get("/lineage")
 def lineage_page():
-    return render_template("platform_app.html", active_layer="lineage")
+    return render_platform_page("lineage")
 
 
 @app.get("/constraints")
 def constraints_page():
-    return render_template("platform_app.html", active_layer="constraints")
+    return render_platform_page("constraints")
 
 
 @app.get("/performance")
 def performance_page():
-    return render_template("platform_app.html", active_layer="performance")
+    return render_platform_page("performance")
 
 
 @app.get("/api/health")
 def health():
     return jsonify({"status": "ok", "service": "cplex-optimization-platform-poc"})
+
+
+@app.get("/api/platform/current-user")
+def api_current_user():
+    user = current_user()
+    if not user:
+        return jsonify({"status": "error", "message": "Login required"}), 401
+    return jsonify({"status": "ok", "user": user})
 
 
 @app.get("/favicon.ico")
