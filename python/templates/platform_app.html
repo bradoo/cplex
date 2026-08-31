@@ -83,15 +83,15 @@
     }
 
     .flow {
-      padding: 14px 0 16px;
+      padding: 12px 0 14px;
       border-top: 1px solid var(--line);
       display: grid;
-      grid-template-columns: repeat(7, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 10px;
     }
 
     .flow-step {
-      min-height: 74px;
+      min-height: 58px;
       position: relative;
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -128,6 +128,10 @@
       color: var(--muted);
       font-size: 12px;
       font-weight: 650;
+    }
+
+    .secondary-step {
+      opacity: 0.76;
     }
 
     main {
@@ -331,6 +335,37 @@
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 8px;
     }
+
+    .button-row.compact {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .decision-strip {
+      display: grid;
+      grid-template-columns: 1.25fr repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      align-items: stretch;
+    }
+
+    .decision-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fff;
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .decision-card.primary {
+      border-color: #b9cef9;
+      background: #eef4ff;
+      box-shadow: inset 0 4px 0 var(--blue);
+    }
+
+    .decision-card.good { background: var(--soft-green); border-color: #bcebd5; }
+    .decision-card.warn { background: var(--soft-amber); border-color: #ffd799; }
+    .decision-card.bad { background: var(--soft-red); border-color: #f5bbb7; }
 
     .status-line {
       min-height: 20px;
@@ -904,7 +939,7 @@
         grid-row: auto;
       }
       .subnav { position: static; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-      .flow, .grid, .scale-metrics, .readiness-grid, .impact-grid, .run-steps, .handoff-grid, .gate-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .flow, .grid, .scale-metrics, .decision-strip, .readiness-grid, .impact-grid, .run-steps, .handoff-grid, .gate-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .throughput-row { grid-template-columns: 1fr; }
       .model-explain-layout { grid-template-columns: 1fr; }
       .explain-grid { grid-template-columns: 1fr; }
@@ -915,7 +950,7 @@
     }
 
     @media (max-width: 640px) {
-      .flow, .grid, .scale-metrics, .diff-grid, .readiness-grid, .impact-grid, .run-steps, .handoff-grid, .gate-list { grid-template-columns: 1fr; }
+      .flow, .grid, .scale-metrics, .decision-strip, .diff-grid, .readiness-grid, .impact-grid, .run-steps, .handoff-grid, .gate-list { grid-template-columns: 1fr; }
       .flow-step::after { display: none; }
       .row, .cost-cards { grid-template-columns: 1fr; }
       .subnav { grid-template-columns: 1fr; }
@@ -926,38 +961,29 @@
   <header>
     <div class="wrap top">
       <div>
-        <h1>CPLEX 优化平台 POC</h1>
-        <p class="subtitle">从上游业务数据到 CPLEX 模型入参，再到求解结果和管理动作。</p>
+        <h1>CPLEX 优化决策台</h1>
+        <p class="subtitle">少填表、少流转：选择方案，运行模型，确认建议，直接形成可审计的执行包。</p>
       </div>
       <div class="health">
         <span class="pill">用户：{{ user.name }}</span>
         <span class="pill">角色：{{ user.role_label }}</span>
-        <span class="pill">数据层：OMS / WMS / TMS / HR</span>
-        <span class="pill">模型层：DOcplex / CPLEX</span>
+        <span class="pill">数据：已接入</span>
+        <span class="pill">模型：可运行</span>
         <a class="pill" href="/logout">退出</a>
       </div>
     </div>
     <nav class="wrap flow" aria-label="平台流程导航">
       {% if "upstream" in allowed_layers %}
-      <a class="flow-step" data-layer-link="upstream" href="/upstream"><strong>1. 上游数据</strong><span>业务原始数据接入</span></a>
+      <a class="flow-step" data-layer-link="upstream" href="/upstream"><strong>1. 数据</strong><span>源数据与质量状态</span></a>
       {% endif %}
       {% if "config" in allowed_layers %}
-      <a class="flow-step" data-layer-link="config" href="/config"><strong>2. 场景配置</strong><span>方案参数与假设</span></a>
-      {% endif %}
-      {% if "inputs" in allowed_layers %}
-      <a class="flow-step" data-layer-link="inputs" href="/inputs"><strong>3. 模型入参</strong><span>转换后的 CPLEX 数据</span></a>
+      <a class="flow-step" data-layer-link="config" href="/config"><strong>2. 配置</strong><span>方案模板与关键参数</span></a>
       {% endif %}
       {% if "results" in allowed_layers %}
-      <a class="flow-step" data-layer-link="results" href="/results"><strong>4. 求解结果</strong><span>KPI、风险与建议动作</span></a>
-      {% endif %}
-      {% if "lineage" in allowed_layers %}
-      <a class="flow-step" data-layer-link="lineage" href="/lineage"><strong>5. 数据血缘</strong><span>字段映射与转换规则</span></a>
-      {% endif %}
-      {% if "constraints" in allowed_layers %}
-      <a class="flow-step" data-layer-link="constraints" href="/constraints"><strong>6. 约束解释</strong><span>变量、目标与约束</span></a>
+      <a class="flow-step" data-layer-link="results" href="/results"><strong>3. 决策</strong><span>KPI、建议与放行</span></a>
       {% endif %}
       {% if "performance" in allowed_layers %}
-      <a class="flow-step" data-layer-link="performance" href="/performance"><strong>7. 容量评估</strong><span>吞吐、耗时与压力</span></a>
+      <a class="flow-step" data-layer-link="performance" href="/performance"><strong>4. 治理</strong><span>容量、审计与运维</span></a>
       {% endif %}
     </nav>
   </header>
@@ -966,25 +992,20 @@
     <div class="page" data-layer="upstream">
       <div class="subpage-shell" data-subpage="upstream">
         <aside class="subnav" aria-label="上游数据二级导航">
-          <button class="active" data-subview-button="upstream" data-target="source">数据源</button>
-          <button data-subview-button="upstream" data-target="quality">质量校验</button>
-          <button data-subview-button="upstream" data-target="quarantine">异常隔离</button>
-          <button data-subview-button="upstream" data-target="weather">天气风险</button>
-          <button data-subview-button="upstream" data-target="scale">规模吞吐</button>
-          <button data-subview-button="upstream" data-target="orders">订单明细</button>
-          <button data-subview-button="upstream" data-target="edit">业务表编辑</button>
+          <button class="active" data-subview-button="upstream" data-target="source">数据概览</button>
+          <button data-subview-button="upstream" data-target="quality">质量状态</button>
+          <button data-subview-button="upstream" data-target="edit">业务数据</button>
         </aside>
         <div class="subviews">
           <div class="subview active" data-subview="upstream" data-subview-id="source">
             <section>
-              <div class="section-head"><h2>上游数据接入层</h2><span id="upstreamSource" class="pill">Source</span></div>
+              <div class="section-head"><h2>数据概览</h2><span id="upstreamSource" class="pill">Source</span></div>
               <div class="content">
-                <p class="small">这一层接入 OMS、WMS、TMS、HR 口径的业务数据；当前 POC 使用 StarRocks 承载订单事实表和模型基础表。</p>
                 <div id="upstreamSummary" class="rows"></div>
               </div>
             </section>
             <section>
-              <div class="section-head"><h2>数据源运行状态</h2><span id="sourceStatus" class="pill">加载中</span></div>
+              <div class="section-head"><h2>数据源状态</h2><span id="sourceStatus" class="pill">加载中</span></div>
               <div class="content">
                 <div id="sourceMetrics" class="scale-metrics"></div>
                 <div class="table-wrap">
@@ -1000,7 +1021,7 @@
           </div>
           <div class="subview" data-subview="upstream" data-subview-id="quality">
             <section>
-              <div class="section-head"><h2>数据质量校验</h2><span id="qualityStatus" class="pill">加载中</span></div>
+              <div class="section-head"><h2>质量状态</h2><span id="qualityStatus" class="pill">加载中</span></div>
               <div class="content">
                 <div id="qualityMetrics" class="grid"></div>
                 <div id="qualityChecks" class="rows"></div>
@@ -1083,7 +1104,7 @@
           </div>
           <div class="subview" data-subview="upstream" data-subview-id="edit">
             <section>
-              <div class="section-head"><h2>上游业务表编辑</h2><span class="pill">Editable</span></div>
+              <div class="section-head"><h2>业务数据</h2><span class="pill">Editable</span></div>
               <div class="content">
           <div>
             <h3>市场需求表</h3>
@@ -1220,19 +1241,18 @@
 
     <div class="page" data-layer="results">
       <aside class="subnav" aria-label="求解结果二级导航">
-        <button class="active" data-result-view-button="summary" type="button">运行概览</button>
-        <button data-result-view-button="enterprise" type="button">企业就绪</button>
-        <button data-result-view-button="value" type="button">经营价值</button>
-        <button data-result-view-button="governance" type="button">治理审批</button>
-        <button data-result-view-button="execution" type="button">执行闭环</button>
-        <button data-result-view-button="models" type="button">模型分析</button>
+        <button class="active" data-result-view-button="summary" type="button">决策总览</button>
+        <button data-result-view-button="governance" type="button">审批放行</button>
       </aside>
       <section>
         <div class="section-head"><h2>运行控制</h2><span id="current" class="pill">等待运行</span></div>
         <div class="content">
-          <button class="run" id="run">运行当前方案</button>
-          <button id="compare">刷新三方案对比</button>
-          <button id="exportReport">导出演示报告</button>
+          <div class="button-row compact">
+            <button class="run" id="run">运行当前方案</button>
+            <button id="compare">刷新建议</button>
+            <button id="quickRelease" type="button">快速放行</button>
+            <button id="exportReport">导出报告</button>
+          </div>
           <div id="exportStatus" class="status-line">报告会导出到 python/reports 目录。</div>
           <div id="runSteps" class="run-steps"></div>
           <div id="approval" class="approval">审批分层：-</div>
@@ -1246,11 +1266,11 @@
       <section>
         <div class="section-head"><h2>求解结果驾驶舱</h2></div>
         <div class="content">
-          <div class="grid">
-            <div id="totalCard" class="metric"><span class="label">综合成本</span><strong id="totalCost" class="value">-</strong></div>
-            <div class="metric"><span class="label">仓网成本</span><strong id="networkCost" class="value">-</strong></div>
-            <div class="metric"><span class="label">补货成本</span><strong id="replenishmentCost" class="value">-</strong></div>
-            <div id="shortageCard" class="metric"><span class="label">总缺口</span><strong id="shortage" class="value">-</strong></div>
+          <div class="decision-strip">
+            <div id="totalCard" class="decision-card primary"><span class="label">综合成本</span><strong id="totalCost" class="value">-</strong><span class="small">当前方案总成本</span></div>
+            <div class="decision-card"><span class="label">仓网成本</span><strong id="networkCost" class="value">-</strong></div>
+            <div class="decision-card"><span class="label">补货成本</span><strong id="replenishmentCost" class="value">-</strong></div>
+            <div id="shortageCard" class="decision-card"><span class="label">总缺口</span><strong id="shortage" class="value">-</strong></div>
           </div>
           <div>
             <h3>管理层汇报摘要</h3>
@@ -1259,27 +1279,9 @@
             </div>
           </div>
           <div>
-            <h3>企业就绪度总览</h3>
-            <div id="enterpriseReadinessPanel" class="diff-panel">
-              <p class="small">加载平台级数据、模型、治理、审计和执行闭环状态。</p>
-            </div>
-          </div>
-          <div>
             <h3>收益归因与经营影响</h3>
             <div id="businessValuePanel" class="diff-panel">
               <p class="small">运行后显示成本、缺口、收入风险和协同效率的经营口径。</p>
-            </div>
-          </div>
-          <div>
-            <h3>决策权衡与冲突解释</h3>
-            <div id="tradeoffPanel" class="diff-panel">
-              <p class="small">运行后显示成本、服务、缺口、审批和前提风险之间的取舍。</p>
-            </div>
-          </div>
-          <div>
-            <h3>模型结果业务解释</h3>
-            <div id="resultExplainPanel" class="diff-panel">
-              <p class="small">运行后显示各模型的瓶颈约束、成本驱动和可调整业务杠杆。</p>
             </div>
           </div>
           <div>
@@ -1316,6 +1318,24 @@
             <h3>上线监控与重跑触发</h3>
             <div id="monitorPanel" class="diff-panel">
               <p class="small">运行后显示订单、库存、运力、人力和成本偏差的监控阈值。</p>
+            </div>
+          </div>
+          <div>
+            <h3>企业就绪度总览</h3>
+            <div id="enterpriseReadinessPanel" class="diff-panel">
+              <p class="small">加载平台级数据、模型、治理、审计和执行闭环状态。</p>
+            </div>
+          </div>
+          <div>
+            <h3>决策权衡与冲突解释</h3>
+            <div id="tradeoffPanel" class="diff-panel">
+              <p class="small">运行后显示成本、服务、缺口、审批和前提风险之间的取舍。</p>
+            </div>
+          </div>
+          <div>
+            <h3>模型结果业务解释</h3>
+            <div id="resultExplainPanel" class="diff-panel">
+              <p class="small">运行后显示各模型的瓶颈约束、成本驱动和可调整业务杠杆。</p>
             </div>
           </div>
           <div class="two-col">
@@ -1534,6 +1554,7 @@
         ["runFromConfig", "run_model"],
         ["runFromInputs", "run_model"],
         ["exportReport", "export_report"],
+        ["quickRelease", "submit_approval"],
         ["publishExecution", "publish_execution"]
       ];
       controls.forEach(([id, permission]) => {
@@ -1585,8 +1606,10 @@
       const saved = loadSubnavState();
       document.querySelectorAll("[data-subpage]").forEach((shell) => {
         const group = shell.dataset.subpage;
-        const fallback = shell.querySelector("[data-subview-button]")?.dataset.target;
-        activateSubview(group, saved[group] || fallback);
+        const availableTargets = Array.from(shell.querySelectorAll("[data-subview-button]")).map((button) => button.dataset.target);
+        const fallback = availableTargets[0];
+        const target = availableTargets.includes(saved[group]) ? saved[group] : fallback;
+        activateSubview(group, target);
       });
       document.querySelectorAll("[data-subview-button]").forEach((button) => {
         button.addEventListener("click", () => activateSubview(button.dataset.subviewButton, button.dataset.target));
@@ -1604,30 +1627,31 @@
     }
 
     function initializeResultsSubnavigation(initialTarget) {
+      const resultTarget = ["summary", "governance"].includes(initialTarget) ? initialTarget : "summary";
       const runSection = field("run")?.closest("section");
       if (runSection) {
         runSection.dataset.resultView = "summary";
       }
       setResultPanel("totalCard", "summary");
       setResultPanel("executiveBriefPanel", "summary");
-      setResultPanel("enterpriseReadinessPanel", "enterprise");
-      setResultPanel("businessValuePanel", "value");
-      setResultPanel("tradeoffPanel", "value");
-      setResultPanel("resultExplainPanel", "value");
-      setResultPanel("differencePanel", "value");
+      setResultPanel("businessValuePanel", "summary");
+      setResultPanel("differencePanel", "summary");
+      setResultPanel("actions", "summary");
       setResultPanel("assumptionPanel", "governance");
       setResultPanel("readinessRows", "governance");
       setResultPanel("approvalWorkflow", "governance");
-      setResultPanel("handoffPanel", "execution");
-      setResultPanel("publishStatus", "execution");
-      setResultPanel("monitorPanel", "execution");
-      setResultPanel("actions", "execution");
-      setResultPanel("executionRows", "execution");
-      setResultPanel("bars", "models");
-      setResultPanel("scenarioRecommendation", "models");
-      setResultPanel("historyRows", "models");
-      setResultPanel("auditReportPanel", "models");
-      activateResultView(initialTarget);
+      setResultPanel("handoffPanel", "governance");
+      setResultPanel("publishStatus", "governance");
+      setResultPanel("monitorPanel", "governance");
+      setResultPanel("executionRows", "governance");
+      setResultPanel("enterpriseReadinessPanel", "governance");
+      setResultPanel("tradeoffPanel", "governance");
+      setResultPanel("resultExplainPanel", "governance");
+      setResultPanel("bars", "governance");
+      setResultPanel("scenarioRecommendation", "governance");
+      setResultPanel("historyRows", "governance");
+      setResultPanel("auditReportPanel", "governance");
+      activateResultView(resultTarget);
       document.querySelectorAll("[data-result-view-button]").forEach((button) => {
         button.addEventListener("click", () => activateResultView(button.dataset.resultViewButton));
       });
@@ -2551,8 +2575,8 @@
       field("shortage").textContent = fmt(summary.total_shortage);
       field("approval").textContent = `审批分层：${summary.approval_level}`;
       field("decisionNote").textContent = summary.decision_note;
-      field("shortageCard").className = `metric ${summary.total_shortage > 500 ? "bad" : summary.total_shortage > 0 ? "warn" : "good"}`;
-      field("totalCard").className = `metric ${summary.approval_level === "管理层审批" ? "warn" : ""}`;
+      field("shortageCard").className = `decision-card ${summary.total_shortage > 500 ? "bad" : summary.total_shortage > 0 ? "warn" : "good"}`;
+      field("totalCard").className = `decision-card primary ${summary.approval_level === "管理层审批" ? "warn" : ""}`;
       field("actions").innerHTML = summary.actions.map((item) => `<li>${h(item)}</li>`).join("");
       field("risks").innerHTML = summary.risks.map((item) => `<div class="item"><strong>${h(item)}</strong></div>`).join("");
       latestConfig = data.config;
@@ -2587,9 +2611,15 @@
       const approvalStatus = approval ? approval.status : "not_submitted";
       const canSubmit = Boolean(runRecord) && can("submit_approval") && ["not_submitted", "rejected"].includes(approvalStatus);
       const canDecide = Boolean(runRecord) && can("decide_approval") && approvalStatus === "submitted";
+      const canQuickRelease = Boolean(runRecord) && (
+        canSubmit ||
+        canDecide ||
+        (can("publish_execution") && ["approved", "auto_approved"].includes(approvalStatus))
+      );
       field("submitApproval").disabled = !canSubmit;
       field("approveRun").disabled = !canDecide;
       field("rejectRun").disabled = !canDecide;
+      field("quickRelease").disabled = !canQuickRelease;
       field("approvalStatus").textContent = runRecord
         ? `当前运行记录：${runRecord.run_id}，${status.status_label || "待提交"}，当前角色：${currentRoleLabel()}`
         : "运行并保存记录后可发起审批。";
@@ -3230,6 +3260,36 @@
       await loadRunHistory();
     }
 
+    async function quickRelease() {
+      if (!latestRunId) {
+        field("approvalStatus").textContent = "请先运行当前方案。";
+        return;
+      }
+      let approvalStatus = latestCaseData && latestCaseData.run_record && latestCaseData.run_record.approval
+        ? latestCaseData.run_record.approval.status
+        : "not_submitted";
+      field("approvalStatus").textContent = "快速放行处理中...";
+      if (["not_submitted", "rejected"].includes(approvalStatus) && can("submit_approval")) {
+        await updateApproval("submit");
+        approvalStatus = latestCaseData && latestCaseData.run_record && latestCaseData.run_record.approval
+          ? latestCaseData.run_record.approval.status
+          : approvalStatus;
+      }
+      if (approvalStatus === "submitted" && can("decide_approval")) {
+        await updateApproval("approve");
+        approvalStatus = latestCaseData && latestCaseData.run_record && latestCaseData.run_record.approval
+          ? latestCaseData.run_record.approval.status
+          : approvalStatus;
+      }
+      if (["approved", "auto_approved"].includes(approvalStatus) && can("publish_execution")) {
+        await publishExecution();
+      } else if (approvalStatus === "submitted") {
+        field("approvalStatus").textContent = "已提交审批，等待审批人批准。";
+      } else if (!can("publish_execution")) {
+        field("approvalStatus").textContent = "审批已更新；发布执行包需要管理员权限。";
+      }
+    }
+
     async function updateApprovalFromAudit(action, runId) {
       await updateApproval(action, runId);
       await loadRunAuditReport(runId, false);
@@ -3476,6 +3536,7 @@
     field("runFromInputs").addEventListener("click", () => run(true));
     field("compare").addEventListener("click", compare);
     field("exportReport").addEventListener("click", exportReport);
+    field("quickRelease").addEventListener("click", quickRelease);
     field("submitApproval").addEventListener("click", () => updateApproval("submit"));
     field("approveRun").addEventListener("click", () => updateApproval("approve"));
     field("rejectRun").addEventListener("click", () => updateApproval("reject"));

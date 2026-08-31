@@ -52,11 +52,11 @@ DEMO_USERS = {
     "admin": {"password": "demo", "name": "管理员", "role": "admin"},
 }
 ROLE_LAYERS = {
-    "viewer": ["upstream", "inputs", "results", "lineage", "constraints", "performance"],
-    "data_admin": ["upstream", "lineage", "performance"],
-    "planner": ["upstream", "config", "inputs", "results", "lineage", "constraints", "performance"],
-    "approver": ["results", "lineage", "constraints"],
-    "admin": ["upstream", "config", "inputs", "results", "lineage", "constraints", "performance"],
+    "viewer": ["upstream", "results", "performance"],
+    "data_admin": ["upstream", "performance"],
+    "planner": ["upstream", "config", "results", "performance"],
+    "approver": ["results"],
+    "admin": ["upstream", "config", "results", "performance"],
 }
 APPROVAL_TRANSITIONS = {
     "not_submitted": {"submit": "submitted"},
