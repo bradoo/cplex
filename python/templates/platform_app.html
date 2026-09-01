@@ -1503,6 +1503,7 @@
     let orderSampleLimit = 100;
     let currentModelInputKey = "network";
     let selectedConstraintModel = "";
+    const loadedPanels = new Set();
     const activeLayer = document.body.dataset.activeLayer || "upstream";
     const stateKey = "cplexPlatformPocState";
     const subnavKey = "cplexPlatformPocSubnav";
@@ -1600,6 +1601,37 @@
         button.classList.toggle("active", button.dataset.target === target);
       });
       saveSubnavState(group, target);
+      loadSubviewData(group, target);
+    }
+
+    function loadOnce(key, loader) {
+      if (loadedPanels.has(key)) {
+        return Promise.resolve();
+      }
+      loadedPanels.add(key);
+      return loader().catch((error) => {
+        loadedPanels.delete(key);
+        throw error;
+      });
+    }
+
+    function loadSubviewData(group, target) {
+      if (group !== "upstream" || activeLayer !== "upstream") {
+        return Promise.resolve();
+      }
+      if (target === "quality") {
+        return loadOnce("upstream:quality", loadDataQuality);
+      }
+      if (target === "quarantine") {
+        return loadOnce("upstream:quarantine", loadDataQuarantine);
+      }
+      if (target === "scale") {
+        return loadOnce("upstream:scale", loadScaleSnapshot);
+      }
+      if (target === "source") {
+        return loadOnce("upstream:source", loadSourceStatus);
+      }
+      return Promise.resolve();
     }
 
     function initializeSubnavigation() {
@@ -1661,6 +1693,9 @@
         button.classList.toggle("active", button.dataset.resultViewButton === target);
       });
       saveSubnavState("results", target);
+      if (activeLayer === "results" && target === "governance") {
+        loadOnce("results:enterprise-readiness", loadEnterpriseReadiness);
+      }
     }
 
     function initializeModelInputNavigation(initialTarget) {
@@ -3192,11 +3227,40 @@
       document.querySelectorAll("[data-reject-run]").forEach((button) => {
         button.addEventListener("click", () => updateApproval("reject", button.dataset.rejectRun));
       });
+      hydrateResultSummary(rows[0]);
       hydrateApprovalWorkbench(rows);
     }
 
+    function hydrateResultSummary(row) {
+      if (!row || latestRunId) {
+        return;
+      }
+      const summary = row.summary || {};
+      latestRunId = row.run_id || "";
+      latestCaseData = {
+        playbook_name: row.playbook_name,
+        summary,
+        run_record: row,
+        execution_handoff: null,
+        operating_monitor: null
+      };
+      field("current").textContent = row.playbook_name || "-";
+      field("inputPlaybook").textContent = row.playbook_name || "-";
+      field("totalCost").textContent = fmt(summary.total_cost);
+      field("networkCost").textContent = fmt(summary.network_cost);
+      field("replenishmentCost").textContent = fmt(summary.replenishment_cost);
+      field("shortage").textContent = fmt(summary.total_shortage);
+      field("approval").textContent = `审批分层：${summary.approval_level || "-"}`;
+      field("decisionNote").textContent = row.difference && row.difference.management_readout
+        ? row.difference.management_readout
+        : "已加载最近运行记录，可查看审批放行或审计报告。";
+      renderApprovalWorkflow(row.approval, row);
+      renderExecutionHandoff(null, row.approval);
+      renderReadiness(latestCaseData);
+    }
+
     function hydrateApprovalWorkbench(rows) {
-      if ((!can("decide_approval") && !can("publish_execution")) || latestRunId || !rows.length) {
+      if (latestRunId || !rows.length) {
         return;
       }
       const pending = rows.find((row) => row.approval && row.approval.status === "submitted");
@@ -3496,7 +3560,7 @@
         return;
       }
       field("upstreamStatus").textContent = `已保存：${result.data_source}`;
-      await Promise.all([loadUpstreamData(), loadSourceStatus(), loadDataQuality(), loadDataQuarantine(), loadScaleSnapshot(), loadLineage()]);
+      await Promise.all([loadUpstreamData(), loadSourceStatus(), loadDataQuality()]);
     }
 
     async function saveConfigData() {
@@ -3523,7 +3587,27 @@
       playbookDefaults[selected] = { ...playbookDefaults[selected], ...config };
       saveSharedState(false);
       field("configStatus").textContent = `已保存到：${result.data_source}`;
-      await Promise.all([loadOverview(), loadDataLayer(), loadConfigAudit(), compare(), loadLineage()]);
+      await Promise.all([loadOverview(), loadDataLayer(), loadConfigAudit()]);
+    }
+
+    function loadActiveLayerData() {
+      const loads = [];
+      if (activeLayer === "upstream") {
+        loads.push(loadOnce("upstream:data", loadUpstreamData));
+      } else if (activeLayer === "config") {
+        loads.push(loadDataLayer());
+      } else if (activeLayer === "results") {
+        loads.push(loadRunHistory());
+      } else if (activeLayer === "performance") {
+        loads.push(loadCapacityAssessment());
+      } else if (activeLayer === "inputs") {
+        loads.push(loadUpstreamData(), loadLineage());
+      } else if (activeLayer === "lineage") {
+        loads.push(loadLineage());
+      } else if (activeLayer === "constraints") {
+        loads.push(loadConstraintExplanations());
+      }
+      return Promise.all(loads);
     }
 
     activateLayer();
@@ -3554,15 +3638,7 @@
     });
     loadOverview().then(() => {
       applyRoleControls();
-      const initialRun = can("run_model") ? run(false) : Promise.resolve();
-      const commonLoads = [initialRun, loadUpstreamData(), loadSourceStatus(), loadDataQuality(), loadDataQuarantine(), loadScaleSnapshot(), loadLineage(), loadRunHistory(), loadConstraintExplanations()];
-      if (can("edit_config") || can("run_model")) {
-        commonLoads.push(compare(), loadDataLayer(), loadConfigAudit(), loadEnterpriseReadiness());
-      }
-      if (activeLayer === "performance") {
-        commonLoads.push(loadCapacityAssessment());
-      }
-      return Promise.all(commonLoads);
+      return loadActiveLayerData();
     });
   </script>
 </body>
